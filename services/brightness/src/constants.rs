@@ -17,4 +17,4 @@ pub const DBUS_OBJECT_PATH: &str = "/org/rde/Brightness";
 
 // ========================= COMMANDS =========================
 ///  Brightness helper command
-pub const BRIGHTNESS_HELPER_COMMAND: &str = "rde-brightness-helper";
+pub const BRIGHTNESS_HELPER_COMMAND: &str = "/usr/lib/rde/rde-brightness-helper";

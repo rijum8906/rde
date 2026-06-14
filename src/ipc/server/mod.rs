@@ -3,7 +3,7 @@ pub mod handler;
 use std::{
     fs::remove_file,
     os::unix::net::UnixListener,
-    sync::{Arc, atomic::AtomicBool},
+    sync::{atomic::AtomicBool, Arc},
 };
 
 use crate::ipc::{self, server::handler::handle_stream};
