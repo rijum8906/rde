@@ -1,9 +1,9 @@
-use rde_brightness::brightness::BrightnessController;
+use rde_brightness::{brightness::BrightnessController, constants::BACKLIGHT_SYSFS_PATH};
 use zbus::connection;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let service = BrightnessController::new().unwrap();
+    let service = BrightnessController::new(BACKLIGHT_SYSFS_PATH).unwrap();
 
     // Start D-Bus server (zbus uses tokio internally)
     let _connection = connection::Builder::session()?

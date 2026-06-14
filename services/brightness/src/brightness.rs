@@ -1,6 +1,27 @@
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, process::Command};
 
-use zbus::{fdo::Result, interface};
+use zbus::{
+    fdo::{Error, Result},
+    interface,
+};
+
+use crate::constants::{BRIGHTNESS_FILE, BRIGHTNESS_HELPER_COMMAND, MAX_BRIGHTNESS_FILE};
+
+pub trait Brightness {
+    fn get_brightness(&self) -> Result<u16>;
+    fn get_brightness_percent(&self) -> Result<u8>;
+    fn set_brightness(&self, value: u16) -> Result<()>;
+    fn set_brightness_percent(&self, value: u8) -> Result<()>;
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum BacklightType {
+    Intel,
+    Amd,
+    Nvidia,
+    Acpi,
+    Generic,
+}
 
 // Implementation
 pub struct BrightnessController {
@@ -9,9 +30,9 @@ pub struct BrightnessController {
 }
 
 impl BrightnessController {
-    pub fn new() -> Result<Self> {
+    pub fn new(path: &str) -> Result<Self> {
         // Find backlight device
-        let backlight_dir = PathBuf::from("/sys/class/backlight");
+        let backlight_dir = PathBuf::from(path);
         let devices = match fs::read_dir(&backlight_dir) {
             Ok(d) => d,
             Err(e) => return Err(zbus::fdo::Error::Failed(e.to_string())),
@@ -30,7 +51,7 @@ impl BrightnessController {
 
         // Read max brightness
         let device_path = dir_entry.path();
-        let max_path = device_path.join("max_brightness");
+        let max_path = device_path.join(MAX_BRIGHTNESS_FILE);
         let max_str = match fs::read_to_string(&max_path) {
             Ok(s) => s,
             Err(e) => return Err(zbus::fdo::Error::Failed(e.to_string())),
@@ -57,7 +78,7 @@ impl BrightnessController {
 impl BrightnessController {
     // get_brightness returns the current brightness
     pub fn get_brightness(&self) -> Result<u16> {
-        let value_path = self.backlight_path.join("brightness");
+        let value_path = self.backlight_path.join(BRIGHTNESS_FILE);
         let max_str = match fs::read_to_string(&value_path) {
             Ok(s) => s,
             Err(e) => {
@@ -88,9 +109,18 @@ impl BrightnessController {
             ));
         }
         let value_path = self.backlight_path.join("brightness");
-        match fs::write(&value_path, value.to_string()) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(zbus::fdo::Error::Failed(e.to_string())),
+        let status = Command::new("pkexec")
+            .arg(BRIGHTNESS_HELPER_COMMAND)
+            .arg(value_path)
+            .arg(value.to_string())
+            .status()
+            .map_err(|e| Error::Failed(e.to_string()))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(zbus::fdo::Error::Failed(
+                "Failed to set brightness".to_string(),
+            ))
         }
     }
 
