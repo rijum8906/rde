@@ -1,0 +1,16 @@
+[package]
+name = "brightness"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "rde-brightness"
+path = "src/main.rs"
+
+[lib]
+name = "rde_brightness"
+path = "src/lib.rs"
+
+[dependencies]
+tokio = { version = "1.52.3", features = ["macros", "signal"] }
+zbus = { version = "5.16.0", default-features = false, features = ["tokio"] }
