@@ -39,7 +39,7 @@ mod tests {
     }
 
     #[test]
-    fn tesst_controller_set_methods() {
+    fn test_controller_set_methods() {
         // Create a tmp file for this test
         let test_backlight_path = "/tmp/test_backlight/";
 

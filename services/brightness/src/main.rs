@@ -16,7 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Press Ctrl+C to stop");
 
     tokio::signal::ctrl_c().await?;
-    println!("Goodbye!");
+    println!("Brightness service stopped");
 
     Ok(())
 }

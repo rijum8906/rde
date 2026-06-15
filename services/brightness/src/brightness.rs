@@ -9,9 +9,9 @@ use crate::constants::{BRIGHTNESS_FILE, BRIGHTNESS_HELPER_COMMAND, MAX_BRIGHTNES
 
 pub trait Brightness {
     fn get_brightness(&self) -> Result<u16>;
-    fn get_brightness_percent(&self) -> Result<u8>;
+    fn get_brightness_percentage(&self) -> Result<u8>;
     fn set_brightness(&self, value: u16) -> Result<()>;
-    fn set_brightness_percent(&self, value: u8) -> Result<()>;
+    fn set_brightness_percentage(&self, value: u8) -> Result<()>;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -77,9 +77,10 @@ impl BrightnessController {
 #[interface(name = "org.rde.Brightness")]
 impl BrightnessController {
     // get_brightness returns the current brightness
+    #[zbus(property, name = "Brightness")]
     pub fn get_brightness(&self) -> Result<u16> {
         let value_path = self.backlight_path.join(BRIGHTNESS_FILE);
-        let max_str = match fs::read_to_string(&value_path) {
+        let value_str = match fs::read_to_string(&value_path) {
             Ok(s) => s,
             Err(e) => {
                 return Err(zbus::fdo::Error::Failed(e.to_string()));
@@ -87,7 +88,7 @@ impl BrightnessController {
         };
 
         // Parse and return
-        match max_str.trim().parse() {
+        match value_str.trim().parse() {
             Ok(u) => Ok(u),
             Err(_) => Err(zbus::fdo::Error::Failed(
                 "Unsupported brightness value".to_string(),
@@ -95,20 +96,23 @@ impl BrightnessController {
         }
     }
 
-    pub fn get_brightness_percent(&self) -> Result<u8> {
+    // get_brightness_percentage returns the current brightness percentage
+    #[zbus(property, name = "BrightnessPercentage")]
+    pub fn get_brightness_percentage(&self) -> Result<u8> {
         let value = self.get_brightness()?;
         Ok((value as f64 / self.max_brightness as f64 * 100.0) as u8)
     }
 
     // set_brightness sets the current brightness
+    #[zbus(property, name = "Brightness")]
     pub fn set_brightness(&self, value: u16) -> Result<()> {
         // Check if value is in range
         if value > self.max_brightness {
-            return Err(zbus::fdo::Error::Failed(
+            return Err(zbus::fdo::Error::InvalidArgs(
                 "Unsupported brightness value".to_string(),
             ));
         }
-        let value_path = self.backlight_path.join("brightness");
+        let value_path = self.backlight_path.join(BRIGHTNESS_FILE);
         let status = Command::new("pkexec")
             .arg(BRIGHTNESS_HELPER_COMMAND)
             .arg(value_path)
@@ -124,14 +128,17 @@ impl BrightnessController {
         }
     }
 
-    pub fn set_brightness_percent(&self, value: u8) -> Result<()> {
+    #[zbus(property, name = "BrightnessPercentage")]
+    pub fn set_brightness_percentage(&self, value: u8) -> Result<()> {
+        if value > 100 {
+            return Err(zbus::fdo::Error::InvalidArgs(
+                "Unsupported brightness value".to_string(),
+            ));
+        }
         self.set_brightness((value as f64 / 100.0 * self.max_brightness as f64) as u16)
     }
 
-    pub fn get_backlight_path(&self) -> &PathBuf {
-        &self.backlight_path
-    }
-
+    #[zbus(property, name = "MaxBrightness")]
     pub fn get_max_brightness(&self) -> Result<u16> {
         Ok(self.max_brightness)
     }
