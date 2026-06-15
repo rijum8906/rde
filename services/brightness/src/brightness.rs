@@ -1,4 +1,9 @@
-use std::{fs, path::{Path, PathBuf}, process::Command, sync::Arc};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+    sync::Arc,
+};
 
 use zbus::{
     fdo::{Error, Result},
@@ -137,7 +142,7 @@ impl Brightness for BrightnessController {
         // Check if value is in range
         if value > self.max_brightness {
             return Err(zbus::fdo::Error::InvalidArgs(
-                "Unsupported brightness value".to_string(),
+                "Brightness value exceeds max brightness".to_string(),
             ));
         }
         let value_path = self.backlight_path.join(BRIGHTNESS_FILE);
@@ -147,7 +152,7 @@ impl Brightness for BrightnessController {
     fn set_brightness_percentage(&self, value: u8) -> Result<()> {
         if value > 100 {
             return Err(zbus::fdo::Error::InvalidArgs(
-                "Unsupported brightness value".to_string(),
+                "Brightness percentage exceeds 100%".to_string(),
             ));
         }
         self.set_brightness((value as f64 / 100.0 * self.max_brightness as f64).round() as u16)

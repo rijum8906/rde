@@ -1,20 +1,17 @@
 [package]
-name = "rde-brightness"
+name = "rde-volume"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
 [dependencies]
+alsa = "0.11.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true }
 zbus = { workspace = true, features = ["tokio"] }
 
 [[bin]]
-name = "rde-brightness-helper"
-path = "src/bin/helper.rs"
-
-[[bin]]
-name = "rde-brightness"
+name = "rde-volume"
 path = "src/main.rs"
