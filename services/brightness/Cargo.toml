@@ -7,8 +7,9 @@ authors.workspace = true
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
-zbus = { workspace = true }
+zbus = { workspace = true, features = ["tokio"] }
 
 [[bin]]
 name = "rde-brightness-helper"

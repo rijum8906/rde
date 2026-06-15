@@ -5,6 +5,7 @@ edition = "2024"
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+tempfile = { workspace = true }
 thiserror = "2.0.18"
 tokio = { workspace = true }
 zbus = { workspace = true }
@@ -22,6 +23,7 @@ authors = ["Rijum <rijum@example.com>"]
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+tempfile = "3.27.0"
 tokio = { version = "1.52", features = [
     "rt-multi-thread",
     "macros",
