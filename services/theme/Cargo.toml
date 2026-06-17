@@ -1,0 +1,19 @@
+[package]
+name = "rde-theme"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+zbus = { workspace = true, features = ["tokio"] }
+dirs = "6.0.0"
+rand = "0.10.1"
+tempfile.workspace = true
+async_once = "0.2.6"
+
+[[bin]]
+name = "rde-theme"
+path = "src/main.rs"
