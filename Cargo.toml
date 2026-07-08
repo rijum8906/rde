@@ -1,10 +1,15 @@
 [workspace]
-resolver = "2"
-members = ["cli/rde-cli",
+resolver = "3"
+members = [
+    "cli/rde-cli",
     "crates/rde-config",
-    "crates/rde-core", "crates/rde-ipc",
+    "crates/rde-core",
+    "crates/rde-ipc",
     "services/rde-brightness",
-    "services/rde-daemon", "services/rde-notification", "services/rde-theme", "services/rde-volume",
+    "services/rde-daemon",
+    "services/rde-notification",
+    "services/rde-theme",
+    "services/rde-volume",
 ]
 
 [workspace.package]
@@ -31,3 +36,11 @@ serde_json = "1.0.150"
 # Error
 anyhow = "1.0.103"
 thiserror = "2.0.18"
+
+# Logging
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+tracing-appender = "0.2.5"
+
+# Other
+chrono = "0.4.45"
