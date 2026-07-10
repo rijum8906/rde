@@ -4,3 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+rde-core = { path = "../../crates/rde-core" }
+
+zbus = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+futures-util = { workspace = true }
+
+[[bin]]
+path = "src/bin/rde-brightness-helper.rs"
+name = "rde-brightness-helper"

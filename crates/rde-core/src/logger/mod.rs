@@ -117,15 +117,6 @@ impl Logger {
             }
         });
 
-        // ============================================
-        // 3. Log initialization success
-        // ============================================
-        println!("✅ Logger initialized!");
-        println!("📝 Log directory: {:?}", self.log_dir);
-        println!("📄 Log file: {:?}", self.service_name);
-        println!("📊 Log level: {}", self.level);
-        println!("🔧 To override: RUST_LOG=debug cargo run");
-
         Ok(())
     }
 }
