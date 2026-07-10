@@ -4,9 +4,11 @@ use rde_core::{
     logger::{LogLevel, Logger},
     utils::logger::init_log_dir,
 };
+use tracing::{error, info};
 use zbus::interface;
 
 /// Brightness D-Bus interface
+#[derive(Debug)]
 pub struct BrightnessInterface {
     pub backend: BrightnessBackend,
     pub logger: Logger,
@@ -19,6 +21,9 @@ impl BrightnessInterface {
         let log_dir = base_log_dir.join("brightness");
 
         let logger = Logger::new(LogLevel::Info, log_dir, "brightness".to_string());
+        logger.init()?;
+
+        info!("Brightness D-Bus service logger initialized.");
 
         // crate an instance of the backend
         let mut backend = BrightnessBackend::new()?;
@@ -45,9 +50,10 @@ impl BrightnessInterface {
     // get raw brightness value
     #[zbus(property(emits_changed_signal = "false"))]
     pub fn brightness(&self) -> zbus::fdo::Result<u32> {
-        self.backend
-            .get_brightness()
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+        self.backend.get_brightness().map_err(|e| {
+            error!("Failed to get raw brightness: {}", e);
+            zbus::fdo::Error::Failed(e.to_string())
+        })
     }
 
     // set raw brightness value
@@ -57,20 +63,25 @@ impl BrightnessInterface {
         brightness: u32,
         #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
     ) -> zbus::fdo::Result<()> {
-        self.backend
-            .set_brightness(brightness)
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        info!("Setting raw brightness to {}", brightness);
+        self.backend.set_brightness(brightness).map_err(|e| {
+            error!("Failed to set raw brightness to {}: {}", brightness, e);
+            zbus::fdo::Error::Failed(e.to_string())
+        })?;
 
         // Calculate current percent to emit signal with percentage
-        let percent = self
-            .backend
-            .get_brightness_percent()
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        let percent = self.backend.get_brightness_percent().map_err(|e| {
+            error!("Failed to get brightness percentage: {}", e);
+            zbus::fdo::Error::Failed(e.to_string())
+        })?;
 
         // Emit custom BrightnessChanged signal
         Self::emit_brightness_changed(&emitter, percent)
             .await
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+            .map_err(|e| {
+                error!("Failed to emit BrightnessChanged signal: {}", e);
+                zbus::fdo::Error::Failed(e.to_string())
+            })?;
 
         Ok(())
     }
@@ -78,9 +89,10 @@ impl BrightnessInterface {
     // get brightness percentage (0-100)
     #[zbus(property(emits_changed_signal = "false"))]
     pub fn brightness_percent(&self) -> zbus::fdo::Result<u32> {
-        self.backend
-            .get_brightness_percent()
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+        self.backend.get_brightness_percent().map_err(|e| {
+            error!("Failed to get brightness percentage: {}", e);
+            zbus::fdo::Error::Failed(e.to_string())
+        })
     }
 
     // set brightness percentage (0-100)
@@ -90,17 +102,22 @@ impl BrightnessInterface {
         percent: u32,
         #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
     ) -> zbus::fdo::Result<()> {
+        info!("Setting brightness to {}%", percent);
         let max = self.backend.max_brightness;
         let raw_val = (percent * max) / 100;
 
-        self.backend
-            .set_brightness(raw_val)
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        self.backend.set_brightness(raw_val).map_err(|e| {
+            error!("Failed to set brightness to {}%: {}", percent, e);
+            zbus::fdo::Error::Failed(e.to_string())
+        })?;
 
         // Emit custom BrightnessChanged signal
         Self::emit_brightness_changed(&emitter, percent)
             .await
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+            .map_err(|e| {
+                error!("Failed to emit BrightnessChanged signal: {}", e);
+                zbus::fdo::Error::Failed(e.to_string())
+            })?;
 
         Ok(())
     }
@@ -108,9 +125,10 @@ impl BrightnessInterface {
     // get max brightness value
     #[zbus(property)]
     pub fn max_brightness(&self) -> zbus::fdo::Result<u32> {
-        self.backend
-            .get_max_brightness()
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+        self.backend.get_max_brightness().map_err(|e| {
+            error!("Failed to get max brightness: {}", e);
+            zbus::fdo::Error::Failed(e.to_string())
+        })
     }
 
     // ========= METHODS ==========
@@ -120,25 +138,31 @@ impl BrightnessInterface {
         percent: u32,
         #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
     ) -> zbus::fdo::Result<()> {
+        info!("D-Bus method SetBrightness called with {}%", percent);
         let max = self.backend.max_brightness;
         let raw_val = (percent * max) / 100;
 
-        self.backend
-            .set_brightness(raw_val)
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        self.backend.set_brightness(raw_val).map_err(|e| {
+            error!("Failed to set brightness to {}%: {}", percent, e);
+            zbus::fdo::Error::Failed(e.to_string())
+        })?;
 
         Self::emit_brightness_changed(&emitter, percent)
             .await
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+            .map_err(|e| {
+                error!("Failed to emit BrightnessChanged signal: {}", e);
+                zbus::fdo::Error::Failed(e.to_string())
+            })?;
 
         Ok(())
     }
 
     #[zbus(name = "GetBrightness")]
     pub fn get_brightness_method(&self) -> zbus::fdo::Result<u32> {
-        self.backend
-            .get_brightness_percent()
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+        self.backend.get_brightness_percent().map_err(|e| {
+            error!("Failed to get brightness: {}", e);
+            zbus::fdo::Error::Failed(e.to_string())
+        })
     }
 
     #[zbus(name = "IncreaseBrightness")]
@@ -147,23 +171,32 @@ impl BrightnessInterface {
         step: u32,
         #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
     ) -> zbus::fdo::Result<u32> {
-        let current_percent = self
-            .backend
-            .get_brightness_percent()
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        info!("D-Bus method IncreaseBrightness called with step {}", step);
+        let current_percent = self.backend.get_brightness_percent().map_err(|e| {
+            error!("Failed to get current brightness percentage: {}", e);
+            zbus::fdo::Error::Failed(e.to_string())
+        })?;
 
         let new_percent = std::cmp::min(current_percent + step, 100);
+        info!(
+            "Increasing brightness: {}% -> {}%",
+            current_percent, new_percent
+        );
 
         let max = self.backend.max_brightness;
         let raw_val = (new_percent * max) / 100;
 
-        self.backend
-            .set_brightness(raw_val)
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        self.backend.set_brightness(raw_val).map_err(|e| {
+            error!("Failed to set brightness to {}%: {}", new_percent, e);
+            zbus::fdo::Error::Failed(e.to_string())
+        })?;
 
         Self::emit_brightness_changed(&emitter, new_percent)
             .await
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+            .map_err(|e| {
+                error!("Failed to emit BrightnessChanged signal: {}", e);
+                zbus::fdo::Error::Failed(e.to_string())
+            })?;
 
         Ok(new_percent)
     }
@@ -174,23 +207,32 @@ impl BrightnessInterface {
         step: u32,
         #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
     ) -> zbus::fdo::Result<u32> {
-        let current_percent = self
-            .backend
-            .get_brightness_percent()
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        info!("D-Bus method DecreaseBrightness called with step {}", step);
+        let current_percent = self.backend.get_brightness_percent().map_err(|e| {
+            error!("Failed to get current brightness percentage: {}", e);
+            zbus::fdo::Error::Failed(e.to_string())
+        })?;
 
         let new_percent = current_percent.saturating_sub(step);
+        info!(
+            "Decreasing brightness: {}% -> {}%",
+            current_percent, new_percent
+        );
 
         let max = self.backend.max_brightness;
         let raw_val = (new_percent * max) / 100;
 
-        self.backend
-            .set_brightness(raw_val)
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        self.backend.set_brightness(raw_val).map_err(|e| {
+            error!("Failed to set brightness to {}%: {}", new_percent, e);
+            zbus::fdo::Error::Failed(e.to_string())
+        })?;
 
         Self::emit_brightness_changed(&emitter, new_percent)
             .await
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+            .map_err(|e| {
+                error!("Failed to emit BrightnessChanged signal: {}", e);
+                zbus::fdo::Error::Failed(e.to_string())
+            })?;
 
         Ok(new_percent)
     }
