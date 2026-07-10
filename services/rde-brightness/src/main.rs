@@ -5,7 +5,10 @@ use zbus::connection;
 
 #[tokio::main]
 async fn main() -> RdeResult<()> {
+    // create a new brightness service
     let brightness_interface = BrightnessInterface::new()?;
+
+    // build dbus connection and register the brightness interface
     let conn = connection::Builder::session()?
         .name("org.rde.Brightness")?
         .serve_at("/org/rde/Brightness", brightness_interface)?

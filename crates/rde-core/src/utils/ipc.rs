@@ -120,7 +120,7 @@ mod tests {
     #[test]
     fn test_socket_path_creation() {
         let temp_dir = tempdir().unwrap();
-        let path = temp_dir.path().join("test.sock");
+        let path = temp_dir.path().join("rde").join("test.sock");
 
         // Directory doesn't exist yet
         assert!(!path.parent().unwrap().exists());

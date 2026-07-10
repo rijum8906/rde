@@ -1,21 +1,32 @@
 use crate::backend::BrightnessBackend;
-use rde_core::errors::RdeResult;
+use rde_core::{
+    errors::RdeResult,
+    logger::{LogLevel, Logger},
+    utils::logger::init_log_dir,
+};
 use zbus::interface;
 
 /// Brightness D-Bus interface
 pub struct BrightnessInterface {
     pub backend: BrightnessBackend,
+    pub logger: Logger,
 }
 
 impl BrightnessInterface {
     pub fn new() -> RdeResult<Self> {
+        // create a logger
+        let base_log_dir = init_log_dir()?;
+        let log_dir = base_log_dir.join("brightness");
+
+        let logger = Logger::new(LogLevel::Info, log_dir, "brightness".to_string());
+
         // crate an instance of the backend
         let mut backend = BrightnessBackend::new()?;
 
         // initialize the backend
         backend.init()?;
 
-        Ok(Self { backend })
+        Ok(Self { backend, logger })
     }
 }
 
