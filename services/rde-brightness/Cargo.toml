@@ -11,6 +11,9 @@ tokio = { workspace = true }
 anyhow = { workspace = true }
 futures-util = { workspace = true }
 
+[dev-dependencies]
+tempfile = "3.27.0"
+
 [[bin]]
 path = "src/bin/rde-brightness-helper.rs"
 name = "rde-brightness-helper"

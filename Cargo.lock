@@ -661,6 +661,7 @@ dependencies = [
  "anyhow",
  "futures-util",
  "rde-core",
+ "tempfile",
  "tokio",
  "zbus",
 ]

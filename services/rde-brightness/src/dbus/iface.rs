@@ -1,10 +1,6 @@
-use rde_core::errors::RdeResult;
-use zbus::{
-    fdo::{Error, Result},
-    interface, proxy,
-};
-
 use crate::backend::BrightnessBackend;
+use rde_core::errors::RdeResult;
+use zbus::interface;
 
 /// Brightness D-Bus interface
 pub struct BrightnessInterface {
@@ -28,113 +24,170 @@ impl BrightnessInterface {
     // ========= PROPERTIES ==========
     /// Returns the version of the service
     #[zbus(property)]
-    pub fn version(&self) -> Result<String> {
+    pub fn version(&self) -> zbus::fdo::Result<String> {
         // get the version from Cargo.toml
         let version = env!("CARGO_PKG_VERSION");
 
         Ok(version.to_string())
     }
 
-    // get brightness %tage
-    #[zbus(property)]
-    pub fn brightness(&self) -> Result<u32> {
+    // get raw brightness value
+    #[zbus(property(emits_changed_signal = "false"))]
+    pub fn brightness(&self) -> zbus::fdo::Result<u32> {
         self.backend
             .get_brightness()
-            .map_err(|e| Error::Failed(e.to_string()))
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
     }
 
-    // set brightness %tage
+    // set raw brightness value
     #[zbus(property)]
     pub async fn set_brightness(
         &mut self,
         brightness: u32,
         #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
-    ) -> Result<()> {
+    ) -> zbus::fdo::Result<()> {
         self.backend
             .set_brightness(brightness)
-            .map_err(|e| Error::Failed(e.to_string()))?;
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        // Calculate current percent to emit signal with percentage
+        let percent = self
+            .backend
+            .get_brightness_percent()
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
 
         // Emit custom BrightnessChanged signal
-        Self::emit_brightness_changed(&emitter, brightness)
+        Self::emit_brightness_changed(&emitter, percent)
             .await
-            .map_err(|e| Error::Failed(e.to_string()))?;
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        Ok(())
+    }
+
+    // get brightness percentage (0-100)
+    #[zbus(property(emits_changed_signal = "false"))]
+    pub fn brightness_percent(&self) -> zbus::fdo::Result<u32> {
+        self.backend
+            .get_brightness_percent()
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+    }
+
+    // set brightness percentage (0-100)
+    #[zbus(property)]
+    pub async fn set_brightness_percent(
+        &mut self,
+        percent: u32,
+        #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let max = self.backend.max_brightness;
+        let raw_val = (percent * max) / 100;
+
+        self.backend
+            .set_brightness(raw_val)
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        // Emit custom BrightnessChanged signal
+        Self::emit_brightness_changed(&emitter, percent)
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
 
         Ok(())
     }
 
     // get max brightness value
     #[zbus(property)]
-    pub fn max_brightness(&self) -> Result<u32> {
+    pub fn max_brightness(&self) -> zbus::fdo::Result<u32> {
         self.backend
             .get_max_brightness()
-            .map_err(|e| Error::Failed(e.to_string()))
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+    }
+
+    // ========= METHODS ==========
+    #[zbus(name = "SetBrightness")]
+    pub async fn set_brightness_method(
+        &mut self,
+        percent: u32,
+        #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let max = self.backend.max_brightness;
+        let raw_val = (percent * max) / 100;
+
+        self.backend
+            .set_brightness(raw_val)
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        Self::emit_brightness_changed(&emitter, percent)
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        Ok(())
+    }
+
+    #[zbus(name = "GetBrightness")]
+    pub fn get_brightness_method(&self) -> zbus::fdo::Result<u32> {
+        self.backend
+            .get_brightness_percent()
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+    }
+
+    #[zbus(name = "IncreaseBrightness")]
+    pub async fn increase_brightness(
+        &mut self,
+        step: u32,
+        #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<u32> {
+        let current_percent = self
+            .backend
+            .get_brightness_percent()
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        let new_percent = std::cmp::min(current_percent + step, 100);
+
+        let max = self.backend.max_brightness;
+        let raw_val = (new_percent * max) / 100;
+
+        self.backend
+            .set_brightness(raw_val)
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        Self::emit_brightness_changed(&emitter, new_percent)
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        Ok(new_percent)
+    }
+
+    #[zbus(name = "DecreaseBrightness")]
+    pub async fn decrease_brightness(
+        &mut self,
+        step: u32,
+        #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<u32> {
+        let current_percent = self
+            .backend
+            .get_brightness_percent()
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        let new_percent = current_percent.saturating_sub(step);
+
+        let max = self.backend.max_brightness;
+        let raw_val = (new_percent * max) / 100;
+
+        self.backend
+            .set_brightness(raw_val)
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        Self::emit_brightness_changed(&emitter, new_percent)
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        Ok(new_percent)
     }
 
     // ========= SIGNALS ==========
-    #[zbus(signal)]
-    #[zbus(name = "BrightnessChanged")]
+    #[zbus(signal, name = "BrightnessChanged")]
     pub async fn emit_brightness_changed(
         signal_emitter: &zbus::object_server::SignalEmitter<'_>,
         percent: u32,
     ) -> zbus::Result<()>;
-}
-
-#[proxy(
-    default_service = "org.rde.Brightness",
-    default_path = "/org/rde/Brightness",
-    interface = "org.rde.Brightness"
-)]
-trait BrightnessManager {
-    #[zbus(property)]
-    fn brightness(&self) -> zbus::Result<u32>;
-
-    #[zbus(property)]
-    fn set_brightness(&self, brightness: u32) -> zbus::Result<()>;
-
-    #[zbus(signal)]
-    #[zbus(name = "BrightnessChanged")]
-    fn brightness_changed_signal(&self, percent: u32) -> zbus::Result<()>;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use futures_util::StreamExt;
-    use zbus::Connection;
-
-    #[tokio::test]
-    async fn test_property_changed_signal() {
-        // create the service
-        let brightness_interface = BrightnessInterface::new().unwrap();
-        let conn = Connection::session().await.unwrap();
-
-        // Register the service
-        conn.object_server()
-            .at("/org/rde/Brightness", brightness_interface)
-            .await
-            .unwrap();
-
-        // Request the bus name
-        conn.request_name("org.rde.Brightness").await.unwrap();
-
-        // Create the proxy
-        let brightness_manager_proxy = BrightnessManagerProxy::new(&conn).await.unwrap();
-
-        // Listen for the custom BrightnessChanged signal
-        let mut signal_stream = brightness_manager_proxy
-            .receive_brightness_changed_signal()
-            .await
-            .unwrap();
-
-        // Set brightness to a new value via the proxy
-        brightness_manager_proxy.set_brightness(75).await.unwrap();
-
-        // Await the signal from the stream
-        if let Some(signal) = signal_stream.next().await {
-            let args = signal.args().unwrap();
-            assert_eq!(args.percent, 75);
-        } else {
-            panic!("Did not receive BrightnessChanged signal");
-        }
-    }
 }

@@ -87,6 +87,12 @@ pub enum RdeError {
 
     #[error("Policy error: {0}")]
     Policy(String),
+
+    // ============================================
+    // Invalid Value Errors
+    // ============================================
+    #[error("Invalid value: {0}")]
+    InvalidValue(String),
 }
 
 // Custom Result type for library crates
