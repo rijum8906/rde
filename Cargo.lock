@@ -708,6 +708,7 @@ dependencies = [
  "anyhow",
  "futures-util",
  "rde-core",
+ "rde-ipc",
  "tempfile",
  "tokio",
  "tracing",

@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 rde-core = { path = "../../crates/rde-core" }
+rde-ipc = { path = "../../crates/rde-ipc" }
 
 zbus = { workspace = true }
 tokio = { workspace = true }

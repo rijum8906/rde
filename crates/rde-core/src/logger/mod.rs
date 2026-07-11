@@ -54,11 +54,11 @@ struct LoggerState {
 }
 
 impl Logger {
-    pub fn new(level: LogLevel, log_dir: PathBuf, service_name: String) -> Self {
+    pub fn new(level: LogLevel, log_dir: PathBuf, service_name: &str) -> Self {
         Self {
             log_dir,
             level: level.as_tracing_level(),
-            service_name,
+            service_name: service_name.to_string(),
         }
     }
 
@@ -166,7 +166,7 @@ mod tests {
         let log_dir = PathBuf::from(temp_dir.path());
 
         // Initialize logger with DEBUG level
-        let logger = Logger::new(LogLevel::Debug, log_dir.clone(), "test-log".to_string());
+        let logger = Logger::new(LogLevel::Debug, log_dir.clone(), "test-log");
         logger.init()?;
 
         // Helper to wait for expected content to be flushed to the file

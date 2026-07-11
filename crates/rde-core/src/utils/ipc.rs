@@ -35,11 +35,6 @@ pub fn get_socket_path() -> RdeResult<PathBuf> {
     // 4. Build socket path
     let socket_path = app_runtime_dir.join("rde.sock");
 
-    // 5. Remove stale socket if it exists
-    if socket_path.exists() {
-        fs::remove_file(&socket_path)?;
-    }
-
     Ok(socket_path)
 }
 

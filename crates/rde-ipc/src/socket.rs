@@ -37,7 +37,7 @@ impl IpcServer {
         // create the logger
         let base_log_dir = init_log_dir()?;
         let log_dir = base_log_dir.join("ipc");
-        let service_name = "rde-ipc".to_string();
+        let service_name = "rde-ipc";
 
         let logger = Logger::new(LogLevel::Info, log_dir, service_name);
         logger.init()?;
@@ -84,8 +84,7 @@ impl IpcServer {
     }
 
     /// Close the socket and cleanup
-    pub fn shutdown(self) -> RdeResult<()> {
-        drop(self.listener);
+    pub fn shutdown(&self) -> RdeResult<()> {
         if self.socket_path.exists() {
             std::fs::remove_file(&self.socket_path)?;
             tracing::info!("🧹 Socket cleaned up: {}", self.socket_path.display());

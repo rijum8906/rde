@@ -10,7 +10,7 @@ async fn main() -> RdeResult<()> {
     // 1. Initialize the global Logger
     let base_log_dir = init_log_dir()?;
     let log_dir = base_log_dir.join("daemon");
-    let logger = Logger::new(LogLevel::Info, log_dir, "daemon".to_string());
+    let logger = Logger::new(LogLevel::Info, log_dir, "daemon");
     logger.init()?;
 
     tracing::info!("Starting RDE Daemon...");
@@ -25,7 +25,7 @@ async fn main() -> RdeResult<()> {
     }
 
     // 3. Start the IPC supervision server
-    let _server = Server::new()?;
+    let server = Server::new()?;
 
     // 4. Wait for shutdown signal (Ctrl+C)
     tracing::info!("RDE Daemon successfully initialized. Press Ctrl+C to terminate.");
@@ -39,15 +39,8 @@ async fn main() -> RdeResult<()> {
         app.stop();
     }
 
-    // 6. Clean up the Unix Domain Socket file
-    let socket_path = rde_core::utils::ipc::get_socket_path()?;
-    if socket_path.exists() {
-        std::fs::remove_file(&socket_path)?;
-        tracing::info!(
-            "🧹 Socket file removed successfully on exit: {}",
-            socket_path.display()
-        );
-    }
+    // 6. Shutdown the IPC supervision server (removes the socket file)
+    server.server.shutdown()?;
 
     tracing::info!("RDE Daemon shut down cleanly.");
     Ok(())
