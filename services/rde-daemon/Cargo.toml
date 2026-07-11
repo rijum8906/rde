@@ -7,3 +7,8 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+rde-ipc = { workspace = true }
+rde-core = { workspace = true }
+
+tokio = { workspace = true }
+tracing = { workspace = true }

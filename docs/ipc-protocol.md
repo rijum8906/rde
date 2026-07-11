@@ -15,7 +15,7 @@ This document specifies the **private** protocol used between `rde-daemon` and e
 
 ## Transport
 
-- **Socket path**: `$XDG_RUNTIME_DIR/rde/daemon.sock` (falls back to `/run/user/<uid>/rde/daemon.sock` if `XDG_RUNTIME_DIR` is unset).
+- **Socket path**: `$XDG_RUNTIME_DIR/rde/rde.sock` (falls back to `/run/user/<uid>/rde/rde.sock` if `XDG_RUNTIME_DIR` is unset).
 - **Ownership**: created and bound by `rde-daemon` on startup, mode `0600`.
 - **Model**: one connection per service process, held open for the service's lifetime. `rde-daemon` is the listener; services are clients that connect on startup.
 
@@ -46,29 +46,34 @@ pub enum Message {
 
 /// Sent by a service to the daemon.
 #[derive(Serialize, Deserialize, Debug)]
-pub enum Request {
+pub enum ServiceToDaemonRequest {
     /// First message a service sends after connecting.
     Register {
         service_name: String,   // e.g. "rde-volume"
         pid: u32,
         version: String,        // service's own crate version
     },
-    /// Response to a daemon HealthCheck.
-    Alive,
     /// Service is shutting down cleanly (e.g. after SIGTERM handled).
     Deregister { service_name: String },
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub enum ServiceToDaemonResponse {
+    Ok,
+    Error { code: ErrorCode, message: String },
+}
+
 /// Sent by the daemon to a service.
 #[derive(Serialize, Deserialize, Debug)]
-pub enum Event {
+pub enum DaemonToServiceRequest {
     /// Periodic liveness probe. Service must reply with Request::Alive
     /// within `health_check_timeout_ms` (config, default 2000ms).
     HealthCheck,
-    /// Ask the service to reload its config from disk without restarting.
-    ReloadConfig,
     /// Ask the service to persist state and exit gracefully.
     Shutdown { grace_period_ms: u64 },
+    Restart,
+    ChangeStatus{ status: ServiceStatus }
+    ChangeLogLevel{ level: LogLevel}
 }
 
 /// Acknowledgement / result envelope for a Request.
