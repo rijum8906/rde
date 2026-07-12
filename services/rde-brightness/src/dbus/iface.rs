@@ -77,7 +77,7 @@ impl BrightnessInterface {
 
     // get brightness percentage (0-100)
     #[zbus(property(emits_changed_signal = "false"))]
-    pub fn brightness_percent(&self) -> zbus::fdo::Result<u32> {
+    pub fn brightness_percentage(&self) -> zbus::fdo::Result<u32> {
         self.backend.get_brightness_percent().map_err(|e| {
             error!("Failed to get brightness percentage: {}", e);
             zbus::fdo::Error::Failed(e.to_string())
