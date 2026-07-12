@@ -4,7 +4,7 @@ use rde_ipc::{
     socket::IpcClient,
 };
 
-use crate::app::handler::Handler;
+use crate::app::{App, handler::Handler};
 
 impl Handler {
     /// Handle requests pushed by the daemon (e.g. HealthCheck liveness probe).
@@ -24,6 +24,8 @@ impl Handler {
                 service_name,
                 reason,
             } => {
+                let mut app_guard = App::global().lock().await;
+                app_guard.shutdown().await;
                 tracing::info!(
                     "Daemon requested shutdown of service {}: {:?}",
                     service_name,

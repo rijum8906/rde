@@ -22,6 +22,9 @@ pub enum ServiceRequest {
     /// Register a service
     Register(RegisterRequest),
 
+    /// Deregister a service
+    Deregister { pid: u32, name: String },
+
     /// Get service status
     GetStatus(GetStatusRequest),
 

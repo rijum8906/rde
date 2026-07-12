@@ -52,6 +52,10 @@ impl Server {
                     return Err(e);
                 }
             }
+            ServiceRequest::Deregister { pid, name } => {
+                tracing::info!("Deregistering service {} (PID: {})", name, pid);
+                app.lock().unwrap().remove_client(&name);
+            }
             ServiceRequest::GetStatus(_get_status_request) => todo!(),
             ServiceRequest::StatusUpdate(_status_update_request) => todo!(),
         }

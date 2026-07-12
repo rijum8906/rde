@@ -121,6 +121,12 @@ impl IpcClient {
         Ok(Self { stream })
     }
 
+    /// Close the connection
+    pub async fn close(&mut self) -> RdeResult<()> {
+        self.stream.shutdown().await?;
+        Ok(())
+    }
+
     /// Send a raw message envelope
     pub async fn send(&mut self, msg: &Message) -> RdeResult<()> {
         let data = serde_json::to_vec(msg)
