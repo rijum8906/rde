@@ -26,22 +26,31 @@ use crate::{constants::MAX_SOCKET_CONN_RETRY_COUNT, dbus::iface::BrightnessInter
 /// # SECURITY:
 /// - Thread-safety is achieved by wrapping the global singleton state in a `Mutex`.
 pub struct App {
-    pub version: String,
-    pub is_running: bool,
-    pub start_time: Option<Instant>,
+    /// service app version
+    /// literally the CARGO_PKG_VERSION
+    version: String,
+
+    /// if the service is running
+    is_running: bool,
+
+    /// the time the service started
+    start_time: Option<Instant>,
 
     /// if the service is connected to the daemon
-    pub is_conneced: bool,
+    is_conneced: bool,
 
     /// the ipc client
-    pub client: Arc<TokioMutex<Option<IpcClient>>>,
+    client: Arc<TokioMutex<Option<IpcClient>>>,
 
+    /// the brightness dbus interface
     interface: Option<BrightnessInterface>,
 }
 
+/// Global singleton ap instance
 static APP_INSTANCE: OnceLock<Mutex<App>> = OnceLock::new();
 
 impl App {
+    /// Create a new App instance
     fn new() -> RdeResult<Self> {
         // initialize the global Logger
         let base_log_dir = init_log_dir()?;
@@ -62,29 +71,13 @@ impl App {
         })
     }
 
+    /// Get ot create a app instance and make it global
     pub fn global() -> &'static Mutex<App> {
         APP_INSTANCE.get_or_init(|| Mutex::new(App::new().unwrap()))
     }
 
-    pub async fn run(&mut self) -> RdeResult<()> {
-        tracing::info!("Starting Brightness Application...");
-
-        let interface = self.interface.take().ok_or_else(|| {
-            RdeError::Socket("BrightnessInterface has already been taken or run".to_string())
-        })?;
-
-        // build dbus connection and register the brightness interface
-        let conn = zbus::connection::Builder::session()?
-            .name("org.rde.Brightness")?
-            .serve_at("/org/rde/Brightness", interface)?
-            .build()
-            .await
-            .map_err(RdeError::Dbus)?;
-
-        self.is_running = true;
-        self.start_time = Some(Instant::now());
-
-        // Spawn connection and supervisor monitoring loop asynchronously in a background task
+    /// Connect to the daemon and start the supervisor monitoring loop in the background
+    fn start_daemon_monitor(&mut self) {
         let client_clone = Arc::clone(&self.client);
         let version = self.version.clone();
         self.is_conneced = true;
@@ -178,6 +171,31 @@ impl App {
                 }
             }
         });
+    }
+
+    /// Run the service app
+    pub async fn run(&mut self) -> RdeResult<()> {
+        tracing::info!("Starting Brightness Application...");
+
+        // take the brightness interface
+        let interface = self.interface.take().ok_or_else(|| {
+            RdeError::Socket("BrightnessInterface has already been taken or run".to_string())
+        })?;
+
+        // build dbus connection and register the brightness interface
+        let conn = zbus::connection::Builder::session()?
+            .name("org.rde.Brightness")?
+            .serve_at("/org/rde/Brightness", interface)?
+            .build()
+            .await
+            .map_err(RdeError::Dbus)?;
+
+        // Spawn connection and supervisor monitoring loop asynchronously in a background task
+        self.start_daemon_monitor();
+
+        // update app states
+        self.is_running = true;
+        self.start_time = Some(Instant::now());
 
         // start the D-Bus service
         tracing::info!("Brightness D-Bus service started successfully on org.rde.Brightness");

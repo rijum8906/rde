@@ -9,6 +9,9 @@ pub enum DaemonRequest {
     /// Check if a Service is alive
     HealthCheck,
 
+    /// Get service status
+    GetStatus(GetStatusRequest),
+
     /// Tell the daemon to shutdown
     Shutdown {
         service_name: String,
@@ -24,9 +27,6 @@ pub enum ServiceRequest {
 
     /// Deregister a service
     Deregister { pid: u32, name: String },
-
-    /// Get service status
-    GetStatus(GetStatusRequest),
 
     /// Send status update
     StatusUpdate(StatusUpdateRequest),

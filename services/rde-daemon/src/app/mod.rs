@@ -17,12 +17,20 @@ use rde_ipc::message::{PROTOCOL_VERSION, ServiceInfo};
 /// - Read the RDE configuration file from `~/.config/rde/daemon.toml` at application startup
 ///   to bootstrap and manage configured services.
 pub struct App {
+    /// daemon app version
     pub version: String,
+
+    /// indicates if the application is running
     pub is_running: bool,
+
+    /// the start time of the application
     pub start_time: Option<Instant>,
+
+    /// list of registered clients
     pub clients: Vec<ServiceInfo>,
 }
 
+/// The global singleton instance of the App
 static APP_INSTANCE: OnceLock<Mutex<App>> = OnceLock::new();
 
 impl App {

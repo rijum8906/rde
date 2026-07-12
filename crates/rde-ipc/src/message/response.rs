@@ -1,5 +1,7 @@
 //! Response messages (server → client)
 
+use crate::message::ServiceStatus;
+
 use super::types::ServiceInfo;
 use serde::{Deserialize, Serialize};
 
@@ -15,7 +17,7 @@ pub enum DaemonResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServiceResponse {
     /// Service status response
-    Status(StatusResponse),
+    Status(ServiceStatus),
 
     /// Shutdown acknowledged
     /// Response on Shutdown request

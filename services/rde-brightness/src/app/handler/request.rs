@@ -1,6 +1,6 @@
 use rde_core::errors::RdeResult;
 use rde_ipc::{
-    message::{DaemonRequest, ServiceResponse},
+    message::{DaemonRequest, ServiceResponse, ServiceStatus},
     socket::IpcClient,
 };
 
@@ -19,6 +19,18 @@ impl Handler {
                     "Received HealthCheck request from daemon, sending Alive response..."
                 );
                 client.send_service_response(ServiceResponse::Alive).await?;
+            }
+            DaemonRequest::GetStatus(req) => {
+                tracing::debug!("Received GetStatus request from daemon for {}", req.name);
+                let is_running = App::global().lock().await.is_running;
+                let status = if is_running {
+                    ServiceStatus::Running
+                } else {
+                    ServiceStatus::Stopped
+                };
+                client
+                    .send_service_response(ServiceResponse::Status(status))
+                    .await?;
             }
             DaemonRequest::Shutdown {
                 service_name,

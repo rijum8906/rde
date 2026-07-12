@@ -14,7 +14,7 @@ impl Server {
                 tracing::info!("Alive response received from client");
             }
             ServiceResponse::Status(status) => {
-                tracing::info!("Status response: {:?}", status.service);
+                tracing::info!("Status response: {:?}", status);
             }
             ServiceResponse::ShutdownAck(ack) => {
                 tracing::info!("ShutdownAck response: {:?}", ack.reason);
