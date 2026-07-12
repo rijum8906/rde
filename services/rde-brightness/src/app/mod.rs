@@ -1,3 +1,5 @@
+pub mod handler;
+
 use std::{process, time::Instant};
 
 use rde_core::{
@@ -6,7 +8,7 @@ use rde_core::{
     utils::{ipc::get_socket_path, logger::init_log_dir},
 };
 use rde_ipc::{
-    message::{Message, MessagePayload, RegisterRequest, Request},
+    message::{Message, MessagePayload, RegisterRequest, ServiceRequest},
     socket::IpcClient,
 };
 use tokio::signal;
@@ -65,7 +67,7 @@ impl App {
         // create a socket client
         let socket_path = get_socket_path()?;
         let mut client = IpcClient::connect(&socket_path).await?;
-        let message = Message::new(MessagePayload::Request(Request::Register(
+        let message = Message::new(MessagePayload::ServiceRequest(ServiceRequest::Register(
             RegisterRequest {
                 pid: process::id(),
                 name: "brightness".to_string(),
@@ -74,6 +76,26 @@ impl App {
             },
         )));
         client.send(&message).await?;
+
+        // Spawn a background task to process incoming supervisor socket messages (liveness checks, events)
+        tokio::spawn(async move {
+            use crate::app::handler::Handler;
+            let mut handler = Handler::new("brightness");
+            loop {
+                match client.recv().await {
+                    Ok(msg) => {
+                        if let Err(e) = handler.handle_message(msg, &mut client).await {
+                            tracing::error!("Error handling supervisor message: {}", e);
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("UDS connection to daemon supervisor lost: {}", e);
+                        break;
+                    }
+                }
+            }
+        });
 
         tracing::info!("Brightness D-Bus service started successfully on org.rde.Brightness");
         conn.request_name("org.rde.Brightness").await?;

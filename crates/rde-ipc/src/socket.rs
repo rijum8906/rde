@@ -4,11 +4,12 @@ use tokio::net::{UnixListener, UnixStream};
 
 use rde_core::{
     errors::{RdeError, RdeResult, ipc::IpcError},
-    logger::{LogLevel, Logger},
-    utils::logger::init_log_dir,
+    logger::Logger,
 };
 
-use crate::message::{Event, Message, MessagePayload, Request, Response};
+use crate::message::{
+    DaemonRequest, DaemonResponse, Message, MessagePayload, ServiceRequest, ServiceResponse,
+};
 
 // =============================
 // ======= Socket Server =========
@@ -17,31 +18,23 @@ use crate::message::{Event, Message, MessagePayload, Request, Response};
 /// IPC Server: A socket server that listens on a Unix socket
 /// and helps in communication between services.
 ///
-/// # SECURITY
+/// # SECURITY:
 /// - Socket file permissions are set to `0o600` (owner read/write only) to restrict access.
 /// - Parent directory permissions must be `0o700` (owner read/write/execute only).
 ///
-/// # NOTE
+/// # NOTE:
 /// - Communicates asynchronously using Tokio's Unix domain sockets.
 ///
-/// # TODO
+/// # TODO:
 /// - Implement connection rate-limiting to prevent potential Denial of Service (DoS) attacks.
 pub struct IpcServer {
     pub listener: UnixListener,
-    logger: Logger,
+    pub logger: Logger,
     socket_path: PathBuf,
 }
 
 impl IpcServer {
-    pub fn new() -> RdeResult<Self> {
-        // create the logger
-        let base_log_dir = init_log_dir()?;
-        let log_dir = base_log_dir.join("ipc");
-        let service_name = "rde-ipc";
-
-        let logger = Logger::new(LogLevel::Info, log_dir, service_name);
-        logger.init()?;
-
+    pub fn new(logger: Logger) -> RdeResult<Self> {
         // Use the centralized socket path utility from rde-core
         let socket_path = rde_core::utils::ipc::get_socket_path()?;
 
@@ -91,10 +84,6 @@ impl IpcServer {
         }
         Ok(())
     }
-
-    pub fn logger(&self) -> &Logger {
-        &self.logger
-    }
 }
 
 // ============================================
@@ -103,10 +92,10 @@ impl IpcServer {
 
 /// IPC Client: Connects to the daemon's supervision socket.
 ///
-/// # SECURITY
+/// # SECURITY:
 /// - Ensure the client validates that it is connecting to the correct socket path owned by the daemon.
 ///
-/// # NOTE
+/// # NOTE:
 /// - Employs a length-prefixed protocol with a 4-byte Little-Endian prefix followed by JSON payload.
 pub struct IpcClient {
     stream: UnixStream,
@@ -150,24 +139,32 @@ impl IpcClient {
     }
 
     /// Send a request payload (automatically wrapped in a Message envelope)
-    pub async fn send_request(&mut self, req: Request) -> RdeResult<u64> {
-        let msg = Message::new(MessagePayload::Request(req));
+    pub async fn send_daemon_request(&mut self, req: DaemonRequest) -> RdeResult<u64> {
+        let msg = Message::new(MessagePayload::DaemonRequest(req));
+        let id = msg.message_id;
+        self.send(&msg).await?;
+        Ok(id)
+    }
+
+    /// Send a request payload (automatically wrapped in a Message envelope)
+    pub async fn send_service_requst(&mut self, req: ServiceRequest) -> RdeResult<u64> {
+        let msg = Message::new(MessagePayload::ServiceRequest(req));
         let id = msg.message_id;
         self.send(&msg).await?;
         Ok(id)
     }
 
     /// Send a response payload (automatically wrapped in a Message envelope)
-    pub async fn send_response(&mut self, resp: Response) -> RdeResult<u64> {
-        let msg = Message::new(MessagePayload::Response(resp));
+    pub async fn send_daemon_response(&mut self, resp: DaemonResponse) -> RdeResult<u64> {
+        let msg = Message::new(MessagePayload::DaemonResponse(resp));
         let id = msg.message_id;
         self.send(&msg).await?;
         Ok(id)
     }
 
-    /// Send an event payload (automatically wrapped in a Message envelope)
-    pub async fn send_event(&mut self, evt: Event) -> RdeResult<u64> {
-        let msg = Message::new(MessagePayload::Event(evt));
+    /// Send a response payload (automatically wrapped in a Message envelope)
+    pub async fn send_service_response(&mut self, resp: ServiceResponse) -> RdeResult<u64> {
+        let msg = Message::new(MessagePayload::ServiceResponse(resp));
         let id = msg.message_id;
         self.send(&msg).await?;
         Ok(id)
@@ -205,6 +202,12 @@ impl IpcClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::message::{
+        AckResponse, GetStatusRequest, RegisterRequest, StatusResponse,
+        types::{ServiceId, ServiceInfo, ServiceStatus},
+    };
+    use rde_core::logger::LogLevel;
+    use std::time::SystemTime;
     use tempfile::tempdir;
 
     #[tokio::test]
@@ -215,29 +218,72 @@ mod tests {
             std::env::set_var("XDG_RUNTIME_DIR", temp_dir.path());
         }
 
+        // create the logger
+        let log_dir = tempdir().unwrap().path().to_path_buf();
+        let service_name = "rde-test";
+        let logger = Logger::new(LogLevel::Info, log_dir, service_name);
+        logger.init()?;
+
         // Initialize IPC Server
-        let server = IpcServer::new()?;
+        let server = IpcServer::new(logger)?;
         let socket_path = server.socket_path().clone();
 
         // Spawn task to accept and handle connection on server side
         let server_handle = tokio::spawn(async move {
             let mut client = server.accept_client().await.unwrap();
 
-            // Receive request from client
+            // 1. Receive registration request from client
             let msg = client.recv().await.unwrap();
-
-            // Verify message structure
-            if let MessagePayload::Request(Request::Register(reg)) = msg.payload {
+            if let MessagePayload::ServiceRequest(ServiceRequest::Register(reg)) = msg.payload {
                 assert_eq!(reg.name, "test-service");
                 assert_eq!(reg.pid, 1234);
                 assert_eq!(reg.version, "0.1.0");
             } else {
-                panic!("Expected MessagePayload::Request(Request::Register)");
+                panic!("Expected MessagePayload::ServiceRequest(ServiceRequest::Register)");
             }
 
             // Send back register acknowledgment
-            let response = Response::register_ack(true, "Registered", "test-service-123");
-            client.send_response(response).await.unwrap();
+            let response = DaemonResponse::RegisterAck(AckResponse {
+                success: true,
+                reason: Some("Registered".to_string()),
+            });
+            client.send_daemon_response(response).await.unwrap();
+
+            // 2. Server sends a DaemonRequest::HealthCheck liveness check
+            client
+                .send_daemon_request(DaemonRequest::HealthCheck)
+                .await
+                .unwrap();
+
+            // Server receives ServiceResponse::Alive liveness acknowledgment
+            let msg = client.recv().await.unwrap();
+            assert!(matches!(
+                msg.payload,
+                MessagePayload::ServiceResponse(ServiceResponse::Alive)
+            ));
+
+            // 3. Server receives ServiceRequest::GetStatus status query
+            let msg = client.recv().await.unwrap();
+            if let MessagePayload::ServiceRequest(ServiceRequest::GetStatus(req)) = msg.payload {
+                assert_eq!(req.name, "test-service");
+            } else {
+                panic!("Expected ServiceRequest::GetStatus");
+            }
+
+            // Server responds with ServiceResponse::Status
+            let status = ServiceResponse::Status(StatusResponse {
+                service: ServiceInfo {
+                    id: ServiceId {
+                        name: "test-service".to_string(),
+                        pid: 1234,
+                    },
+                    status: ServiceStatus::Running,
+                    uptime: Some(SystemTime::now()),
+                    restart_count: 0,
+                    version: "0.1.0".to_string(),
+                },
+            });
+            client.send_service_response(status).await.unwrap();
 
             server.shutdown().unwrap();
         });
@@ -245,17 +291,48 @@ mod tests {
         // Connect client
         let mut client = IpcClient::connect(&socket_path).await?;
 
-        // Send registration request
-        let request = Request::register("test-service", 1234, "0.1.0");
-        client.send_request(request).await?;
+        // 1. Send registration request
+        let request = ServiceRequest::Register(RegisterRequest {
+            name: "test-service".to_string(),
+            pid: 1234,
+            version: "0.1.0".to_string(),
+            capabilities: vec![],
+        });
+        client.send_service_requst(request).await?;
 
         // Receive response
         let response = client.recv().await?;
-        if let MessagePayload::Response(Response::RegisterAck(ack)) = response.payload {
-            assert!(ack.accepted);
-            assert_eq!(ack.service_id, "test-service-123");
+        if let MessagePayload::DaemonResponse(DaemonResponse::RegisterAck(ack)) = response.payload {
+            assert!(ack.success);
+            assert_eq!(ack.reason.unwrap(), "Registered");
         } else {
-            panic!("Expected MessagePayload::Response(Response::RegisterAck)");
+            panic!("Expected ServiceResponse::RegisterAck");
+        }
+
+        // 2. Receive DaemonRequest::HealthCheck liveness check
+        let msg = client.recv().await?;
+        assert!(matches!(
+            msg.payload,
+            MessagePayload::DaemonRequest(DaemonRequest::HealthCheck)
+        ));
+
+        // Send ServiceResponse::Alive liveness acknowledgment
+        client.send_service_response(ServiceResponse::Alive).await?;
+
+        // 3. Send ServiceRequest::GetStatus status query
+        client
+            .send_service_requst(ServiceRequest::GetStatus(GetStatusRequest {
+                name: "test-service".to_string(),
+            }))
+            .await?;
+
+        // Receive status response
+        let msg = client.recv().await?;
+        if let MessagePayload::ServiceResponse(ServiceResponse::Status(status)) = msg.payload {
+            assert_eq!(status.service.id.name, "test-service");
+            assert_eq!(status.service.status, ServiceStatus::Running);
+        } else {
+            panic!("Expected ServiceResponse::Status");
         }
 
         // Wait for server task to finish

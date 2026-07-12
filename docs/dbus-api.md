@@ -24,8 +24,8 @@ For the *internal* daemon↔service protocol, see [`ipc-protocol.md`](ipc-protoc
 
 | Method | Signature | Description |
 | :--- | :--- | :--- |
-| `SetBrightness` | `(u percent) -> ()` | Sets brightness to an absolute percentage (0–100). Requires polkit authorization. |
-| `GetBrightness` | `() -> (u percent)` | Returns current brightness as a percentage. |
+| `SetBrightnessPercentage` | `(u percent) -> ()` | Sets brightness to an absolute percentage (0–100). Requires polkit authorization. |
+| `SetBrightnessPercentage` | `() -> (u percent)` | Returns current brightness as a percentage. |
 | `IncreaseBrightness` | `(u step) -> (u new_percent)` | Increases brightness by `step` percentage points, clamped to 100. |
 | `DecreaseBrightness` | `(u step) -> (u new_percent)` | Decreases brightness by `step` percentage points, clamped to 0. |
 

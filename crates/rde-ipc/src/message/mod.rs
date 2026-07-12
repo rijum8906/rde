@@ -1,6 +1,5 @@
 //! IPC Message Definitions
 pub mod error;
-pub mod event;
 pub mod protocol;
 pub mod request;
 pub mod response;
@@ -8,7 +7,6 @@ pub mod types;
 
 // Re-export
 pub use error::MessageError;
-pub use event::*;
 pub use protocol::*;
 pub use request::*;
 pub use response::*;
@@ -28,9 +26,10 @@ pub struct Message {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "data")]
 pub enum MessagePayload {
-    Request(Request),
-    Response(Response),
-    Event(Event),
+    DaemonRequest(DaemonRequest),
+    DaemonResponse(DaemonResponse),
+    ServiceRequest(ServiceRequest),
+    ServiceResponse(ServiceResponse),
 }
 
 impl Message {
@@ -43,16 +42,24 @@ impl Message {
         }
     }
 
-    pub fn is_request(&self) -> bool {
-        matches!(self.payload, MessagePayload::Request(_))
+    /// Check if the message is a daemon request
+    pub fn is_daemon_request(&self) -> bool {
+        matches!(self.payload, MessagePayload::DaemonRequest(_))
     }
 
-    pub fn is_response(&self) -> bool {
-        matches!(self.payload, MessagePayload::Response(_))
+    /// Check if the message is a service request
+    pub fn is_service_request(&self) -> bool {
+        matches!(self.payload, MessagePayload::ServiceRequest(_))
     }
 
-    pub fn is_event(&self) -> bool {
-        matches!(self.payload, MessagePayload::Event(_))
+    /// Check if the message is a daemon response
+    pub fn is_damon_response(&self) -> bool {
+        matches!(self.payload, MessagePayload::DaemonResponse(_))
+    }
+
+    /// Check if the message is a service response
+    pub fn is_service_response(&self) -> bool {
+        matches!(self.payload, MessagePayload::ServiceResponse(_))
     }
 
     pub fn is_protocol_supported(&self) -> bool {

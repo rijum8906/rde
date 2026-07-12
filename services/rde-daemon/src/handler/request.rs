@@ -2,18 +2,22 @@ use std::time::SystemTime;
 
 use rde_core::errors::RdeResult;
 use rde_ipc::{
-    message::{Request, Response, ServiceId, ServiceInfo, ServiceStatus},
+    message::{AckResponse, DaemonResponse, ServiceId, ServiceInfo, ServiceRequest, ServiceStatus},
     socket::IpcClient,
 };
 
 use crate::{app::App, ipc::server::Server};
 
 impl Server {
-    pub async fn handle_client_request(client: &mut IpcClient, request: Request) -> RdeResult<()> {
+    /// Process incoming requests from supervised client services.
+    pub async fn handle_client_request(
+        client: &mut IpcClient,
+        request: ServiceRequest,
+    ) -> RdeResult<()> {
         let app = App::global();
 
         match request {
-            Request::Register(register_request) => {
+            ServiceRequest::Register(register_request) => {
                 tracing::info!(
                     "Registering service: {} (PID: {}, Version: {})",
                     register_request.name,
@@ -35,12 +39,11 @@ impl Server {
                 app.lock().unwrap().add_client(service_info);
 
                 // Send back RegisterAck response
-                let response = Response::register_ack(
-                    true,
-                    "Registered successfully",
-                    &format!("{}-{}", register_request.name, register_request.pid),
-                );
-                if let Err(e) = client.send_response(response).await {
+                let response = DaemonResponse::RegisterAck(AckResponse {
+                    success: true,
+                    reason: None,
+                });
+                if let Err(e) = client.send_daemon_response(response).await {
                     tracing::error!(
                         "Failed to send RegisterAck to client {}: {}",
                         register_request.name,
@@ -49,11 +52,8 @@ impl Server {
                     return Err(e);
                 }
             }
-            Request::Heartbeat(_heartbeat_request) => todo!(),
-            Request::GetStatus(_get_status_request) => todo!(),
-            Request::ListServices(_list_services_request) => todo!(),
-            Request::Shutdown(_shutdown_request) => todo!(),
-            Request::StatusUpdate(_status_update_request) => todo!(),
+            ServiceRequest::GetStatus(_get_status_request) => todo!(),
+            ServiceRequest::StatusUpdate(_status_update_request) => todo!(),
         }
 
         Ok(())

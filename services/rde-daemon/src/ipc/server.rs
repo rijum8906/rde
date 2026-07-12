@@ -1,6 +1,6 @@
 use rde_core::errors::RdeResult;
 use rde_ipc::{
-    message::{MessagePayload, Request},
+    message::{MessagePayload, ServiceRequest},
     socket::{IpcClient, IpcServer},
 };
 use std::sync::Arc;
@@ -9,20 +9,6 @@ use tokio::net::UnixStream;
 use crate::app::App;
 
 /// IPC supervision server that manages incoming socket connections from client services.
-///
-/// # SECURITY:
-/// - Enforces protocol validation on first message. If the protocol version doesn't match `PROTOCOL_VERSION`,
-///   the connection is terminated immediately.
-/// - Services are registered by their PID. In the future, verify the PID matches the spawned child PID
-///   to prevent pid spoofing/unauthorized registrations.
-///
-/// # IMPORTANT:
-/// - Unregistered clients are logged at debug level and disconnected if they attempt to invoke restricted requests.
-///
-/// # TODO:
-/// - Add heartbeat timeout checking (reap client if no heartbeat is received within timeout).
-/// - Implement peer credentials verification (`tokio::net::UnixStream::peer_cred()`) to verify the connecting process
-///   uid/gid match the daemon's uid/gid.
 pub struct Server {
     pub server: Arc<IpcServer>,
 }
@@ -30,7 +16,13 @@ pub struct Server {
 impl Server {
     /// Bind the socket and start the listening loop in the background.
     pub fn new() -> RdeResult<Self> {
-        let server = Arc::new(IpcServer::new()?);
+        // Initialize log directory and Logger for IPC
+        let base_log_dir = rde_core::utils::logger::init_log_dir()?;
+        let log_dir = base_log_dir.join("daemon-ipc");
+        let logger =
+            rde_core::logger::Logger::new(rde_core::logger::LogLevel::Info, log_dir, "daemon-ipc");
+
+        let server = Arc::new(IpcServer::new(logger)?);
         let server_clone = Arc::clone(&server);
 
         // Spawn a background task to accept incoming client connections
@@ -68,34 +60,32 @@ impl Server {
                         break;
                     }
 
-                    // Route payload depending on its category (Request, Response, Event)
+                    // Route payload depending on its category (ServiceRequest or ServiceResponse)
                     let result = match msg.payload {
-                        MessagePayload::Request(request) => {
+                        MessagePayload::ServiceRequest(request) => {
                             // Extract and track the service name upon registration
-                            if let Request::Register(ref reg) = request {
+                            if let ServiceRequest::Register(ref reg) = request {
                                 service_name = Some(reg.name.clone());
                             }
                             // Delegate request processing to the request handler module
                             Self::handle_client_request(&mut client, request).await
                         }
-                        MessagePayload::Response(response) => {
+                        MessagePayload::ServiceResponse(response) => {
                             // Delegate response processing to the response handler module
                             Self::handle_client_response(&mut client, response).await
                         }
-                        MessagePayload::Event(event) => {
-                            // Services do not normally emit unsolicited events to the daemon
+                        _ => {
                             tracing::warn!(
-                                "Received unexpected event notification from client: {:?}",
-                                event
+                                "Received unexpected message payload category from client: {:?}",
+                                msg.payload
                             );
                             Ok(())
                         }
                     };
 
-                    // Close socket if handling encountered an error
                     if let Err(e) = result {
                         tracing::error!(
-                            "Error handling message for client {:?}: {}",
+                            "Error handling client message (Service: {:?}): {}",
                             service_name,
                             e
                         );
@@ -103,16 +93,21 @@ impl Server {
                     }
                 }
                 Err(e) => {
-                    // Cleanup and remove the client from active registry when connection drops
-                    if let Some(ref name) = service_name {
-                        tracing::info!("Connection lost or closed for service {}: {}", name, e);
-                        app.lock().unwrap().remove_client(name);
-                    } else {
-                        tracing::debug!("Connection lost or closed for unregistered client: {}", e);
-                    }
+                    tracing::debug!(
+                        "Client connection closed (Service: {:?}): {}",
+                        service_name,
+                        e
+                    );
                     break;
                 }
             }
+        }
+
+        // Clean up: remove the client from the active registry if it was registered
+        if let Some(ref name) = service_name {
+            tracing::info!("Cleaning up disconnected service: {}", name);
+            let mut app_lock = app.lock().unwrap();
+            app_lock.remove_client(name);
         }
     }
 }

@@ -1,50 +1,38 @@
 //! Response messages (server → client)
 
-use super::types::{ErrorDetails, ServiceInfo};
+use super::types::ServiceInfo;
 use serde::{Deserialize, Serialize};
 
-/// All possible responses
+/// All possible responses that a daemon could send to a service
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", content = "payload")]
-pub enum Response {
-    /// Successful response
-    Success(SuccessResponse),
-
-    /// Error response
-    Error(ErrorResponse),
-
+pub enum DaemonResponse {
     /// Registration acknowledged
-    RegisterAck(RegisterAckResponse),
+    /// Response on Register request
+    RegisterAck(AckResponse),
+}
 
+/// All possible responses that a service could send to the daemon
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ServiceResponse {
     /// Service status response
     Status(StatusResponse),
 
-    /// List of services
-    ServiceList(ServiceListResponse),
-
     /// Shutdown acknowledged
-    ShutdownAck(ShutdownAckResponse),
+    /// Response on Shutdown request
+    ShutdownAck(AckResponse),
+
+    /// Alive response (heartbeat confirmation)
+    Alive,
 }
 
-/// Success response (generic)
+/// Acknowledgement response
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SuccessResponse {
-    pub message: String,
-    pub data: Option<serde_json::Value>,
-}
+pub struct AckResponse {
+    /// Whether the request was successful
+    pub success: bool,
 
-/// Error response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ErrorResponse {
-    pub error: ErrorDetails,
-}
-
-/// Registration acknowledgment
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegisterAckResponse {
-    pub accepted: bool,
-    pub message: String,
-    pub service_id: String,
+    /// Error message if not successful
+    pub reason: Option<String>,
 }
 
 /// Status response
@@ -53,43 +41,9 @@ pub struct StatusResponse {
     pub service: ServiceInfo,
 }
 
-/// Service list response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceListResponse {
-    pub services: Vec<ServiceInfo>,
-    pub count: usize,
-}
-
-/// Shutdown acknowledgment
+/// Shutdown acknowledgment (daemon-to-service)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShutdownAckResponse {
     pub accepted: bool,
     pub message: String,
-}
-
-impl Response {
-    pub fn success(message: &str) -> Self {
-        Self::Success(SuccessResponse {
-            message: message.to_string(),
-            data: None,
-        })
-    }
-
-    pub fn error(code: u32, message: &str) -> Self {
-        Self::Error(ErrorResponse {
-            error: ErrorDetails {
-                code,
-                message: message.to_string(),
-                details: None,
-            },
-        })
-    }
-
-    pub fn register_ack(accepted: bool, message: &str, service_id: &str) -> Self {
-        Self::RegisterAck(RegisterAckResponse {
-            accepted,
-            message: message.to_string(),
-            service_id: service_id.to_string(),
-        })
-    }
 }
