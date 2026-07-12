@@ -18,9 +18,9 @@ Closes #<issue-number>
 ## D-Bus / IPC Impact
 
 - [ ] This PR does **not** change any public D-Bus interface or the internal IPC protocol.
-- [ ] This PR changes a D-Bus interface — [`docs/dbus-api.md`](../docs/dbus-api.md) is updated in this PR.
-- [ ] This PR changes the internal IPC protocol — [`docs/ipc-protocol.md`](../docs/ipc-protocol.md) is updated in this PR.
-- [ ] This is a **breaking** change to either — noted in [`CHANGELOG.md`](../CHANGELOG.md) under `Breaking`.
+- [ ] This PR changes a D-Bus interface — [`docs/dbus-api.md`](/docs/dbus-api.md) is updated in this PR.
+- [ ] This PR changes the internal IPC protocol — [`docs/ipc-protocol.md`](/docs/ipc-protocol.md) is updated in this PR.
+- [ ] This is a **breaking** change to either — noted in [`CHANGELOG.md`](/CHANGELOG.md) under `Breaking`.
 
 ## Checklist
 

@@ -85,7 +85,7 @@ impl BrightnessInterface {
 
     // set brightness percentage (0-100)
     #[zbus(property)]
-    pub async fn set_brightness_percent(
+    pub async fn set_brightness_percentage(
         &mut self,
         percent: u32,
         #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
@@ -110,7 +110,7 @@ impl BrightnessInterface {
     }
 
     // get max brightness value
-    #[zbus(property)]
+    #[zbus(property(emits_changed_signal = "false"))]
     pub fn max_brightness(&self) -> zbus::fdo::Result<u32> {
         self.backend.get_max_brightness().map_err(|e| {
             error!("Failed to get max brightness: {}", e);
@@ -119,39 +119,6 @@ impl BrightnessInterface {
     }
 
     // ========= METHODS ==========
-    #[zbus(name = "SetBrightness")]
-    pub async fn set_brightness_method(
-        &mut self,
-        percent: u32,
-        #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
-    ) -> zbus::fdo::Result<()> {
-        info!("D-Bus method SetBrightness called with {}%", percent);
-        let max = self.backend.max_brightness;
-        let raw_val = (percent * max) / 100;
-
-        self.backend.set_brightness(raw_val).map_err(|e| {
-            error!("Failed to set brightness to {}%: {}", percent, e);
-            zbus::fdo::Error::Failed(e.to_string())
-        })?;
-
-        Self::emit_brightness_changed(&emitter, percent)
-            .await
-            .map_err(|e| {
-                error!("Failed to emit BrightnessChanged signal: {}", e);
-                zbus::fdo::Error::Failed(e.to_string())
-            })?;
-
-        Ok(())
-    }
-
-    #[zbus(name = "GetBrightness")]
-    pub fn get_brightness_method(&self) -> zbus::fdo::Result<u32> {
-        self.backend.get_brightness_percent().map_err(|e| {
-            error!("Failed to get brightness: {}", e);
-            zbus::fdo::Error::Failed(e.to_string())
-        })
-    }
-
     #[zbus(name = "IncreaseBrightness")]
     pub async fn increase_brightness(
         &mut self,
