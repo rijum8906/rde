@@ -68,7 +68,7 @@ impl Server {
                                 service_name = Some(reg.name.clone());
                             }
                             // Delegate request processing to the request handler module
-                            Self::handle_client_request(&mut client, request).await
+                            Self::handle_client_request(&mut client, request, &service_name).await
                         }
                         MessagePayload::ServiceResponse(response) => {
                             // Delegate response processing to the response handler module

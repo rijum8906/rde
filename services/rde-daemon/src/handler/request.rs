@@ -13,6 +13,7 @@ impl Server {
     pub async fn handle_client_request(
         client: &mut IpcClient,
         request: ServiceRequest,
+        service_name: &Option<String>,
     ) -> RdeResult<()> {
         let app = App::global();
 
@@ -56,7 +57,23 @@ impl Server {
                 tracing::info!("Deregistering service {} (PID: {})", name, pid);
                 app.lock().unwrap().remove_client(&name);
             }
-            ServiceRequest::StatusUpdate(_status_update_request) => todo!(),
+            ServiceRequest::StatusUpdate(status_update_request) => {
+                if let Some(name) = service_name {
+                    tracing::info!(
+                        "Received StatusUpdate request from service {}: {:?}",
+                        name,
+                        status_update_request.status
+                    );
+                    let mut app_lock = app.lock().unwrap();
+                    if let Some(client_info) =
+                        app_lock.clients.iter_mut().find(|c| &c.id.name == name)
+                    {
+                        client_info.status = status_update_request.status;
+                    }
+                } else {
+                    tracing::warn!("Received StatusUpdate request from unregistered client");
+                }
+            }
         }
 
         Ok(())

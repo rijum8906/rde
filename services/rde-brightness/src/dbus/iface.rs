@@ -52,7 +52,6 @@ impl BrightnessInterface {
         brightness: u32,
         #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
     ) -> zbus::fdo::Result<()> {
-        info!("Setting raw brightness to {}", brightness);
         self.backend.set_brightness(brightness).map_err(|e| {
             error!("Failed to set raw brightness to {}: {}", brightness, e);
             zbus::fdo::Error::Failed(e.to_string())
@@ -91,7 +90,6 @@ impl BrightnessInterface {
         percent: u32,
         #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
     ) -> zbus::fdo::Result<()> {
-        info!("Setting brightness to {}%", percent);
         let max = self.backend.max_brightness;
         let raw_val = (percent * max) / 100;
 
