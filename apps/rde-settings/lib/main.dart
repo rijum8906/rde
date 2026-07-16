@@ -1,21 +1,31 @@
 import 'package:flutter/material.dart';
-import 'package:rde_settings/features/wifi/presentation/pages/wifi_page.dart';
+import 'package:rde_settings/core/navigation/router.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const SettingsApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class SettingsApp extends StatelessWidget {
+  const SettingsApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'Settings',
-      theme: ThemeData(colorScheme: .fromSeed(seedColor: Colors.deepPurple)),
-      home: Scaffold(body: WifiPage()),
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
+      ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+      themeMode: ThemeMode.system,
+      routerConfig: router,
     );
   }
 }
