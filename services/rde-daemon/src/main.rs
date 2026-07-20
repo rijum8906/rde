@@ -1,15 +1,14 @@
 use rde_core::{
     errors::{RdeError, RdeResult},
+    fs::rde_service_logs_dir,
     logger::{LogLevel, Logger},
-    utils::logger::init_log_dir,
 };
 use rde_daemon::{app::App, ipc::server::Server};
 
 #[tokio::main]
 async fn main() -> RdeResult<()> {
     // 1. Initialize the global Logger
-    let base_log_dir = init_log_dir()?;
-    let log_dir = base_log_dir.join("daemon");
+    let log_dir = rde_service_logs_dir("daemon")?;
     let logger = Logger::new(LogLevel::Info, log_dir, "daemon");
     logger.init()?;
 

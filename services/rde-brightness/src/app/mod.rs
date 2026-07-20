@@ -9,8 +9,9 @@ use std::{
 use futures_util::lock::Mutex;
 use rde_core::{
     errors::{RdeError, RdeResult},
+    fs::rde_service_logs_dir,
     logger::{LogLevel, Logger},
-    utils::{ipc::get_socket_path, logger::init_log_dir},
+    utils::ipc::get_socket_path,
 };
 use rde_ipc::{
     message::{Message, MessagePayload, RegisterRequest, ServiceRequest},
@@ -53,8 +54,7 @@ impl App {
     /// Create a new App instance
     fn new() -> RdeResult<Self> {
         // initialize the global Logger
-        let base_log_dir = init_log_dir()?;
-        let log_dir = base_log_dir.join("brightness");
+        let log_dir = rde_service_logs_dir("brightness")?;
         let logger = Logger::new(LogLevel::Info, log_dir, "brightness");
         logger.init()?;
 

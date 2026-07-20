@@ -17,8 +17,7 @@ impl Server {
     /// Bind the socket and start the listening loop in the background.
     pub fn new() -> RdeResult<Self> {
         // Initialize log directory and Logger for IPC
-        let base_log_dir = rde_core::utils::logger::init_log_dir()?;
-        let log_dir = base_log_dir.join("daemon-ipc");
+        let log_dir = rde_core::fs::rde_service_logs_dir("rde-deamon")?;
         let logger =
             rde_core::logger::Logger::new(rde_core::logger::LogLevel::Info, log_dir, "daemon-ipc");
 

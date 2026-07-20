@@ -8,6 +8,12 @@ use crate::errors::ipc::IpcError;
 #[derive(Error, Debug)]
 pub enum RdeError {
     // ============================================
+    // Common Errors (General)
+    // ============================================
+    #[error("Not Found: {0}")]
+    NotFound(String),
+
+    // ============================================
     // System-Level Errors (OS, Hardware)
     // ============================================
     #[error("I/O error: {0}")]
