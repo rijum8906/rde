@@ -161,54 +161,57 @@ final router = GoRouter(
   ],
 );
 
-/// A page that animates its entrance and exit using a Material 3 Shared Axis / Fade Through style.
+/// A page that animates its entrance and exit using a premium Material 3 Horizontal Shared Axis (Slide & Fade) transition.
 Page<dynamic> _buildTransitionPage(GoRouterState state, Widget child) {
   return CustomTransitionPage<void>(
     key: state.pageKey,
     child: child,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      // Incoming page fade and scale up from 96%
-      final fade = Tween<double>(begin: 0.0, end: 1.0).animate(
+      // Shared Axis X Transition:
+      // Slide from right to center (incoming) and center to left (outgoing)
+
+      final slideIn = Tween<Offset>(
+        begin: const Offset(0.04, 0.0), // Starts slightly offset to the right
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutQuart));
+
+      final fadeIn = Tween<double>(begin: 0.0, end: 1.0).animate(
         CurvedAnimation(
           parent: animation,
-          curve: const Interval(0.15, 1.0, curve: Curves.easeOutCubic),
+          curve: const Interval(0.1, 0.8, curve: Curves.easeOut),
         ),
       );
 
-      final scale = Tween<double>(begin: 0.96, end: 1.0).animate(
-        CurvedAnimation(
-          parent: animation,
-          curve: const Interval(0.15, 1.0, curve: Curves.easeOutCubic),
-        ),
-      );
+      final slideOut =
+          Tween<Offset>(
+            begin: Offset.zero,
+            end: const Offset(-0.02, 0.0), // Slides slightly to the left
+          ).animate(
+            CurvedAnimation(
+              parent: secondaryAnimation,
+              curve: Curves.easeOutQuart,
+            ),
+          );
 
-      // Outgoing page fade and scale down to 104% (or fade out smoothly)
-      final secondaryFade = Tween<double>(begin: 1.0, end: 0.0).animate(
-        CurvedAnimation(
-          parent: secondaryAnimation,
-          curve: const Interval(0.0, 0.35, curve: Curves.easeInCubic),
-        ),
-      );
-
-      final secondaryScale = Tween<double>(begin: 1.0, end: 1.03).animate(
+      final fadeOut = Tween<double>(begin: 1.0, end: 0.0).animate(
         CurvedAnimation(
           parent: secondaryAnimation,
-          curve: const Interval(0.0, 0.35, curve: Curves.easeInCubic),
+          curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
         ),
       );
 
-      return FadeTransition(
-        opacity: secondaryFade,
-        child: ScaleTransition(
-          scale: secondaryScale,
-          child: FadeTransition(
-            opacity: fade,
-            child: ScaleTransition(scale: scale, child: child),
+      return SlideTransition(
+        position: slideOut,
+        child: FadeTransition(
+          opacity: fadeOut,
+          child: SlideTransition(
+            position: slideIn,
+            child: FadeTransition(opacity: fadeIn, child: child),
           ),
         ),
       );
     },
-    transitionDuration: const Duration(milliseconds: 320),
-    reverseTransitionDuration: const Duration(milliseconds: 240),
+    transitionDuration: const Duration(milliseconds: 350),
+    reverseTransitionDuration: const Duration(milliseconds: 250),
   );
 }
