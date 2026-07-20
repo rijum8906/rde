@@ -35,7 +35,9 @@ class _WifiPageState extends State<WifiPage> {
           const SizedBox(height: 24),
           Card(
             elevation: 0,
-            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            color: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.3,
+            ),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
               side: BorderSide(color: theme.colorScheme.outlineVariant),
@@ -65,7 +67,9 @@ class _WifiPageState extends State<WifiPage> {
                                 ),
                               ),
                               Text(
-                                _isWifiEnabled ? 'Connected to RDE-Net' : 'Disconnected',
+                                _isWifiEnabled
+                                    ? 'Connected to RDE-Net'
+                                    : 'Disconnected',
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
@@ -89,7 +93,7 @@ class _WifiPageState extends State<WifiPage> {
                     _buildNetworkItem(context, 'RDE-Net', true),
                     _buildNetworkItem(context, 'Home-WiFi', false),
                     _buildNetworkItem(context, 'Office-5G', false),
-                  ]
+                  ],
                 ],
               ),
             ),
@@ -99,7 +103,11 @@ class _WifiPageState extends State<WifiPage> {
     );
   }
 
-  Widget _buildNetworkItem(BuildContext context, String name, bool isConnected) {
+  Widget _buildNetworkItem(
+    BuildContext context,
+    String name,
+    bool isConnected,
+  ) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -111,7 +119,9 @@ class _WifiPageState extends State<WifiPage> {
               Icon(
                 Icons.wifi_lock,
                 size: 20,
-                color: isConnected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
+                color: isConnected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurfaceVariant,
               ),
               const SizedBox(width: 16),
               Text(
@@ -131,10 +141,7 @@ class _WifiPageState extends State<WifiPage> {
               ),
             )
           else
-            TextButton(
-              onPressed: () {},
-              child: const Text('Connect'),
-            ),
+            TextButton(onPressed: () {}, child: const Text('Connect')),
         ],
       ),
     );

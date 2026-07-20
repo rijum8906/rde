@@ -35,9 +35,7 @@ final router = GoRouter(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               NavigationSidebar(currentPath: state.matchedLocation),
-              Expanded(
-                child: child,
-              ),
+              Expanded(child: child),
             ],
           ),
         );
@@ -45,97 +43,172 @@ final router = GoRouter(
       routes: [
         GoRoute(
           path: '/dashboard',
-          builder: (context, state) => const DashboardPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const DashboardPage()),
         ),
         GoRoute(
           path: '/wifi',
-          builder: (context, state) => const WifiPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const WifiPage()),
         ),
         GoRoute(
           path: '/bluetooth',
-          builder: (context, state) => const BluetoothPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const BluetoothPage()),
         ),
         GoRoute(
           path: '/network_proxy',
-          builder: (context, state) => const NetworkProxyPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const NetworkProxyPage()),
         ),
         GoRoute(
           path: '/theme_styling',
-          builder: (context, state) => const ThemeStylingPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const ThemeStylingPage()),
         ),
         GoRoute(
           path: '/wallpaper',
-          builder: (context, state) => const WallpaperPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const WallpaperPage()),
         ),
         GoRoute(
           path: '/typography',
-          builder: (context, state) => const TypographyPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const TypographyPage()),
         ),
         GoRoute(
           path: '/interface_assets',
-          builder: (context, state) => const InterfaceAssetsPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const InterfaceAssetsPage()),
         ),
         GoRoute(
           path: '/display',
-          builder: (context, state) => const DisplayPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const DisplayPage()),
         ),
         GoRoute(
           path: '/audio_io',
-          builder: (context, state) => const AudioIoPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const AudioIoPage()),
         ),
         GoRoute(
           path: '/keyboard',
-          builder: (context, state) => const KeyboardPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const KeyboardPage()),
         ),
         GoRoute(
           path: '/pointer',
-          builder: (context, state) => const PointerPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const PointerPage()),
         ),
         GoRoute(
           path: '/wm_bindings',
-          builder: (context, state) => const WmBindingsPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const WmBindingsPage()),
         ),
         GoRoute(
           path: '/battery_health',
-          builder: (context, state) => const BatteryHealthPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const BatteryHealthPage()),
         ),
         GoRoute(
           path: '/sleep_states',
-          builder: (context, state) => const SleepStatesPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const SleepStatesPage()),
         ),
         GoRoute(
           path: '/hardware_triggers',
-          builder: (context, state) => const HardwareTriggersPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const HardwareTriggersPage()),
         ),
         GoRoute(
           path: '/lock_screen',
-          builder: (context, state) => const LockScreenPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const LockScreenPage()),
         ),
         GoRoute(
           path: '/user_profile',
-          builder: (context, state) => const UserProfilePage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const UserProfilePage()),
         ),
         GoRoute(
           path: '/system_privacy',
-          builder: (context, state) => const SystemPrivacyPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const SystemPrivacyPage()),
         ),
         GoRoute(
           path: '/about_rde',
-          builder: (context, state) => const AboutRdePage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const AboutRdePage()),
         ),
         GoRoute(
           path: '/environment',
-          builder: (context, state) => const EnvironmentPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const EnvironmentPage()),
         ),
         GoRoute(
           path: '/daemons',
-          builder: (context, state) => const DaemonsPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const DaemonsPage()),
         ),
         GoRoute(
           path: '/engine_overrides',
-          builder: (context, state) => const EngineOverridesPage(),
+          pageBuilder: (context, state) =>
+              _buildTransitionPage(state, const EngineOverridesPage()),
         ),
       ],
     ),
   ],
 );
+
+/// A page that animates its entrance and exit using a Material 3 Shared Axis / Fade Through style.
+Page<dynamic> _buildTransitionPage(GoRouterState state, Widget child) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    child: child,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      // Incoming page fade and scale up from 96%
+      final fade = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+          parent: animation,
+          curve: const Interval(0.15, 1.0, curve: Curves.easeOutCubic),
+        ),
+      );
+
+      final scale = Tween<double>(begin: 0.96, end: 1.0).animate(
+        CurvedAnimation(
+          parent: animation,
+          curve: const Interval(0.15, 1.0, curve: Curves.easeOutCubic),
+        ),
+      );
+
+      // Outgoing page fade and scale down to 104% (or fade out smoothly)
+      final secondaryFade = Tween<double>(begin: 1.0, end: 0.0).animate(
+        CurvedAnimation(
+          parent: secondaryAnimation,
+          curve: const Interval(0.0, 0.35, curve: Curves.easeInCubic),
+        ),
+      );
+
+      final secondaryScale = Tween<double>(begin: 1.0, end: 1.03).animate(
+        CurvedAnimation(
+          parent: secondaryAnimation,
+          curve: const Interval(0.0, 0.35, curve: Curves.easeInCubic),
+        ),
+      );
+
+      return FadeTransition(
+        opacity: secondaryFade,
+        child: ScaleTransition(
+          scale: secondaryScale,
+          child: FadeTransition(
+            opacity: fade,
+            child: ScaleTransition(scale: scale, child: child),
+          ),
+        ),
+      );
+    },
+    transitionDuration: const Duration(milliseconds: 320),
+    reverseTransitionDuration: const Duration(milliseconds: 240),
+  );
+}

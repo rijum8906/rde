@@ -17,19 +17,13 @@ class SidebarSection {
   final String? title;
   final List<SidebarItem> items;
 
-  const SidebarSection({
-    this.title,
-    required this.items,
-  });
+  const SidebarSection({this.title, required this.items});
 }
 
 class NavigationSidebar extends StatelessWidget {
   final String currentPath;
 
-  const NavigationSidebar({
-    super.key,
-    required this.currentPath,
-  });
+  const NavigationSidebar({super.key, required this.currentPath});
 
   static const List<SidebarSection> _sections = [
     SidebarSection(
@@ -44,11 +38,7 @@ class NavigationSidebar extends StatelessWidget {
     SidebarSection(
       title: 'Connectivity',
       items: [
-        SidebarItem(
-          title: 'Wi-Fi',
-          icon: Icons.wifi,
-          path: '/wifi',
-        ),
+        SidebarItem(title: 'Wi-Fi', icon: Icons.wifi, path: '/wifi'),
         SidebarItem(
           title: 'Bluetooth',
           icon: Icons.bluetooth,
@@ -89,26 +79,14 @@ class NavigationSidebar extends StatelessWidget {
     SidebarSection(
       title: 'Hardware & Inputs',
       items: [
-        SidebarItem(
-          title: 'Display',
-          icon: Icons.monitor,
-          path: '/display',
-        ),
+        SidebarItem(title: 'Display', icon: Icons.monitor, path: '/display'),
         SidebarItem(
           title: 'Audio I/O',
           icon: Icons.volume_up,
           path: '/audio_io',
         ),
-        SidebarItem(
-          title: 'Keyboard',
-          icon: Icons.keyboard,
-          path: '/keyboard',
-        ),
-        SidebarItem(
-          title: 'Pointer',
-          icon: Icons.mouse,
-          path: '/pointer',
-        ),
+        SidebarItem(title: 'Keyboard', icon: Icons.keyboard, path: '/keyboard'),
+        SidebarItem(title: 'Pointer', icon: Icons.mouse, path: '/pointer'),
         SidebarItem(
           title: 'Window Manager Bindings',
           icon: Icons.keyboard_command_key,
@@ -159,21 +137,13 @@ class NavigationSidebar extends StatelessWidget {
     SidebarSection(
       title: 'Core System (Advanced)',
       items: [
-        SidebarItem(
-          title: 'About RDE',
-          icon: Icons.info,
-          path: '/about_rde',
-        ),
+        SidebarItem(title: 'About RDE', icon: Icons.info, path: '/about_rde'),
         SidebarItem(
           title: 'Environment',
           icon: Icons.settings_applications,
           path: '/environment',
         ),
-        SidebarItem(
-          title: 'Daemons',
-          icon: Icons.dns,
-          path: '/daemons',
-        ),
+        SidebarItem(title: 'Daemons', icon: Icons.dns, path: '/daemons'),
         SidebarItem(
           title: 'Engine Overrides',
           icon: Icons.developer_mode,
@@ -186,15 +156,18 @@ class NavigationSidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
     return Container(
-      width: 260,
+      width: 280,
       decoration: BoxDecoration(
-        color: isDark ? Colors.grey[900] : Colors.grey[50],
+        color: isDark
+            ? colorScheme.surfaceContainerLow
+            : colorScheme.surfaceContainerLowest,
         border: Border(
           right: BorderSide(
-            color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+            color: colorScheme.outlineVariant.withValues(alpha: 0.4),
             width: 1,
           ),
         ),
@@ -202,34 +175,13 @@ class NavigationSidebar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 24, top: 40, right: 24, bottom: 20),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.settings,
-                  size: 28,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Settings',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
+          const _SidebarHeader(),
+          const Divider(),
           Expanded(
             child: ListView.builder(
               itemCount: _sections.length,
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
               itemBuilder: (context, sectionIndex) {
                 final section = _sections[sectionIndex];
                 return Column(
@@ -237,65 +189,35 @@ class NavigationSidebar extends StatelessWidget {
                   children: [
                     if (section.title != null) ...[
                       Padding(
-                        padding: const EdgeInsets.only(left: 16, top: 16, bottom: 8),
+                        padding: const EdgeInsets.only(
+                          left: 24,
+                          top: 18,
+                          bottom: 6,
+                        ),
                         child: Text(
                           section.title!.toUpperCase(),
                           style: theme.textTheme.bodySmall?.copyWith(
                             fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.primary,
-                            letterSpacing: 1.1,
+                            color: colorScheme.primary,
+                            letterSpacing: 1.3,
+                            fontSize: 10,
                           ),
                         ),
                       ),
                     ],
                     ...section.items.map((item) {
-                      final isSelected = currentPath == item.path ||
+                      final isSelected =
+                          currentPath == item.path ||
                           (item.path == '/wifi' && currentPath == '/');
 
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: InkWell(
-                          onTap: () {
-                            if (!isSelected) {
-                              context.go(item.path);
-                            }
-                          },
-                          borderRadius: BorderRadius.circular(8),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? theme.colorScheme.primaryContainer
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  item.icon,
-                                  color: isSelected
-                                      ? theme.colorScheme.onPrimaryContainer
-                                      : theme.colorScheme.onSurfaceVariant,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Text(
-                                    item.title,
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                                      color: isSelected
-                                          ? theme.colorScheme.onPrimaryContainer
-                                          : theme.colorScheme.onSurface,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                      return _SidebarItemWidget(
+                        item: item,
+                        isSelected: isSelected,
+                        onTap: () {
+                          if (!isSelected) {
+                            context.go(item.path);
+                          }
+                        },
                       );
                     }),
                   ],
@@ -304,6 +226,173 @@ class NavigationSidebar extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SidebarHeader extends StatefulWidget {
+  const _SidebarHeader();
+
+  @override
+  State<_SidebarHeader> createState() => _SidebarHeaderState();
+}
+
+class _SidebarHeaderState extends State<_SidebarHeader> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 24, top: 32, right: 24, bottom: 16),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: Row(
+          children: [
+            AnimatedRotation(
+              turns: _isHovered ? 0.25 : 0.0,
+              duration: const Duration(milliseconds: 600),
+              curve: Curves.easeOutBack,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _isHovered
+                      ? colorScheme.primaryContainer
+                      : colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.settings_outlined,
+                  size: 24,
+                  color: _isHovered
+                      ? colorScheme.onPrimaryContainer
+                      : colorScheme.primary,
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                'Settings',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: colorScheme.onSurface,
+                  letterSpacing: -0.5,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SidebarItemWidget extends StatefulWidget {
+  final SidebarItem item;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _SidebarItemWidget({
+    required this.item,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  State<_SidebarItemWidget> createState() => _SidebarItemWidgetState();
+}
+
+class _SidebarItemWidgetState extends State<_SidebarItemWidget> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    final Color textColor = widget.isSelected
+        ? colorScheme.onSecondaryContainer
+        : (_isHovered ? colorScheme.onSurface : colorScheme.onSurfaceVariant);
+
+    final Color iconColor = widget.isSelected
+        ? colorScheme.onSecondaryContainer
+        : (_isHovered ? colorScheme.primary : colorScheme.onSurfaceVariant);
+
+    final Color backgroundColor = widget.isSelected
+        ? colorScheme.secondaryContainer
+        : (_isHovered
+              ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.4)
+              : Colors.transparent);
+
+    final double translationX = _isHovered && !widget.isSelected ? 4.0 : 0.0;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 12),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: AnimatedSlide(
+          offset: Offset(translationX / 280, 0),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(28),
+            hoverColor: Colors.transparent,
+            splashColor: colorScheme.primary.withValues(alpha: 0.1),
+            highlightColor: Colors.transparent,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: Row(
+                children: [
+                  AnimatedScale(
+                    scale: widget.isSelected ? 1.05 : (_isHovered ? 1.02 : 1.0),
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(widget.item.icon, color: iconColor, size: 20),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 200),
+                      style: theme.textTheme.bodyMedium!.copyWith(
+                        fontWeight: widget.isSelected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                        color: textColor,
+                      ),
+                      child: Text(
+                        widget.item.title,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  if (widget.isSelected)
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
