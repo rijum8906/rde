@@ -1,0 +1,21 @@
+[package]
+name = "rde-wifi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Internal
+rde-core.workspace = true
+rde-ipc.workspace = true
+
+tokio.workspace = true
+serde.workspace = true
+zbus.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+futures-util.workspace = true
+
+mockall.workspace = true

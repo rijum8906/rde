@@ -236,13 +236,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_brightness_app_lifecycle() {
-        let backlight_exists = std::path::Path::new("/sys/class/backlight/").exists();
+        let backlight_exists = std::path::Path::new("/sys/class/backlight/")
+            .read_dir()
+            .map(|mut entries| entries.any(|e| e.is_ok()))
+            .unwrap_or(false);
         let app_res = App::new();
 
         if backlight_exists {
             assert!(
                 app_res.is_ok(),
-                "Expected App::new to succeed on host with backlight"
+                "Expected App::new to succeed on host with backlight. Error: {:?}",
+                app_res.err()
             );
             let mut app = app_res.unwrap();
 

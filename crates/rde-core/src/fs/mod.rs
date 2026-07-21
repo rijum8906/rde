@@ -31,7 +31,7 @@ pub fn rde_service_cache_dir(service_name: &str) -> RdeResult<PathBuf> {
 
     let service_cache_dir = rde_cache_dir.join(service_name);
     // create the service cache directory if it doesn't exist
-    std::fs::create_dir(&service_cache_dir).map_err(|e| RdeError::NotFound(e.to_string()))?;
+    std::fs::create_dir_all(&service_cache_dir).map_err(|e| RdeError::NotFound(e.to_string()))?;
 
     Ok(service_cache_dir)
 }
@@ -55,7 +55,7 @@ pub fn rde_service_logs_dir(service_name: &str) -> RdeResult<PathBuf> {
 
     let service_logs_dir = rde_logs_dir.join(service_name);
     // create the service logs directory if it doesn't exist
-    std::fs::create_dir(&service_logs_dir).map_err(|e| RdeError::NotFound(e.to_string()))?;
+    std::fs::create_dir_all(&service_logs_dir).map_err(|e| RdeError::NotFound(e.to_string()))?;
 
     Ok(service_logs_dir)
 }

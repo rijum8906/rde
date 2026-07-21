@@ -1,0 +1,13 @@
+[Unit]
+Description=Riju Desktop Environment - Wi-Fi Service
+After=dbus.socket
+PartOf=rde-daemon.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/rde-wifi
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -1,4 +1,7 @@
-use alsa::{Mixer, PollDescriptors, mixer::{SelemChannelId, SelemId}};
+use alsa::{
+    Mixer,
+    mixer::{SelemChannelId, SelemId},
+};
 use rde_core::errors::{RdeError, RdeResult};
 
 /// Volume badkend constains all the methods needed to change and manaege the volume
@@ -28,21 +31,25 @@ impl VolumeBackend {
 
     /// Get current volume (0-100)
     pub fn get_volume(&self) -> RdeResult<u8> {
-        // Get the current volume
-        let vol = self
+        let selem = self
             .mixer
-            .get().map_err(|e| RdeError::ConfigNotFound(e.to_string()))?.get(SelemChannelId::FrontLeft);
+            .find_selem(&self.selem_id)
+            .ok_or_else(|| RdeError::ConfigNotFound("No Master control found".to_string()))?;
 
-        self.selem_id.try_intoH
+        // Get the current volume
+        let vol = selem
+            .get_playback_volume(SelemChannelId::FrontLeft)
+            .map_err(|e| RdeError::ConfigNotFound(e.to_string()))?;
 
         // Get min and max range
-        let (min, max) = self
-            .mixer
-            .selem_get_playback_volume_range(&self.selem_id)
-            .map_err(|e| format!("Failed to get volume range: {}", e))?;
+        let (min, max) = selem.get_playback_volume_range();
 
         // Convert to percentage (0-100)
-        let percentage = ((vol - min) * 100 / (max - min)) as u8;
+        let percentage = if max > min {
+            ((vol - min) * 100 / (max - min)) as u8
+        } else {
+            0
+        };
         Ok(percentage)
     }
 }
