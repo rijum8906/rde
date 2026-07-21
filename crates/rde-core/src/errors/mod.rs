@@ -55,6 +55,9 @@ pub enum RdeError {
     #[error("D-Bus error: {0}")]
     Dbus(#[from] zbus::Error),
 
+    #[error("Zbus error: {0}")]
+    Zbus(#[from] zbus::fdo::Error),
+
     #[error("D-Bus service not available: {0}")]
     DbusServiceUnavailable(String),
 
