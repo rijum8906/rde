@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:rde_settings/features/wifi/data/datasources/dbus/network_manager_proxy.dart';
+import 'package:rde_settings/features/wifi/data/datasources/dbus/rde_wifi_proxy.dart';
 import 'package:rde_settings/features/wifi/data/datasources/dbus_wifi_datasource.dart';
 import 'package:rde_settings/features/wifi/domain/repositories/wifi_repository_impl.dart';
 import 'package:rde_settings/features/wifi/presentation/bloc/wifi_bloc.dart';
@@ -14,7 +14,7 @@ class WifiPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Instantiate repository dependencies locally
-    final proxy = NetworkManagerProxy();
+    final proxy = RdeWifiProxy();
     final datasource = DbusWifiDatasource(proxy);
     final repository = WifiRepositoryImpl(datasource);
 

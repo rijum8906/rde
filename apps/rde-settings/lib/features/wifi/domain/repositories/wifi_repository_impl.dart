@@ -20,21 +20,25 @@ class WifiRepositoryImpl implements WifiRepository {
     WifiNetwork network, {
     String? password,
   }) async {
-    // Basic mock connection simulation
-    await Future.delayed(const Duration(milliseconds: 800));
-    return Right(network);
+    final res = await _wifiDatasource.connectToNetwork(network.ssid, password);
+    return res.fold(
+      (error) => Left(Failure(error.message)),
+      (_) => Right(network),
+    );
   }
 
   @override
   Future<Either<Failure, void>> disconnectFromNetwork(
     WifiNetwork network,
   ) async {
-    return const Right(null);
+    final res = await _wifiDatasource.disconnect();
+    return res.mapLeft((error) => Failure(error.message));
   }
 
   @override
   Future<Either<Failure, void>> forgetNetwork(WifiNetwork network) async {
-    return const Right(null);
+    final res = await _wifiDatasource.forgetNetwork(network.ssid);
+    return res.mapLeft((error) => Failure(error.message));
   }
 
   @override
