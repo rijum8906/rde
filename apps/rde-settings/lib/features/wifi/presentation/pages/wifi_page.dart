@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:rde_settings/features/wifi/data/datasources/dbus/network_manager_proxy.dart';
+import 'package:rde_settings/features/wifi/data/datasources/dbus/rde_wifi_proxy.dart';
 import 'package:rde_settings/features/wifi/data/datasources/dbus_wifi_datasource.dart';
 import 'package:rde_settings/features/wifi/domain/repositories/wifi_repository_impl.dart';
 import 'package:rde_settings/features/wifi/presentation/bloc/wifi_bloc.dart';
@@ -14,7 +14,7 @@ class WifiPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Instantiate repository dependencies locally
-    final proxy = NetworkManagerProxy();
+    final proxy = RdeWifiProxy();
     final datasource = DbusWifiDatasource(proxy);
     final repository = WifiRepositoryImpl(datasource);
 
@@ -269,6 +269,137 @@ class WifiView extends StatelessWidget {
                                         network: network,
                                         isConnected: isConnected,
                                         isConnecting: isConnecting,
+                                      ),
+                                    ],
+                                  );
+                                }),
+                              ),
+                            ],
+
+                            // Saved Devices & Profiles Section
+                            if (state.savedNetworks.isNotEmpty) ...[
+                              const Divider(height: 36),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.history_toggle_off_rounded,
+                                    size: 20,
+                                    color: colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Saved Devices & Profiles',
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: colorScheme.onSurface,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              Column(
+                                children: List.generate(state.savedNetworks.length, (
+                                  index,
+                                ) {
+                                  final network = state.savedNetworks[index];
+                                  final isConnected =
+                                      state.connectedSsid == network.ssid;
+
+                                  return Column(
+                                    children: [
+                                      if (index > 0) const Divider(),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 8.0,
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Icon(
+                                                  Icons.bookmark_added_outlined,
+                                                  size: 20,
+                                                  color: isConnected
+                                                      ? colorScheme.primary
+                                                      : colorScheme
+                                                            .onSurfaceVariant,
+                                                ),
+                                                const SizedBox(width: 16),
+                                                Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      network.ssid,
+                                                      style: theme
+                                                          .textTheme
+                                                          .bodyLarge
+                                                          ?.copyWith(
+                                                            fontWeight:
+                                                                isConnected
+                                                                ? FontWeight
+                                                                      .bold
+                                                                : FontWeight
+                                                                      .normal,
+                                                          ),
+                                                    ),
+                                                    Text(
+                                                      isConnected
+                                                          ? 'Currently Connected'
+                                                          : 'Saved Profile',
+                                                      style: theme
+                                                          .textTheme
+                                                          .bodySmall
+                                                          ?.copyWith(
+                                                            color: colorScheme
+                                                                .onSurfaceVariant,
+                                                          ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                            Row(
+                                              children: [
+                                                if (!isConnected) ...[
+                                                  TextButton(
+                                                    onPressed: () {
+                                                      context
+                                                          .read<WifiBloc>()
+                                                          .add(
+                                                            ConnectToNetworkEvent(
+                                                              network.ssid,
+                                                            ),
+                                                          );
+                                                    },
+                                                    child: const Text(
+                                                      'Connect',
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                ],
+                                                IconButton(
+                                                  onPressed: () {
+                                                    context.read<WifiBloc>().add(
+                                                      ForgetSavedNetworkEvent(
+                                                        network.ssid,
+                                                      ),
+                                                    );
+                                                  },
+                                                  icon: Icon(
+                                                    Icons.delete_outline,
+                                                    color: colorScheme.error
+                                                        .withValues(alpha: 0.8),
+                                                  ),
+                                                  tooltip: 'Forget Profile',
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ],
                                   );
