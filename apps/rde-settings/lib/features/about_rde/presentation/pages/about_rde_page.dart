@@ -1,65 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:rde_settings/features/about_rde/presentation/bloc/about_rde_bloc.dart';
+import 'package:rde_settings/features/about_rde/presentation/bloc/about_rde_event.dart';
+import 'package:rde_settings/features/about_rde/presentation/bloc/about_rde_state.dart';
 
-class AboutRdePage extends StatefulWidget {
+class AboutRdePage extends StatelessWidget {
   const AboutRdePage({super.key});
 
   @override
-  State<AboutRdePage> createState() => _AboutRdePageState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (context) => AboutRdeBloc(),
+      child: const AboutRdeView(),
+    );
+  }
 }
 
-class _AboutRdePageState extends State<AboutRdePage> {
-  bool _isCheckingForUpdates = false;
-  double _logoRotation = 0.0;
+class AboutRdeView extends StatelessWidget {
+  const AboutRdeView({super.key});
 
-  void _triggerUpdateCheck() async {
-    if (_isCheckingForUpdates) return;
-    setState(() {
-      _isCheckingForUpdates = true;
-    });
-
-    // Simulate standard system update search duration
-    await Future.delayed(const Duration(seconds: 2));
-
-    if (mounted) {
-      setState(() {
-        _isCheckingForUpdates = false;
-      });
-
-      // Show M3 custom dialog confirming current status
-      showDialog(
-        context: context,
-        builder: (context) {
-          final theme = Theme.of(context);
-          return AlertDialog(
-            title: const Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.green),
-                SizedBox(width: 12),
-                Text('System Up to Date'),
-              ],
-            ),
-            content: Text(
-              'Your Riju Desktop Environment is running the latest available release (v2.0.1 LTS).',
-              style: theme.textTheme.bodyMedium,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Dismiss'),
-              ),
-            ],
-          );
-        },
-      );
-    }
-  }
-
-  void _showLogsDialog() {
+  void _showLogsDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) {
         final theme = Theme.of(context);
-        final colorScheme = theme.colorScheme;
         return AlertDialog(
           title: const Text('System Core Logs'),
           content: Container(
@@ -98,74 +62,117 @@ class _AboutRdePageState extends State<AboutRdePage> {
     );
   }
 
+  void _showUpdateSuccessDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green),
+              SizedBox(width: 12),
+              Text('System Up to Date'),
+            ],
+          ),
+          content: Text(
+            'Your Riju Desktop Environment is running the latest available release (v2.0.1 LTS).',
+            style: theme.textTheme.bodyMedium,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Dismiss'),
+            ),
+          ],
+        );
+      },
+    ).then((_) {
+      // Clear status back to initial
+      if (context.mounted) {
+        context.read<AboutRdeBloc>().add(const ResetUpdateStatusEvent());
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header Title
-            Text(
-              'About RDE',
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: colorScheme.onSurface,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'System information, kernel configurations, releases, and diagnostic logs',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 28),
+      body: BlocConsumer<AboutRdeBloc, AboutRdeState>(
+        listenWhen: (previous, current) => previous.status != current.status,
+        listener: (context, state) {
+          if (state.status == AboutStatus.success) {
+            _showUpdateSuccessDialog(context);
+          }
+        },
+        builder: (context, state) {
+          return SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header Title
+                Text(
+                  'About RDE',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: colorScheme.onSurface,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'System information, kernel configurations, releases, and diagnostic logs',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 28),
 
-            // Main Columns
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth > 800;
-                return Flex(
-                  direction: isWide ? Axis.horizontal : Axis.vertical,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // System card (Left/Top)
-                    Expanded(
-                      flex: isWide ? 4 : 0,
-                      child: Column(
-                        children: [
-                          _buildSystemMainCard(context),
-                          const SizedBox(height: 24),
-                          _buildUpdateActionsCard(context),
-                        ],
-                      ),
-                    ),
-                    if (isWide) const SizedBox(width: 32),
-                    if (!isWide) const SizedBox(height: 32),
+                // Main Columns
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.maxWidth > 800;
+                    return Flex(
+                      direction: isWide ? Axis.horizontal : Axis.vertical,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // System card (Left/Top)
+                        Expanded(
+                          flex: isWide ? 4 : 0,
+                          child: Column(
+                            children: [
+                              _buildSystemMainCard(context, state),
+                              const SizedBox(height: 24),
+                              _buildUpdateActionsCard(context, state),
+                            ],
+                          ),
+                        ),
+                        if (isWide) const SizedBox(width: 32),
+                        if (!isWide) const SizedBox(height: 32),
 
-                    // Detail Specs (Right/Bottom)
-                    Expanded(
-                      flex: isWide ? 3 : 0,
-                      child: _buildDetailsSpecsCard(context),
-                    ),
-                  ],
-                );
-              },
+                        // Detail Specs (Right/Bottom)
+                        Expanded(
+                          flex: isWide ? 3 : 0,
+                          child: _buildDetailsSpecsCard(context),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildSystemMainCard(BuildContext context) {
+  Widget _buildSystemMainCard(BuildContext context, AboutRdeState state) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -177,34 +184,39 @@ class _AboutRdePageState extends State<AboutRdePage> {
             // Dynamic Rotating System Logo Badge
             MouseRegion(
               cursor: SystemMouseCursors.click,
-              onEnter: (_) => setState(() => _logoRotation += 0.25),
+              onEnter: (_) =>
+                  context.read<AboutRdeBloc>().add(const RotateLogoEvent(0.25)),
               child: GestureDetector(
-                onTap: () => setState(() => _logoRotation += 1.0),
-                child: AnimatedRotation(
-                  turns: _logoRotation,
-                  duration: const Duration(milliseconds: 800),
-                  curve: Curves.easeOutBack,
-                  child: Container(
-                    width: 96,
-                    height: 96,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [colorScheme.primary, colorScheme.tertiary],
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: colorScheme.primary.withValues(alpha: 0.2),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
+                onTap: () => context.read<AboutRdeBloc>().add(
+                  const RotateLogoEvent(1.0),
+                ),
+                child: RepaintBoundary(
+                  child: AnimatedRotation(
+                    turns: state.logoRotation,
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.easeOutBack,
+                    child: Container(
+                      width: 96,
+                      height: 96,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [colorScheme.primary, colorScheme.tertiary],
                         ),
-                      ],
-                    ),
-                    child: Center(
-                      child: Icon(
-                        Icons.blur_on_rounded,
-                        size: 56,
-                        color: colorScheme.onPrimary,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: colorScheme.primary.withValues(alpha: 0.2),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.blur_on_rounded,
+                          size: 56,
+                          color: colorScheme.onPrimary,
+                        ),
                       ),
                     ),
                   ),
@@ -242,9 +254,9 @@ class _AboutRdePageState extends State<AboutRdePage> {
     );
   }
 
-  Widget _buildUpdateActionsCard(BuildContext context) {
+  Widget _buildUpdateActionsCard(BuildContext context, AboutRdeState state) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final isChecking = state.status == AboutStatus.checking;
 
     return Card(
       child: Padding(
@@ -263,10 +275,12 @@ class _AboutRdePageState extends State<AboutRdePage> {
               children: [
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: _isCheckingForUpdates
+                    onPressed: isChecking
                         ? null
-                        : _triggerUpdateCheck,
-                    icon: _isCheckingForUpdates
+                        : () => context.read<AboutRdeBloc>().add(
+                            const TriggerUpdateCheckEvent(),
+                          ),
+                    icon: isChecking
                         ? const SizedBox(
                             width: 18,
                             height: 18,
@@ -279,16 +293,14 @@ class _AboutRdePageState extends State<AboutRdePage> {
                           )
                         : const Icon(Icons.system_update_alt_rounded),
                     label: Text(
-                      _isCheckingForUpdates
-                          ? 'Checking Server...'
-                          : 'Check for Updates',
+                      isChecking ? 'Checking Server...' : 'Check for Updates',
                     ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: _showLogsDialog,
+                    onPressed: () => _showLogsDialog(context),
                     icon: const Icon(Icons.terminal),
                     label: const Text('View Core Logs'),
                   ),
@@ -303,7 +315,6 @@ class _AboutRdePageState extends State<AboutRdePage> {
 
   Widget _buildDetailsSpecsCard(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return Card(
       child: Padding(

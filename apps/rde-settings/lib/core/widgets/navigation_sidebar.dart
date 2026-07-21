@@ -253,25 +253,27 @@ class _SidebarHeaderState extends State<_SidebarHeader> {
         onExit: (_) => setState(() => _isHovered = false),
         child: Row(
           children: [
-            AnimatedRotation(
-              turns: _isHovered ? 0.25 : 0.0,
-              duration: const Duration(milliseconds: 600),
-              curve: Curves.easeOutBack,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: _isHovered
-                      ? colorScheme.primaryContainer
-                      : colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.settings_outlined,
-                  size: 24,
-                  color: _isHovered
-                      ? colorScheme.onPrimaryContainer
-                      : colorScheme.primary,
+            RepaintBoundary(
+              child: AnimatedRotation(
+                turns: _isHovered ? 0.25 : 0.0,
+                duration: const Duration(milliseconds: 600),
+                curve: Curves.easeOutBack,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: _isHovered
+                        ? colorScheme.primaryContainer
+                        : colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.settings_outlined,
+                    size: 24,
+                    color: _isHovered
+                        ? colorScheme.onPrimaryContainer
+                        : colorScheme.primary,
+                  ),
                 ),
               ),
             ),
@@ -338,57 +340,64 @@ class _SidebarItemWidgetState extends State<_SidebarItemWidget> {
       child: MouseRegion(
         onEnter: (_) => setState(() => _isHovered = true),
         onExit: (_) => setState(() => _isHovered = false),
-        child: AnimatedSlide(
-          offset: Offset(translationX / 280, 0),
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
-          child: InkWell(
-            onTap: widget.onTap,
-            borderRadius: BorderRadius.circular(28),
-            hoverColor: Colors.transparent,
-            splashColor: colorScheme.primary.withValues(alpha: 0.1),
-            highlightColor: Colors.transparent,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutCubic,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: backgroundColor,
-                borderRadius: BorderRadius.circular(28),
-              ),
-              child: Row(
-                children: [
-                  AnimatedScale(
-                    scale: widget.isSelected ? 1.05 : (_isHovered ? 1.02 : 1.0),
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(widget.item.icon, color: iconColor, size: 20),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: AnimatedDefaultTextStyle(
+        child: RepaintBoundary(
+          child: AnimatedSlide(
+            offset: Offset(translationX / 280, 0),
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            child: InkWell(
+              onTap: widget.onTap,
+              borderRadius: BorderRadius.circular(28),
+              hoverColor: Colors.transparent,
+              splashColor: colorScheme.primary.withValues(alpha: 0.1),
+              highlightColor: Colors.transparent,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: backgroundColor,
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: Row(
+                  children: [
+                    AnimatedScale(
+                      scale: widget.isSelected
+                          ? 1.05
+                          : (_isHovered ? 1.02 : 1.0),
                       duration: const Duration(milliseconds: 200),
-                      style: theme.textTheme.bodyMedium!.copyWith(
-                        fontWeight: widget.isSelected
-                            ? FontWeight.w600
-                            : FontWeight.normal,
-                        color: textColor,
-                      ),
-                      child: Text(
-                        widget.item.title,
-                        overflow: TextOverflow.ellipsis,
+                      child: Icon(widget.item.icon, color: iconColor, size: 20),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: AnimatedDefaultTextStyle(
+                        duration: const Duration(milliseconds: 200),
+                        style: theme.textTheme.bodyMedium!.copyWith(
+                          fontWeight: widget.isSelected
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                          color: textColor,
+                        ),
+                        child: Text(
+                          widget.item.title,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
-                  ),
-                  if (widget.isSelected)
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary,
-                        shape: BoxShape.circle,
+                    if (widget.isSelected)
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary,
+                          shape: BoxShape.circle,
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

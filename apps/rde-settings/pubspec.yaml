@@ -37,6 +37,8 @@ dependencies:
   go_router: ^17.3.0
   fpdart: ^1.2.0
   dbus: ^0.7.14
+  flutter_bloc: ^9.1.1
+  bloc: ^9.2.1
 
 dev_dependencies:
   flutter_test:

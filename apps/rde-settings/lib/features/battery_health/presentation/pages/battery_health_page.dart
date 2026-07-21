@@ -1,16 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:rde_settings/features/battery_health/presentation/bloc/battery_health_bloc.dart';
+import 'package:rde_settings/features/battery_health/presentation/bloc/battery_health_event.dart';
+import 'package:rde_settings/features/battery_health/presentation/bloc/battery_health_state.dart';
 
-class BatteryHealthPage extends StatefulWidget {
+class BatteryHealthPage extends StatelessWidget {
   const BatteryHealthPage({super.key});
 
   @override
-  State<BatteryHealthPage> createState() => _BatteryHealthPageState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (context) => BatteryHealthBloc(),
+      child: const BatteryHealthView(),
+    );
+  }
 }
 
-class _BatteryHealthPageState extends State<BatteryHealthPage> {
-  bool _powerSavingMode = false;
-  bool _healthProtection = true;
-  double _chargeLimit = 0.8;
+class BatteryHealthView extends StatelessWidget {
+  const BatteryHealthView({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -18,69 +25,73 @@ class _BatteryHealthPageState extends State<BatteryHealthPage> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Text(
-              'Battery Health',
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: colorScheme.onSurface,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Monitor battery status, health performance, and power configurations',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 28),
+      body: BlocBuilder<BatteryHealthBloc, BatteryHealthState>(
+        builder: (context, state) {
+          return SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Text(
+                  'Battery Health',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: colorScheme.onSurface,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Monitor battery status, health performance, and power configurations',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 28),
 
-            // Responsive Layout
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth > 800;
-                return Flex(
-                  direction: isWide ? Axis.horizontal : Axis.vertical,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Visual Battery Card (Left/Top)
-                    Expanded(
-                      flex: isWide ? 4 : 0,
-                      child: Column(
-                        children: [
-                          _buildVisualBatteryCard(context),
-                          const SizedBox(height: 24),
-                          _buildPowerManagementCard(context),
-                        ],
-                      ),
-                    ),
-                    if (isWide) const SizedBox(width: 32),
-                    if (!isWide) const SizedBox(height: 32),
+                // Responsive Layout
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.maxWidth > 800;
+                    return Flex(
+                      direction: isWide ? Axis.horizontal : Axis.vertical,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Visual Battery Card (Left/Top)
+                        Expanded(
+                          flex: isWide ? 4 : 0,
+                          child: Column(
+                            children: [
+                              _buildVisualBatteryCard(context),
+                              const SizedBox(height: 24),
+                              _buildPowerManagementCard(context, state),
+                            ],
+                          ),
+                        ),
+                        if (isWide) const SizedBox(width: 32),
+                        if (!isWide) const SizedBox(height: 32),
 
-                    // Battery Stats & Health info (Right/Bottom)
-                    Expanded(
-                      flex: isWide ? 3 : 0,
-                      child: Column(
-                        children: [
-                          _buildHealthStatsCard(context),
-                          const SizedBox(height: 24),
-                          _buildAppUsageCard(context),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              },
+                        // Battery Stats & Health info (Right/Bottom)
+                        Expanded(
+                          flex: isWide ? 3 : 0,
+                          child: Column(
+                            children: [
+                              _buildHealthStatsCard(context),
+                              const SizedBox(height: 24),
+                              _buildAppUsageCard(context),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -142,72 +153,75 @@ class _BatteryHealthPageState extends State<BatteryHealthPage> {
             const SizedBox(height: 36),
 
             // Animated Visual Battery Cylinder
-            TweenAnimationBuilder<double>(
-              tween: Tween<double>(begin: 0.0, end: 0.88),
-              duration: const Duration(seconds: 1),
-              curve: Curves.easeOutBack,
-              builder: (context, chargeValue, _) {
-                return Column(
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 200,
-                        height: 90,
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: colorScheme.outline,
-                            width: 4,
+            RepaintBoundary(
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0.0, end: 0.88),
+                duration: const Duration(seconds: 1),
+                curve: Curves.easeOutBack,
+                builder: (context, chargeValue, _) {
+                  return Column(
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 200,
+                          height: 90,
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: colorScheme.outline,
+                              width: 4,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        padding: const EdgeInsets.all(6),
-                        child: Stack(
-                          children: [
-                            // Fill level
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 500),
-                              width: (200 - 20) * chargeValue,
-                              height: double.infinity,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                gradient: LinearGradient(
-                                  colors: [
-                                    Colors.green[400]!,
-                                    Colors.green[600]!,
-                                  ],
+                          padding: const EdgeInsets.all(6),
+                          child: Stack(
+                            children: [
+                              // Fill level
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 500),
+                                width: (200 - 20) * chargeValue,
+                                height: double.infinity,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.green[400]!,
+                                      Colors.green[600]!,
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                            // Inside percentage overlay
-                            Center(
-                              child: Text(
-                                '${(chargeValue * 100).toInt()}%',
-                                style: theme.textTheme.headlineMedium?.copyWith(
-                                  fontWeight: FontWeight.w900,
-                                  color: colorScheme.onSurface,
+                              // Inside percentage overlay
+                              Center(
+                                child: Text(
+                                  '${(chargeValue * 100).toInt()}%',
+                                  style: theme.textTheme.headlineMedium
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w900,
+                                        color: colorScheme.onSurface,
+                                      ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    // Battery terminal cap on the right
-                    Container(
-                      width: 14,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: colorScheme.outline,
-                        borderRadius: const BorderRadius.only(
-                          topRight: Radius.circular(6),
-                          bottomRight: Radius.circular(6),
+                      const SizedBox(height: 12),
+                      // Battery terminal cap on the right
+                      Container(
+                        width: 14,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: colorScheme.outline,
+                          borderRadius: const BorderRadius.only(
+                            topRight: Radius.circular(6),
+                            bottomRight: Radius.circular(6),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                );
-              },
+                    ],
+                  );
+                },
+              ),
             ),
             const SizedBox(height: 24),
           ],
@@ -216,9 +230,11 @@ class _BatteryHealthPageState extends State<BatteryHealthPage> {
     );
   }
 
-  Widget _buildPowerManagementCard(BuildContext context) {
+  Widget _buildPowerManagementCard(
+    BuildContext context,
+    BatteryHealthState state,
+  ) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return Card(
       child: Padding(
@@ -243,9 +259,11 @@ class _BatteryHealthPageState extends State<BatteryHealthPage> {
               subtitle: const Text(
                 'Reduces hardware speed and turns down active brightness',
               ),
-              value: _powerSavingMode,
+              value: state.powerSavingMode,
               onChanged: (val) {
-                setState(() => _powerSavingMode = val);
+                context.read<BatteryHealthBloc>().add(
+                  TogglePowerSavingEvent(val),
+                );
               },
             ),
             const Divider(height: 24),
@@ -259,13 +277,15 @@ class _BatteryHealthPageState extends State<BatteryHealthPage> {
               subtitle: const Text(
                 'Cap maximum battery charge level to prolong lithium battery lifespan',
               ),
-              value: _healthProtection,
+              value: state.healthProtection,
               onChanged: (val) {
-                setState(() => _healthProtection = val);
+                context.read<BatteryHealthBloc>().add(
+                  ToggleHealthProtectionEvent(val),
+                );
               },
             ),
 
-            if (_healthProtection) ...[
+            if (state.healthProtection) ...[
               const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -279,7 +299,7 @@ class _BatteryHealthPageState extends State<BatteryHealthPage> {
                       ),
                     ),
                     Text(
-                      '${(_chargeLimit * 100).toInt()}%',
+                      '${(state.chargeLimit * 100).toInt()}%',
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -288,11 +308,15 @@ class _BatteryHealthPageState extends State<BatteryHealthPage> {
                 ),
               ),
               Slider(
-                value: _chargeLimit,
+                value: state.chargeLimit,
                 min: 0.6,
                 max: 1.0,
                 divisions: 8,
-                onChanged: (val) => setState(() => _chargeLimit = val),
+                onChanged: (val) {
+                  context.read<BatteryHealthBloc>().add(
+                    ChangeChargeLimitEvent(val),
+                  );
+                },
               ),
             ],
           ],
@@ -303,7 +327,6 @@ class _BatteryHealthPageState extends State<BatteryHealthPage> {
 
   Widget _buildHealthStatsCard(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return Card(
       child: Padding(

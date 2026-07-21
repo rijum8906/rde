@@ -1,19 +1,34 @@
 import 'package:flutter/material.dart';
-import 'package:rde_settings/main.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:rde_settings/features/dashboard/data/repositories/dashboard_repository_impl.dart';
+import 'package:rde_settings/features/dashboard/domain/use_cases/get_dashboard_settings.dart';
+import 'package:rde_settings/features/dashboard/domain/use_cases/save_dashboard_settings.dart';
+import 'package:rde_settings/features/dashboard/presentation/bloc/dashboard_bloc.dart';
+import 'package:rde_settings/features/dashboard/presentation/bloc/dashboard_event.dart';
+import 'package:rde_settings/features/dashboard/presentation/bloc/dashboard_state.dart';
 
-class DashboardPage extends StatefulWidget {
+class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
 
   @override
-  State<DashboardPage> createState() => _DashboardPageState();
+  Widget build(BuildContext context) {
+    // Inject repository and use cases locally at the feature entry point
+    final repository = DashboardRepositoryImpl();
+    final getUseCase = GetDashboardSettingsUseCase(repository);
+    final saveUseCase = SaveDashboardSettingsUseCase(repository);
+
+    return BlocProvider(
+      create: (context) => DashboardBloc(
+        getSettingsUseCase: getUseCase,
+        saveSettingsUseCase: saveUseCase,
+      )..add(const DashboardInitEvent()),
+      child: const DashboardView(),
+    );
+  }
 }
 
-class _DashboardPageState extends State<DashboardPage> {
-  // Quick settings states
-  bool _wifiEnabled = true;
-  bool _bluetoothEnabled = false;
-  double _volume = 0.7;
-  double _brightness = 0.65;
+class DashboardView extends StatelessWidget {
+  const DashboardView({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -21,94 +36,111 @@ class _DashboardPageState extends State<DashboardPage> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header Title
-            Row(
+      body: BlocBuilder<DashboardBloc, DashboardState>(
+        builder: (context, state) {
+          if (state.status == DashboardStatus.loading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (state.status == DashboardStatus.failure) {
+            return Center(
+              child: Text(
+                'Failed to load settings: ${state.errorMessage}',
+                style: TextStyle(color: colorScheme.error),
+              ),
+            );
+          }
+
+          return SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                // Header Title
+                Row(
                   children: [
-                    Text(
-                      'Dashboard',
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: colorScheme.onSurface,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'System status and quick toggles',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Dashboard',
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: colorScheme.onSurface,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'System status and quick toggles',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
+                const SizedBox(height: 28),
+
+                // Welcome banner with animated gradient background
+                _buildWelcomeBanner(context),
+                const SizedBox(height: 32),
+
+                // Two-column layout on wide screens
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.maxWidth > 800;
+                    if (isWide) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildQuickTogglesSection(context, state),
+                                const SizedBox(height: 32),
+                                _buildSlidersSection(context, state),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 32),
+                          Expanded(
+                            flex: 2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildResourceHealthSection(context, state),
+                                const SizedBox(height: 32),
+                                _buildThemeCustomizerSection(context, state),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    } else {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildQuickTogglesSection(context, state),
+                          const SizedBox(height: 32),
+                          _buildSlidersSection(context, state),
+                          const SizedBox(height: 32),
+                          _buildResourceHealthSection(context, state),
+                          const SizedBox(height: 32),
+                          _buildThemeCustomizerSection(context, state),
+                        ],
+                      );
+                    }
+                  },
+                ),
               ],
             ),
-            const SizedBox(height: 28),
-
-            // Welcome banner with animated gradient background
-            _buildWelcomeBanner(context),
-            const SizedBox(height: 32),
-
-            // Two-column layout on wide screens
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth > 800;
-                if (isWide) {
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildQuickTogglesSection(context),
-                            const SizedBox(height: 32),
-                            _buildSlidersSection(context),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 32),
-                      Expanded(
-                        flex: 2,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildResourceHealthSection(context),
-                            const SizedBox(height: 32),
-                            _buildThemeCustomizerSection(context),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                } else {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildQuickTogglesSection(context),
-                      const SizedBox(height: 32),
-                      _buildSlidersSection(context),
-                      const SizedBox(height: 32),
-                      _buildResourceHealthSection(context),
-                      const SizedBox(height: 32),
-                      _buildThemeCustomizerSection(context),
-                    ],
-                  );
-                }
-              },
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -232,7 +264,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildQuickTogglesSection(BuildContext context) {
+  Widget _buildQuickTogglesSection(BuildContext context, DashboardState state) {
     final theme = Theme.of(context);
 
     return Column(
@@ -253,23 +285,23 @@ class _DashboardPageState extends State<DashboardPage> {
             final wifiCard = _buildToggleCard(
               context: context,
               title: 'Wi-Fi Network',
-              subtitle: _wifiEnabled ? 'Connected to RDE-Net' : 'Off',
-              icon: _wifiEnabled ? Icons.wifi : Icons.wifi_off,
-              value: _wifiEnabled,
+              subtitle: state.wifiEnabled ? 'Connected to RDE-Net' : 'Off',
+              icon: state.wifiEnabled ? Icons.wifi : Icons.wifi_off,
+              value: state.wifiEnabled,
               onChanged: (val) {
-                setState(() => _wifiEnabled = val);
+                context.read<DashboardBloc>().add(ToggleWifiEvent(val));
               },
             );
             final btCard = _buildToggleCard(
               context: context,
               title: 'Bluetooth',
-              subtitle: _bluetoothEnabled ? 'Searching...' : 'Disabled',
-              icon: _bluetoothEnabled
+              subtitle: state.bluetoothEnabled ? 'Searching...' : 'Disabled',
+              icon: state.bluetoothEnabled
                   ? Icons.bluetooth
                   : Icons.bluetooth_disabled,
-              value: _bluetoothEnabled,
+              value: state.bluetoothEnabled,
               onChanged: (val) {
-                setState(() => _bluetoothEnabled = val);
+                context.read<DashboardBloc>().add(ToggleBluetoothEvent(val));
               },
             );
 
@@ -364,7 +396,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildSlidersSection(BuildContext context) {
+  Widget _buildSlidersSection(BuildContext context, DashboardState state) {
     final theme = Theme.of(context);
     return Card(
       child: Padding(
@@ -382,19 +414,23 @@ class _DashboardPageState extends State<DashboardPage> {
             _buildSliderRow(
               context: context,
               label: 'Volume',
-              value: _volume,
-              icon: _volume == 0
+              value: state.volume,
+              icon: state.volume == 0
                   ? Icons.volume_mute
-                  : (_volume < 0.5 ? Icons.volume_down : Icons.volume_up),
-              onChanged: (val) => setState(() => _volume = val),
+                  : (state.volume < 0.5 ? Icons.volume_down : Icons.volume_up),
+              onChanged: (val) {
+                context.read<DashboardBloc>().add(ChangeVolumeEvent(val));
+              },
             ),
             const Divider(height: 24),
             _buildSliderRow(
               context: context,
               label: 'Brightness',
-              value: _brightness,
+              value: state.brightness,
               icon: Icons.light_mode,
-              onChanged: (val) => setState(() => _brightness = val),
+              onChanged: (val) {
+                context.read<DashboardBloc>().add(ChangeBrightnessEvent(val));
+              },
             ),
           ],
         ),
@@ -443,7 +479,10 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildResourceHealthSection(BuildContext context) {
+  Widget _buildResourceHealthSection(
+    BuildContext context,
+    DashboardState state,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -466,19 +505,19 @@ class _DashboardPageState extends State<DashboardPage> {
                 _buildCircularGauge(
                   context: context,
                   label: 'CPU',
-                  percentage: 0.38,
+                  percentage: state.cpuUsage,
                   color: colorScheme.primary,
                 ),
                 _buildCircularGauge(
                   context: context,
                   label: 'RAM',
-                  percentage: 0.54,
+                  percentage: state.ramUsage,
                   color: colorScheme.secondary,
                 ),
                 _buildCircularGauge(
                   context: context,
                   label: 'Battery',
-                  percentage: 0.88,
+                  percentage: state.batteryLevel,
                   color: const Color(0xFF006E3C), // Emerald
                 ),
               ],
@@ -500,7 +539,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0, end: percentage),
-      duration: const Duration(seconds: 1),
+      duration: const Duration(milliseconds: 500),
       curve: Curves.easeOutCubic,
       builder: (context, val, _) {
         return Column(
@@ -508,26 +547,28 @@ class _DashboardPageState extends State<DashboardPage> {
             SizedBox(
               width: 64,
               height: 64,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CircularProgressIndicator(
-                    value: val,
-                    strokeWidth: 6,
-                    valueColor: AlwaysStoppedAnimation<Color>(color),
-                    backgroundColor: colorScheme.surfaceContainerHighest,
-                    strokeCap: StrokeCap.round,
-                  ),
-                  Center(
-                    child: Text(
-                      '${(val * 100).toInt()}%',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: colorScheme.onSurface,
+              child: RepaintBoundary(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CircularProgressIndicator(
+                      value: val,
+                      strokeWidth: 6,
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                      backgroundColor: colorScheme.surfaceContainerHighest,
+                      strokeCap: StrokeCap.round,
+                    ),
+                    Center(
+                      child: Text(
+                        '${(val * 100).toInt()}%',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: colorScheme.onSurface,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 8),
@@ -544,7 +585,10 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildThemeCustomizerSection(BuildContext context) {
+  Widget _buildThemeCustomizerSection(
+    BuildContext context,
+    DashboardState state,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -580,31 +624,28 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ),
             const SizedBox(height: 8),
-            ValueListenableBuilder<ThemeMode>(
-              valueListenable: themeModeNotifier,
-              builder: (context, currentMode, _) {
-                return SegmentedButton<ThemeMode>(
-                  segments: const [
-                    ButtonSegment(
-                      value: ThemeMode.light,
-                      label: Text('Light'),
-                      icon: Icon(Icons.light_mode_outlined),
-                    ),
-                    ButtonSegment(
-                      value: ThemeMode.dark,
-                      label: Text('Dark'),
-                      icon: Icon(Icons.dark_mode_outlined),
-                    ),
-                    ButtonSegment(
-                      value: ThemeMode.system,
-                      label: Text('System'),
-                      icon: Icon(Icons.settings_suggest_outlined),
-                    ),
-                  ],
-                  selected: {currentMode},
-                  onSelectionChanged: (newSelection) {
-                    themeModeNotifier.value = newSelection.first;
-                  },
+            SegmentedButton<ThemeMode>(
+              segments: const [
+                ButtonSegment(
+                  value: ThemeMode.light,
+                  label: Text('Light'),
+                  icon: Icon(Icons.light_mode_outlined),
+                ),
+                ButtonSegment(
+                  value: ThemeMode.dark,
+                  label: Text('Dark'),
+                  icon: Icon(Icons.dark_mode_outlined),
+                ),
+                ButtonSegment(
+                  value: ThemeMode.system,
+                  label: Text('System'),
+                  icon: Icon(Icons.settings_suggest_outlined),
+                ),
+              ],
+              selected: {state.themeMode},
+              onSelectionChanged: (newSelection) {
+                context.read<DashboardBloc>().add(
+                  ChangeThemeModeEvent(newSelection.first),
                 );
               },
             ),
@@ -620,56 +661,53 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ),
             const SizedBox(height: 10),
-            ValueListenableBuilder<Color>(
-              valueListenable: accentColorNotifier,
-              builder: (context, currentAccent, _) {
-                return Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: accentColors.map((color) {
-                    final isSelected = currentAccent.value == color.value;
-                    return MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: GestureDetector(
-                        onTap: () {
-                          accentColorNotifier.value = color;
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isSelected
-                                  ? colorScheme.onSurface
-                                  : Colors.transparent,
-                              width: 3,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: color.withValues(alpha: 0.3),
-                                blurRadius: 6,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: isSelected
-                              ? Icon(
-                                  Icons.check,
-                                  color: color.computeLuminance() > 0.5
-                                      ? Colors.black
-                                      : Colors.white,
-                                  size: 18,
-                                )
-                              : null,
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: accentColors.map((color) {
+                final isSelected = state.accentColor.value == color.value;
+                return MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () {
+                      context.read<DashboardBloc>().add(
+                        ChangeAccentColorEvent(color),
+                      );
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isSelected
+                              ? colorScheme.onSurface
+                              : Colors.transparent,
+                          width: 3,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: color.withValues(alpha: 0.3),
+                            blurRadius: 6,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
                       ),
-                    );
-                  }).toList(),
+                      child: isSelected
+                          ? Icon(
+                              Icons.check,
+                              color: color.computeLuminance() > 0.5
+                                  ? Colors.black
+                                  : Colors.white,
+                              size: 18,
+                            )
+                          : null,
+                    ),
+                  ),
                 );
-              },
+              }).toList(),
             ),
           ],
         ),

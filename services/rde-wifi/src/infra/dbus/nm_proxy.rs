@@ -13,6 +13,9 @@ pub trait NetworkManager {
     /// Get all network devices
     fn get_all_devices(&self) -> Result<Vec<OwnedObjectPath>>;
 
+    /// Get all saved connections
+    async fn list_connections(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
+
     /// Get device by network interface name (e.g., "wlan0")
     fn get_device_by_ip_iface(&self, iface: &str) -> Result<OwnedObjectPath>;
 

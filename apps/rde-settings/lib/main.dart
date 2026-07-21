@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:rde_settings/core/navigation/router.dart';
+import 'package:rde_settings/core/theme/bloc/app_theme_bloc.dart';
+import 'package:rde_settings/core/theme/bloc/app_theme_state.dart';
 
-// Global notifiers for dynamic UI customization
-final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(
-  ThemeMode.system,
-);
-final ValueNotifier<Color> accentColorNotifier = ValueNotifier(
-  const Color(0xFF6750A4),
-); // M3 Baseline purple
+// Global bloc for dynamic UI customization
+final appThemeBloc = AppThemeBloc();
 
 void main() {
   runApp(const SettingsApp());
@@ -112,23 +110,20 @@ class SettingsApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: themeModeNotifier,
-      builder: (context, themeMode, _) {
-        return ValueListenableBuilder<Color>(
-          valueListenable: accentColorNotifier,
-          builder: (context, accentColor, _) {
-            return MaterialApp.router(
-              debugShowCheckedModeBanner: false,
-              title: 'Settings',
-              theme: _createTheme(accentColor, Brightness.light),
-              darkTheme: _createTheme(accentColor, Brightness.dark),
-              themeMode: themeMode,
-              routerConfig: router,
-            );
-          },
-        );
-      },
+    return BlocProvider.value(
+      value: appThemeBloc,
+      child: BlocBuilder<AppThemeBloc, AppThemeState>(
+        builder: (context, state) {
+          return MaterialApp.router(
+            debugShowCheckedModeBanner: false,
+            title: 'Settings',
+            theme: _createTheme(state.accentColor, Brightness.light),
+            darkTheme: _createTheme(state.accentColor, Brightness.dark),
+            themeMode: state.themeMode,
+            routerConfig: router,
+          );
+        },
+      ),
     );
   }
 }
