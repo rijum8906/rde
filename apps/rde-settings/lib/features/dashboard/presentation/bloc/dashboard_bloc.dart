@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:rde_settings/core/theme/bloc/app_theme_event.dart' as theme_evt;
 import 'package:rde_settings/features/dashboard/domain/entities/dashboard_settings.dart';
 import 'package:rde_settings/features/dashboard/domain/use_cases/get_dashboard_settings.dart';
 import 'package:rde_settings/features/dashboard/domain/use_cases/save_dashboard_settings.dart';
@@ -65,8 +66,8 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
           batteryLevel: settings.batteryLevel,
           ramUsage: settings.ramUsage,
           cpuUsage: 0.38,
-          themeMode: themeModeNotifier.value,
-          accentColor: accentColorNotifier.value,
+          themeMode: appThemeBloc.state.themeMode,
+          accentColor: appThemeBloc.state.accentColor,
         ),
       ),
     );
@@ -121,7 +122,7 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
     ChangeThemeModeEvent event,
     Emitter<DashboardState> emit,
   ) async {
-    themeModeNotifier.value = event.themeMode;
+    appThemeBloc.add(theme_evt.ChangeThemeModeEvent(event.themeMode));
     final newState = state.copyWith(themeMode: event.themeMode);
     emit(newState);
     await _saveDashboardSettings(newState);
@@ -131,7 +132,7 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
     ChangeAccentColorEvent event,
     Emitter<DashboardState> emit,
   ) async {
-    accentColorNotifier.value = event.accentColor;
+    appThemeBloc.add(theme_evt.ChangeAccentColorEvent(event.accentColor));
     final newState = state.copyWith(accentColor: event.accentColor);
     emit(newState);
     await _saveDashboardSettings(newState);

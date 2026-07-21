@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:rde_settings/main.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:rde_settings/core/theme/bloc/app_theme_bloc.dart';
+import 'package:rde_settings/core/theme/bloc/app_theme_event.dart';
+import 'package:rde_settings/core/theme/bloc/app_theme_state.dart';
 
 class ThemeStylingPage extends StatefulWidget {
   const ThemeStylingPage({super.key});
@@ -32,86 +35,93 @@ class _ThemeStylingPageState extends State<ThemeStylingPage> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Scaffold(
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Headline Section
-            Text(
-              'Theme & Styling',
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: colorScheme.onSurface,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Personalize your desktop appearance, palette color accents, and layouts',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 28),
+    return BlocBuilder<AppThemeBloc, AppThemeState>(
+      builder: (context, state) {
+        return Scaffold(
+          body: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Headline Section
+                Text(
+                  'Theme & Styling',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: colorScheme.onSurface,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Personalize your desktop appearance, palette color accents, and layouts',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 28),
 
-            // Main Layout wrap
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth > 850;
-                return Flex(
-                  direction: isWide ? Axis.horizontal : Axis.vertical,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Left Column (Controls)
-                    Expanded(
-                      flex: isWide ? 4 : 0,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildThemeModeSelector(context),
-                          const SizedBox(height: 28),
-                          _buildAccentGrid(context),
-                          const SizedBox(height: 28),
-                          _buildInterfaceScaleCard(context),
-                        ],
-                      ),
-                    ),
-                    if (isWide) const SizedBox(width: 32),
-                    if (!isWide) const SizedBox(height: 32),
-
-                    // Right Column (Live Preview mockup)
-                    Expanded(
-                      flex: isWide ? 3 : 0,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(left: 4, bottom: 12),
-                            child: Text(
-                              'Live Preview',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                // Main Layout wrap
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.maxWidth > 850;
+                    return Flex(
+                      direction: isWide ? Axis.horizontal : Axis.vertical,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Left Column (Controls)
+                        Expanded(
+                          flex: isWide ? 4 : 0,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildThemeModeSelector(context, state),
+                              const SizedBox(height: 28),
+                              _buildAccentGrid(context, state),
+                              const SizedBox(height: 28),
+                              _buildInterfaceScaleCard(context),
+                            ],
                           ),
-                          _buildLivePreviewCard(context),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              },
+                        ),
+                        if (isWide) const SizedBox(width: 32),
+                        if (!isWide) const SizedBox(height: 32),
+
+                        // Right Column (Live Preview mockup)
+                        Expanded(
+                          flex: isWide ? 3 : 0,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  left: 4,
+                                  bottom: 12,
+                                ),
+                                child: Text(
+                                  'Live Preview',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              _buildLivePreviewCard(context),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildThemeModeSelector(BuildContext context) {
+  Widget _buildThemeModeSelector(BuildContext context, AppThemeState state) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -128,47 +138,42 @@ class _ThemeStylingPageState extends State<ThemeStylingPage> {
               ),
             ),
             const SizedBox(height: 16),
-            ValueListenableBuilder<ThemeMode>(
-              valueListenable: themeModeNotifier,
-              builder: (context, currentMode, _) {
-                return GridView.count(
-                  crossAxisCount: 3,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1.1,
-                  children: [
-                    _buildThemeCard(
-                      context: context,
-                      mode: ThemeMode.light,
-                      label: 'Light',
-                      isSelected: currentMode == ThemeMode.light,
-                      activeBgColor: Colors.white,
-                      inactiveBgColor: Colors.grey[200]!,
-                      borderColor: Colors.grey[300]!,
-                    ),
-                    _buildThemeCard(
-                      context: context,
-                      mode: ThemeMode.dark,
-                      label: 'Dark',
-                      isSelected: currentMode == ThemeMode.dark,
-                      activeBgColor: Colors.grey[900]!,
-                      inactiveBgColor: Colors.grey[800]!,
-                      borderColor: Colors.grey[850]!,
-                    ),
-                    _buildThemeCard(
-                      context: context,
-                      mode: ThemeMode.system,
-                      label: 'System',
-                      isSelected: currentMode == ThemeMode.system,
-                      activeBgColor: Colors.grey[800]!,
-                      inactiveBgColor: Colors.grey[200]!,
-                      isSystem: true,
-                    ),
-                  ],
-                );
-              },
+            GridView.count(
+              crossAxisCount: 3,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.1,
+              children: [
+                _buildThemeCard(
+                  context: context,
+                  mode: ThemeMode.light,
+                  label: 'Light',
+                  isSelected: state.themeMode == ThemeMode.light,
+                  activeBgColor: Colors.white,
+                  inactiveBgColor: Colors.grey[200]!,
+                  borderColor: Colors.grey[300]!,
+                ),
+                _buildThemeCard(
+                  context: context,
+                  mode: ThemeMode.dark,
+                  label: 'Dark',
+                  isSelected: state.themeMode == ThemeMode.dark,
+                  activeBgColor: Colors.grey[900]!,
+                  inactiveBgColor: Colors.grey[800]!,
+                  borderColor: Colors.grey[850]!,
+                ),
+                _buildThemeCard(
+                  context: context,
+                  mode: ThemeMode.system,
+                  label: 'System',
+                  isSelected: state.themeMode == ThemeMode.system,
+                  activeBgColor: Colors.grey[800]!,
+                  inactiveBgColor: Colors.grey[200]!,
+                  isSystem: true,
+                ),
+              ],
             ),
           ],
         ),
@@ -192,7 +197,8 @@ class _ThemeStylingPageState extends State<ThemeStylingPage> {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => themeModeNotifier.value = mode,
+        onTap: () =>
+            context.read<AppThemeBloc>().add(ChangeThemeModeEvent(mode)),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOutCubic,
@@ -263,7 +269,7 @@ class _ThemeStylingPageState extends State<ThemeStylingPage> {
     );
   }
 
-  Widget _buildAccentGrid(BuildContext context) {
+  Widget _buildAccentGrid(BuildContext context, AppThemeState state) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -287,62 +293,59 @@ class _ThemeStylingPageState extends State<ThemeStylingPage> {
               ),
             ),
             const SizedBox(height: 18),
-            ValueListenableBuilder<Color>(
-              valueListenable: accentColorNotifier,
-              builder: (context, currentAccent, _) {
-                return GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 6,
-                    crossAxisSpacing: 14,
-                    mainAxisSpacing: 14,
-                  ),
-                  itemCount: _accentSeeds.length,
-                  itemBuilder: (context, index) {
-                    final color = _accentSeeds[index];
-                    final isSelected = currentAccent.value == color.value;
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 6,
+                crossAxisSpacing: 14,
+                mainAxisSpacing: 14,
+              ),
+              itemCount: _accentSeeds.length,
+              itemBuilder: (context, index) {
+                final color = _accentSeeds[index];
+                final isSelected = state.accentColor.value == color.value;
 
-                    return MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: GestureDetector(
-                        onTap: () => accentColorNotifier.value = color,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isSelected
-                                  ? colorScheme.onSurface
-                                  : Colors.transparent,
-                              width: 3.5,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: color.withValues(alpha: 0.3),
-                                blurRadius: 6,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
+                return MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () => context.read<AppThemeBloc>().add(
+                      ChangeAccentColorEvent(color),
+                    ),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isSelected
+                              ? colorScheme.onSurface
+                              : Colors.transparent,
+                          width: 3.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: color.withValues(alpha: 0.3),
+                            blurRadius: 6,
+                            offset: const Offset(0, 3),
                           ),
-                          child: Center(
-                            child: AnimatedOpacity(
-                              opacity: isSelected ? 1.0 : 0.0,
-                              duration: const Duration(milliseconds: 150),
-                              child: Icon(
-                                Icons.check,
-                                color: color.computeLuminance() > 0.5
-                                    ? Colors.black
-                                    : Colors.white,
-                                size: 16,
-                              ),
-                            ),
+                        ],
+                      ),
+                      child: Center(
+                        child: AnimatedOpacity(
+                          opacity: isSelected ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 150),
+                          child: Icon(
+                            Icons.check,
+                            color: color.computeLuminance() > 0.5
+                                ? Colors.black
+                                : Colors.white,
+                            size: 16,
                           ),
                         ),
                       ),
-                    );
-                  },
+                    ),
+                  ),
                 );
               },
             ),
