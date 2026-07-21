@@ -9,8 +9,9 @@ use std::{
 use futures_util::lock::Mutex;
 use rde_core::{
     errors::{RdeError, RdeResult},
+    fs::rde_service_logs_dir,
     logger::{LogLevel, Logger},
-    utils::{ipc::get_socket_path, logger::init_log_dir},
+    utils::ipc::get_socket_path,
 };
 use rde_ipc::{
     message::{Message, MessagePayload, RegisterRequest, ServiceRequest},
@@ -53,8 +54,7 @@ impl App {
     /// Create a new App instance
     fn new() -> RdeResult<Self> {
         // initialize the global Logger
-        let base_log_dir = init_log_dir()?;
-        let log_dir = base_log_dir.join("brightness");
+        let log_dir = rde_service_logs_dir("brightness")?;
         let logger = Logger::new(LogLevel::Info, log_dir, "brightness");
         logger.init()?;
 
@@ -236,13 +236,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_brightness_app_lifecycle() {
-        let backlight_exists = std::path::Path::new("/sys/class/backlight/").exists();
+        let backlight_exists = std::path::Path::new("/sys/class/backlight/")
+            .read_dir()
+            .map(|mut entries| entries.any(|e| e.is_ok()))
+            .unwrap_or(false);
         let app_res = App::new();
 
         if backlight_exists {
             assert!(
                 app_res.is_ok(),
-                "Expected App::new to succeed on host with backlight"
+                "Expected App::new to succeed on host with backlight. Error: {:?}",
+                app_res.err()
             );
             let mut app = app_res.unwrap();
 

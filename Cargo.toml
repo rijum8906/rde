@@ -10,6 +10,7 @@ members = [
     "services/rde-notification",
     "services/rde-theme",
     "services/rde-volume",
+    "services/rde-wifi",
 ]
 
 [workspace.package]
@@ -50,3 +51,6 @@ tracing-appender = "0.2.5"
 
 # Other
 chrono = "0.4.45"
+
+# Tests
+mockall = "0.15.0"

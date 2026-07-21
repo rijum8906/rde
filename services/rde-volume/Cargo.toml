@@ -7,3 +7,8 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+rde-core = { workspace = true }
+rde-ipc = { workspace = true }
+zbus = { workspace = true }
+
+alsa = "0.12.0"

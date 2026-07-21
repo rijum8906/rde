@@ -196,9 +196,9 @@ mod tests {
         let file = logger.log_dir.join(format!(
             "{}.{:04}-{:02}-{:02}",
             logger.service_name,
-            chrono::Local::now().year(),
-            chrono::Local::now().month(),
-            chrono::Local::now().day()
+            chrono::Utc::now().year(),
+            chrono::Utc::now().month(),
+            chrono::Utc::now().day()
         ));
         let contents = read_with_retry(&file, "This is an error");
 
