@@ -6,6 +6,7 @@ class WifiState {
   final WifiStatus status;
   final bool isWifiEnabled;
   final List<WifiNetwork> networks;
+  final List<WifiNetwork> savedNetworks;
   final String? connectedSsid;
   final String? connectingSsid;
   final String? errorMessage;
@@ -14,6 +15,7 @@ class WifiState {
     required this.status,
     required this.isWifiEnabled,
     required this.networks,
+    required this.savedNetworks,
     this.connectedSsid,
     this.connectingSsid,
     this.errorMessage,
@@ -24,6 +26,7 @@ class WifiState {
       status: WifiStatus.initial,
       isWifiEnabled: true,
       networks: [],
+      savedNetworks: [],
       connectedSsid: 'RDE-Net',
     );
   }
@@ -32,6 +35,7 @@ class WifiState {
     WifiStatus? status,
     bool? isWifiEnabled,
     List<WifiNetwork>? networks,
+    List<WifiNetwork>? savedNetworks,
     String? connectedSsid,
     String? connectingSsid,
     String? errorMessage,
@@ -40,6 +44,7 @@ class WifiState {
       status: status ?? this.status,
       isWifiEnabled: isWifiEnabled ?? this.isWifiEnabled,
       networks: networks ?? this.networks,
+      savedNetworks: savedNetworks ?? this.savedNetworks,
       connectedSsid: connectedSsid,
       connectingSsid: connectingSsid,
       errorMessage: errorMessage ?? this.errorMessage,

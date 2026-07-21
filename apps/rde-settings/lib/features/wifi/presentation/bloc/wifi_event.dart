@@ -19,3 +19,12 @@ class ConnectToNetworkEvent extends WifiEvent {
   final String ssid;
   const ConnectToNetworkEvent(this.ssid);
 }
+
+class LoadSavedNetworksEvent extends WifiEvent {
+  const LoadSavedNetworksEvent();
+}
+
+class ForgetSavedNetworkEvent extends WifiEvent {
+  final String ssid;
+  const ForgetSavedNetworkEvent(this.ssid);
+}

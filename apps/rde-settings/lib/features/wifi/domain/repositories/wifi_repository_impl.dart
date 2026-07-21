@@ -55,10 +55,8 @@ class WifiRepositoryImpl implements WifiRepository {
 
   @override
   Future<Either<Failure, List<WifiNetwork>>> getSavedNetworks() async {
-    return Right([
-      WifiNetwork(ssid: 'RDE-Net', security: 'WPA2/WPA3', strength: '95%'),
-      WifiNetwork(ssid: 'Home-WiFi', security: 'WPA2', strength: '80%'),
-    ]);
+    final res = await _wifiDatasource.getSavedNetworks();
+    return res.mapLeft((error) => Failure(error.message));
   }
 
   @override

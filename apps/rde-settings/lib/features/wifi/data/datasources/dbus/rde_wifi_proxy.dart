@@ -96,6 +96,31 @@ class RdeWifiProxy {
     }
   }
 
+  /// Get saved networks list
+  Future<Either<RdeError, List<String>>> getSavedNetworks() async {
+    try {
+      final res = await client.callMethod(
+        destination: serviceName,
+        path: objectPath,
+        interface: 'org.freedesktop.DBus.Properties',
+        name: 'Get',
+        values: [DBusString(interfaceName), DBusString('SavedNetworks')],
+      );
+      if (res.returnValues.isEmpty) {
+        return const Right([]);
+      }
+      final variant = res.returnValues.first as DBusVariant;
+      final array = variant.value as DBusArray;
+
+      final List<String> list = array.children
+          .map((v) => (v as DBusString).value)
+          .toList();
+      return Right(list);
+    } catch (e) {
+      return Left(RdeError(e.toString(), RdeErrorType.device));
+    }
+  }
+
   /// Connect to Wi-Fi
   Future<Either<RdeError, void>> connect(String ssid, String password) async {
     try {

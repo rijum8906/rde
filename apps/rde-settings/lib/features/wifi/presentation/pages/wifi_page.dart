@@ -275,6 +275,137 @@ class WifiView extends StatelessWidget {
                                 }),
                               ),
                             ],
+
+                            // Saved Devices & Profiles Section
+                            if (state.savedNetworks.isNotEmpty) ...[
+                              const Divider(height: 36),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.history_toggle_off_rounded,
+                                    size: 20,
+                                    color: colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Saved Devices & Profiles',
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: colorScheme.onSurface,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              Column(
+                                children: List.generate(state.savedNetworks.length, (
+                                  index,
+                                ) {
+                                  final network = state.savedNetworks[index];
+                                  final isConnected =
+                                      state.connectedSsid == network.ssid;
+
+                                  return Column(
+                                    children: [
+                                      if (index > 0) const Divider(),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 8.0,
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Icon(
+                                                  Icons.bookmark_added_outlined,
+                                                  size: 20,
+                                                  color: isConnected
+                                                      ? colorScheme.primary
+                                                      : colorScheme
+                                                            .onSurfaceVariant,
+                                                ),
+                                                const SizedBox(width: 16),
+                                                Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      network.ssid,
+                                                      style: theme
+                                                          .textTheme
+                                                          .bodyLarge
+                                                          ?.copyWith(
+                                                            fontWeight:
+                                                                isConnected
+                                                                ? FontWeight
+                                                                      .bold
+                                                                : FontWeight
+                                                                      .normal,
+                                                          ),
+                                                    ),
+                                                    Text(
+                                                      isConnected
+                                                          ? 'Currently Connected'
+                                                          : 'Saved Profile',
+                                                      style: theme
+                                                          .textTheme
+                                                          .bodySmall
+                                                          ?.copyWith(
+                                                            color: colorScheme
+                                                                .onSurfaceVariant,
+                                                          ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                            Row(
+                                              children: [
+                                                if (!isConnected) ...[
+                                                  TextButton(
+                                                    onPressed: () {
+                                                      context
+                                                          .read<WifiBloc>()
+                                                          .add(
+                                                            ConnectToNetworkEvent(
+                                                              network.ssid,
+                                                            ),
+                                                          );
+                                                    },
+                                                    child: const Text(
+                                                      'Connect',
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                ],
+                                                IconButton(
+                                                  onPressed: () {
+                                                    context.read<WifiBloc>().add(
+                                                      ForgetSavedNetworkEvent(
+                                                        network.ssid,
+                                                      ),
+                                                    );
+                                                  },
+                                                  icon: Icon(
+                                                    Icons.delete_outline,
+                                                    color: colorScheme.error
+                                                        .withValues(alpha: 0.8),
+                                                  ),
+                                                  tooltip: 'Forget Profile',
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }),
+                              ),
+                            ],
                           ],
                         ],
                       ),
