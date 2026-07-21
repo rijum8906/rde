@@ -142,72 +142,75 @@ class _BatteryHealthPageState extends State<BatteryHealthPage> {
             const SizedBox(height: 36),
 
             // Animated Visual Battery Cylinder
-            TweenAnimationBuilder<double>(
-              tween: Tween<double>(begin: 0.0, end: 0.88),
-              duration: const Duration(seconds: 1),
-              curve: Curves.easeOutBack,
-              builder: (context, chargeValue, _) {
-                return Column(
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 200,
-                        height: 90,
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: colorScheme.outline,
-                            width: 4,
+            RepaintBoundary(
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0.0, end: 0.88),
+                duration: const Duration(seconds: 1),
+                curve: Curves.easeOutBack,
+                builder: (context, chargeValue, _) {
+                  return Column(
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 200,
+                          height: 90,
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: colorScheme.outline,
+                              width: 4,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        padding: const EdgeInsets.all(6),
-                        child: Stack(
-                          children: [
-                            // Fill level
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 500),
-                              width: (200 - 20) * chargeValue,
-                              height: double.infinity,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                gradient: LinearGradient(
-                                  colors: [
-                                    Colors.green[400]!,
-                                    Colors.green[600]!,
-                                  ],
+                          padding: const EdgeInsets.all(6),
+                          child: Stack(
+                            children: [
+                              // Fill level
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 500),
+                                width: (200 - 20) * chargeValue,
+                                height: double.infinity,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.green[400]!,
+                                      Colors.green[600]!,
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                            // Inside percentage overlay
-                            Center(
-                              child: Text(
-                                '${(chargeValue * 100).toInt()}%',
-                                style: theme.textTheme.headlineMedium?.copyWith(
-                                  fontWeight: FontWeight.w900,
-                                  color: colorScheme.onSurface,
+                              // Inside percentage overlay
+                              Center(
+                                child: Text(
+                                  '${(chargeValue * 100).toInt()}%',
+                                  style: theme.textTheme.headlineMedium
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w900,
+                                        color: colorScheme.onSurface,
+                                      ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    // Battery terminal cap on the right
-                    Container(
-                      width: 14,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: colorScheme.outline,
-                        borderRadius: const BorderRadius.only(
-                          topRight: Radius.circular(6),
-                          bottomRight: Radius.circular(6),
+                      const SizedBox(height: 12),
+                      // Battery terminal cap on the right
+                      Container(
+                        width: 14,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: colorScheme.outline,
+                          borderRadius: const BorderRadius.only(
+                            topRight: Radius.circular(6),
+                            bottomRight: Radius.circular(6),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                );
-              },
+                    ],
+                  );
+                },
+              ),
             ),
             const SizedBox(height: 24),
           ],

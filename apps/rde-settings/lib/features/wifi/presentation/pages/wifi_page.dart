@@ -292,24 +292,25 @@ class _WifiPageState extends State<WifiPage> {
                           ),
                         )
                       else ...[
-                        ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _networks.length,
-                          separatorBuilder: (context, index) => const Divider(),
-                          itemBuilder: (context, index) {
+                        Column(
+                          children: List.generate(_networks.length, (index) {
                             final network = _networks[index];
                             final isConnected = _connectedSsid == network.ssid;
                             final isConnecting =
                                 _connectingSsid == network.ssid;
 
-                            return _buildNetworkTile(
-                              context: context,
-                              network: network,
-                              isConnected: isConnected,
-                              isConnecting: isConnecting,
+                            return Column(
+                              children: [
+                                if (index > 0) const Divider(),
+                                _buildNetworkTile(
+                                  context: context,
+                                  network: network,
+                                  isConnected: isConnected,
+                                  isConnecting: isConnecting,
+                                ),
+                              ],
                             );
-                          },
+                          }),
                         ),
                       ],
                     ],

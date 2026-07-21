@@ -547,26 +547,28 @@ class DashboardView extends StatelessWidget {
             SizedBox(
               width: 64,
               height: 64,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CircularProgressIndicator(
-                    value: val,
-                    strokeWidth: 6,
-                    valueColor: AlwaysStoppedAnimation<Color>(color),
-                    backgroundColor: colorScheme.surfaceContainerHighest,
-                    strokeCap: StrokeCap.round,
-                  ),
-                  Center(
-                    child: Text(
-                      '${(val * 100).toInt()}%',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: colorScheme.onSurface,
+              child: RepaintBoundary(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CircularProgressIndicator(
+                      value: val,
+                      strokeWidth: 6,
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                      backgroundColor: colorScheme.surfaceContainerHighest,
+                      strokeCap: StrokeCap.round,
+                    ),
+                    Center(
+                      child: Text(
+                        '${(val * 100).toInt()}%',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: colorScheme.onSurface,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 8),

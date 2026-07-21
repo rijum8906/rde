@@ -180,31 +180,33 @@ class _AboutRdePageState extends State<AboutRdePage> {
               onEnter: (_) => setState(() => _logoRotation += 0.25),
               child: GestureDetector(
                 onTap: () => setState(() => _logoRotation += 1.0),
-                child: AnimatedRotation(
-                  turns: _logoRotation,
-                  duration: const Duration(milliseconds: 800),
-                  curve: Curves.easeOutBack,
-                  child: Container(
-                    width: 96,
-                    height: 96,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [colorScheme.primary, colorScheme.tertiary],
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: colorScheme.primary.withValues(alpha: 0.2),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
+                child: RepaintBoundary(
+                  child: AnimatedRotation(
+                    turns: _logoRotation,
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.easeOutBack,
+                    child: Container(
+                      width: 96,
+                      height: 96,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [colorScheme.primary, colorScheme.tertiary],
                         ),
-                      ],
-                    ),
-                    child: Center(
-                      child: Icon(
-                        Icons.blur_on_rounded,
-                        size: 56,
-                        color: colorScheme.onPrimary,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: colorScheme.primary.withValues(alpha: 0.2),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.blur_on_rounded,
+                          size: 56,
+                          color: colorScheme.onPrimary,
+                        ),
                       ),
                     ),
                   ),
