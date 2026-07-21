@@ -8,25 +8,38 @@ impl WifiBackend {
     /// Gets a list of all saved Wi-Fi connection SSIDs.
     pub async fn get_saved_networks(&self) -> RdeResult<Vec<String>> {
         let connection = &self.connection;
-        let settings_proxy = SettingsProxy::new(connection)
-            .await
-            .map_err(RdeError::Dbus)?;
+        let settings_proxy = match SettingsProxy::new(connection).await {
+            Ok(proxy) => proxy,
+            Err(e) => {
+                tracing::warn!("Failed to create SettingsProxy: {}", e);
+                return Ok(Vec::new());
+            }
+        };
 
-        let connection_paths = settings_proxy
-            .list_connections()
-            .await
-            .map_err(RdeError::Dbus)?;
+        let connection_paths = match settings_proxy.list_connections().await {
+            Ok(paths) => paths,
+            Err(e) => {
+                tracing::warn!("Failed to list connections from NetworkManager: {}", e);
+                return Ok(Vec::new());
+            }
+        };
 
         let mut saved = Vec::new();
         for path in connection_paths {
             let conn_settings = match ConnectionSettingsProxy::new(connection, path).await {
                 Ok(proxy) => proxy,
-                Err(_) => continue,
+                Err(e) => {
+                    tracing::warn!("Failed to create ConnectionSettingsProxy for path: {}", e);
+                    continue;
+                }
             };
 
             let settings = match conn_settings.get_settings().await {
                 Ok(s) => s,
-                Err(_) => continue,
+                Err(e) => {
+                    tracing::warn!("Failed to get settings for connection: {}", e);
+                    continue;
+                }
             };
 
             if let Some(wireless) = settings.get("802-11-wireless") {
