@@ -136,7 +136,8 @@ pub trait AccessPoint {
 // ===== Settings Proxy =====
 #[proxy(
     default_service = "org.freedesktop.NetworkManager",
-    default_path = "/org/freedesktop/NetworkManager/Settings"
+    default_path = "/org/freedesktop/NetworkManager/Settings",
+    interface = "org.freedesktop.NetworkManager.Settings"
 )]
 pub trait Settings {
     /// List all saved connections
