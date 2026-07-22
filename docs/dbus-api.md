@@ -11,7 +11,9 @@ Each service documents its own D-Bus API contracts (methods, signals, and proper
 - **org.rde.Brightness**: Detailed API is documented in [rde-brightness](/services/rde-brightness/README.md).
 - **org.rde.Volume**: Detailed API is documented in [rde-volume](/services/rde-volume/README.md).
 - **org.rde.Theme**: Detailed API is documented in [rde-theme README](/services/rde-theme/README.md).
+- **org.rde.wifi**: Detailed API is documented in [rde-wifi README](/services/rde-wifi/README.md).
 - **org.rde.Notification**: Detailed API is documented in [rde-notification README](/services/rde-notification/README.md).
+
 
 ---
 

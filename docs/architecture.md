@@ -48,6 +48,7 @@ rde-cli           thin client that calls services' public D-Bus methods
 rde-brightness    owns org.rde.Brightness; talks to sysfs directly
 rde-volume        owns org.rde.Volume; talks to ALSA via zbus
 rde-theme         owns org.rde.Theme; persists via rde-core's storage abstraction
+rde-wifi          owns org.rde.wifi; talks to NetworkManager via system D-Bus
 rde-notification  owns org.freedesktop.Notifications (WIP)
 ```
 
@@ -59,7 +60,7 @@ A service crate never talks to another service crate directly. If `rde-theme` ne
 
 1. `rde-daemon` starts and reads its config via `rde-config`.
 2. For each configured service, `rde-daemon` spawns the service process and opens a socket connection via `rde-ipc`.
-3. The service sends a `Register` message over the internal socket, then claims its D-Bus bus name (e.g. `org.rde.Volume`) and starts serving its public interface.
+3. The service sends a `Register` message over the internal socket, then claims its D-Bus bus name (e.g. `org.rde.Volume`, `org.rde.wifi`) and starts serving its public interface.
 4. `rde-daemon` periodically sends `HealthCheck`; the service responds `Alive`. A missed response past a timeout threshold triggers a restart.
 5. On `SIGTERM`/shutdown, `rde-daemon` sends `Shutdown` to each service over the internal socket, giving it a chance to persist state (via `rde-config`/`rde-core`) before the process exits.
 
@@ -81,9 +82,12 @@ graph TD
     ipc --> volume
     config --> theme[rde-theme]
     ipc --> theme
+    config --> wifi[rde-wifi]
+    ipc --> wifi
     config --> notification[rde-notification]
     ipc --> notification
 ```
+
 
 No service crate depends on another service crate. Only `crates/*` are shared dependencies.
 
