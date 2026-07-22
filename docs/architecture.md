@@ -95,18 +95,52 @@ No service crate depends on another service crate. Only `crates/*` are shared de
 
 ## Adding a New Service
 
-1. Create `services/rde-<name>/` with the standard shape:
+1. Create `services/rde-<name>/` adhering to RDE's modular service architecture (modeled after `rde-wifi`):
    ```
    services/rde-<name>/
-   ├── Cargo.toml
+   ├── Cargo.toml          # Crate manifest & dependencies (rde-core, rde-ipc, zbus, etc.)
+   ├── README.md           # Service spec, architecture details, & D-Bus API reference
    └── src/
-       ├── main.rs        # entry point, daemon registration handshake
-       ├── dbus/iface.rs  # public D-Bus interface implementation
-       └── backend.rs     # the actual hardware/state logic or if needed create a `backend/`
+       ├── lib.rs          # Crate root re-exporting modules (app, backend, dbus, domain, infra, ipc)
+       ├── main.rs         # Binary entry point initializing Application singleton & running event loop
+       ├── app/            # Service lifecycle & singleton manager
+       │   ├── mod.rs      # Application struct, logger init, & global singleton handle
+       │   ├── run.rs      # Main execution loop, D-Bus session registration, & IPC task spawn
+       │   └── shutdown.rs # Graceful cleanup & teardown logic
+       ├── backend/        # Domain engine & hardware/state logic
+       │   ├── mod.rs      # Main backend struct & core state initialization
+       │   ├── connection.rs # Connection profiles, hardware operations, & state mutations
+       │   ├── device.rs   # Hardware device discovery & status queries
+       │   └── tests.rs    # Unit tests with mock D-Bus sockets
+       ├── dbus/           # Public Session D-Bus interface (org.rde.<name>)
+       │   ├── mod.rs      # Module declarations
+       │   └── iface.rs    # zbus interface implementation (properties, methods, signals)
+       ├── domain/         # Domain models, enums, & event definitions
+       │   ├── mod.rs      # Module declarations
+       │   └── models.rs   # Data structs, status enums, & event payloads
+       ├── infra/          # Low-level system D-Bus proxies & test mocks
+       │   ├── mod.rs      # Conditional export of real vs mock proxies
+       │   └── dbus/
+       │       ├── nm_proxy.rs # zbus system D-Bus proxy traits (e.g. NetworkManager, ALSA, sysfs)
+       │       └── mock.rs     # mockall test mocks for D-Bus proxies
+       └── ipc/            # Unix socket IPC with rde-daemon supervisor
+           ├── mod.rs      # Module declarations
+           ├── handler.rs  # IpcHandler, registration handshake, & socket event loop
+           ├── daemon_request.rs  # Supervisor request handlers (HealthCheck, GetStatus, Shutdown)
+           └── daemon_response.rs # Supervisor response handlers (RegisterAck)
    ```
-2. Add it to the workspace `Cargo.toml` members list.
-3. Depend on `rde-core`, `rde-config`, and `rde-ipc` as needed — never on another service crate.
-4. Register the service in `rde-daemon`'s service list/config so it gets supervised.
-5. Document its public D-Bus interface in [`dbus-api.md`](dbus-api.md).
-6. Add a systemd user unit under `assets/systemd/` and, if it needs elevated access, a polkit policy under `assets/polkit/`.
-7. Add integration coverage under the crate's own `tests/`.
+
+2. **Where to Put What**:
+   - **Binary & Application Bootstrapping (`main.rs`, `app/`)**: Put process startup, logger setup (`rde_core::logger`), signal handlers (`Ctrl+C`), D-Bus session bus setup (`org.rde.<name>`), and IPC connection retry loops here.
+   - **Core Engine & Hardware Logic (`backend/`)**: Put hardware device detection, state management, NetworkManager/sysfs interactions, and backend tests here. Keep it decoupled from D-Bus presentation.
+   - **Public API Interface (`dbus/`)**: Put `zbus` `#[interface(name = "org.rde.<name>")]` code here. Translate incoming D-Bus calls into `backend` method calls and emit D-Bus signals (`*Changed`, `Completed`).
+   - **Data Types (`domain/`)**: Put pure Rust data structures, status enums, and event types here. Derive `Serialize`, `Deserialize`, `zbus::zvariant::Type`, and `zbus::zvariant::Value` as needed.
+   - **Drivers & System Proxies (`infra/`)**: Put low-level `zbus` proxies (`#[proxy]`) for talking to system daemons or hardware interfaces, along with `mockall` mocks for unit testing.
+   - **Supervisor Communications (`ipc/`)**: Put socket client (`rde-ipc`) handling, registration handshake with `rde-daemon`, and responses to `HealthCheck` liveness probes here.
+
+3. Add the new service to workspace `Cargo.toml` members.
+4. Depend on `rde-core`, `rde-config`, and `rde-ipc` — never import another service crate directly.
+5. Register the service in `rde-daemon` so it is supervised automatically.
+6. Document its public D-Bus API in `README.md` and update [`dbus-api.md`](dbus-api.md).
+7. Add integration test coverage under `tests/` or `backend/tests.rs`.
+
