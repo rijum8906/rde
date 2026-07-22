@@ -28,10 +28,29 @@ To maintain codebase integrity, all agents must adhere to the following rules:
    - All inter-service cooperation must happen asynchronously via public D-Bus interfaces or supervision IPC channels.
 2. **Conventional Commits**:
    - Commit messages must follow the [Conventional Commits](https://www.conventionalcommits.org/) spec.
-   - Use the appropriate scope in parentheses, e.g., `feat(rde-volume): add mute toggle` or `fix(rde-core): correct log rotation`.
+   - Use the appropriate scope in parentheses, e.g., `feat(rde-volume): add mute toggle`, `docs(rde-wifi): add inline comments`, or `fix(rde-core): correct log rotation`.
 3. **Rust Coding Standards**:
    - Avoid `panic!`, `.unwrap()`, and `.expect()` in non-test production code. Always bubble up errors using `Result<T, E>` and the custom `RdeError` type.
    - Always run the lint/test suite before finalizing changes.
+
+---
+
+## 🎨 Coding Style & Guidelines
+
+Agents working on RDE must follow these specific coding style standards:
+
+1. **Comprehensive Documentation & Comments**:
+   - **Module & Crate Docs (`//!`)**: Every crate and module must begin with a top-level module documentation comment explaining its purpose, architecture, and responsibilities.
+   - **Symbol Rustdoc (`///`)**: All public structs, enums, fields, functions, methods, traits, and D-Bus properties/methods must have detailed rustdoc comments explaining parameters, return values (`# Returns`), error conditions (`# Errors`), and execution steps.
+   - **Step-by-Step Inline Comments (`//`)**: Use numbered/step-by-step inline comments inside function bodies to clarify non-obvious logic, algorithm flow, D-Bus property dict construction, hardware interaction routines, and fallback error paths.
+2. **Resilient Error Handling**:
+   - Never let service processes crash unexpectedly. In non-fatal scenarios (such as transient D-Bus disconnects or missing non-critical hardware devices), handle errors gracefully, log warnings with full context, and allow the service loop to continue running.
+   - Always map external D-Bus or IPC errors into the domain error type (`RdeError`).
+3. **Structured Tracing & Logging**:
+   - Use `tracing` macros (`info!`, `warn!`, `error!`, `debug!`) for operational state transitions and diagnostics rather than standard `println!`.
+   - Provide informative log messages containing relevant context (e.g. object paths, attempt numbers, error messages).
+4. **Verification Before Committing**:
+   - Never submit code edits without verifying that formatting, linting, and tests pass cleanly across the entire Cargo workspace (`cargo fmt`, `cargo clippy`, `cargo test`).
 
 ---
 
@@ -57,3 +76,4 @@ cargo test --workspace
 - [D-Bus API Reference](/docs/dbus-api.md)
 - [IPC Protocol Design](/docs/ipc-protocol.md)
 - [Contributing Guidelines](/CONTRIBUTING.md)
+
