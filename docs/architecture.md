@@ -102,7 +102,9 @@ No service crate depends on another service crate. Only `crates/*` are shared de
    ├── README.md           # Service spec, architecture details, & D-Bus API reference
    └── src/
        ├── lib.rs          # Crate root re-exporting modules (app, backend, dbus, domain, infra, ipc)
-       ├── main.rs         # Binary entry point initializing Application singleton & running event loop
+       ├── main.rs         # Primary service binary entry point
+       ├── bin/            # Additional/auxiliary binaries or helper tools (e.g. rde-<name>-helper.rs)
+       │   └── rde-<name>-helper.rs
        ├── app/            # Service lifecycle & singleton manager
        │   ├── mod.rs      # Application struct, logger init, & global singleton handle
        │   ├── run.rs      # Main execution loop, D-Bus session registration, & IPC task spawn
@@ -131,7 +133,13 @@ No service crate depends on another service crate. Only `crates/*` are shared de
    ```
 
 2. **Where to Put What**:
-   - **Binary & Application Bootstrapping (`main.rs`, `app/`)**: Put process startup, logger setup (`rde_core::logger`), signal handlers (`Ctrl+C`), D-Bus session bus setup (`org.rde.<name>`), and IPC connection retry loops here.
+   - **Primary Binary & Bootstrapping (`main.rs`, `app/`)**: Put process startup, logger setup (`rde_core::logger`), signal handlers (`Ctrl+C`), D-Bus session bus setup (`org.rde.<name>`), and IPC connection retry loops here.
+   - **Additional Binaries & Helper Tools (`src/bin/`, `Cargo.toml`)**: Any secondary binaries or helper tools (e.g., privileged polkit executables like `rde-brightness-helper`) must be placed in `src/bin/` (e.g., `src/bin/rde-<name>-helper.rs`). Each additional binary must be declared in `Cargo.toml` under a `[[bin]]` section:
+     ```toml
+     [[bin]]
+     name = "rde-<name>-helper"
+     path = "src/bin/rde-<name>-helper.rs"
+     ```
    - **Core Engine & Hardware Logic (`backend/`)**: Put hardware device detection, state management, NetworkManager/sysfs interactions, and backend tests here. Keep it decoupled from D-Bus presentation.
    - **Public API Interface (`dbus/`)**: Put `zbus` `#[interface(name = "org.rde.<name>")]` code here. Translate incoming D-Bus calls into `backend` method calls and emit D-Bus signals (`*Changed`, `Completed`).
    - **Data Types (`domain/`)**: Put pure Rust data structures, status enums, and event types here. Derive `Serialize`, `Deserialize`, `zbus::zvariant::Type`, and `zbus::zvariant::Value` as needed.
@@ -143,4 +151,5 @@ No service crate depends on another service crate. Only `crates/*` are shared de
 5. Register the service in `rde-daemon` so it is supervised automatically.
 6. Document its public D-Bus API in `README.md` and update [`dbus-api.md`](dbus-api.md).
 7. Add integration test coverage under `tests/` or `backend/tests.rs`.
+
 
