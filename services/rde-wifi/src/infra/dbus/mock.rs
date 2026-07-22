@@ -1,7 +1,12 @@
+//! # Mock NetworkManager D-Bus Proxies
+//!
+//! Provides unit test mocks generated using `mockall::mock!` matching NetworkManager D-Bus proxy interfaces.
+
 use std::collections::HashMap;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
 mockall::mock! {
+    /// Mock representation of `NetworkManagerProxy`.
     pub NetworkManagerProxy<'a> {
         pub async fn new(connection: &zbus::Connection) -> zbus::Result<MockNetworkManagerProxy<'static>>;
         pub async fn get_all_devices(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
@@ -28,6 +33,7 @@ mockall::mock! {
 pub type NetworkManagerProxy<'a> = MockNetworkManagerProxy<'a>;
 
 mockall::mock! {
+    /// Mock representation of `DeviceProxy`.
     pub DeviceProxy<'a> {
         pub async fn new(connection: &zbus::Connection, path: OwnedObjectPath) -> zbus::Result<MockDeviceProxy<'static>>;
         pub async fn device_type(&self) -> zbus::Result<u32>;
@@ -40,6 +46,7 @@ mockall::mock! {
 pub type DeviceProxy<'a> = MockDeviceProxy<'a>;
 
 mockall::mock! {
+    /// Mock representation of `WirelessProxy`.
     pub WirelessProxy<'a> {
         pub async fn new(connection: &zbus::Connection, path: OwnedObjectPath) -> zbus::Result<MockWirelessProxy<'static>>;
         pub async fn request_scan(&self, options: HashMap<&'static str, Value<'static>>) -> zbus::Result<()>;
@@ -53,6 +60,7 @@ mockall::mock! {
 pub type WirelessProxy<'a> = MockWirelessProxy<'a>;
 
 mockall::mock! {
+    /// Mock representation of `AccessPointProxy`.
     pub AccessPointProxy<'a> {
         pub async fn new(connection: &zbus::Connection, path: OwnedObjectPath) -> zbus::Result<MockAccessPointProxy<'static>>;
         pub async fn flags(&self) -> zbus::Result<u32>;
@@ -68,6 +76,7 @@ mockall::mock! {
 pub type AccessPointProxy<'a> = MockAccessPointProxy<'a>;
 
 mockall::mock! {
+    /// Mock representation of `SettingsProxy`.
     pub SettingsProxy<'a> {
         pub async fn new(connection: &zbus::Connection) -> zbus::Result<MockSettingsProxy<'static>>;
         pub async fn list_connections(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
@@ -77,6 +86,7 @@ mockall::mock! {
 pub type SettingsProxy<'a> = MockSettingsProxy<'a>;
 
 mockall::mock! {
+    /// Mock representation of `ConnectionSettingsProxy`.
     pub ConnectionSettingsProxy<'a> {
         pub async fn new(connection: &zbus::Connection, path: OwnedObjectPath) -> zbus::Result<MockConnectionSettingsProxy<'static>>;
         pub async fn get_settings(&self) -> zbus::Result<HashMap<String, HashMap<String, OwnedValue>>>;

@@ -1,46 +1,79 @@
+//! # Wi-Fi Domain Data Models
+//!
+//! Structs and enums representing Wi-Fi access points, encryption standards,
+//! asynchronous backend events, and connection lifecycle states.
+
 use serde::{Deserialize, Serialize};
 use zbus::zvariant::{Type, Value};
 
-/// Represents a WiFi access point with all necessary info
+/// Comprehensive metadata describing a scanned Wi-Fi access point.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Value)]
 pub struct AccessPointInfo {
+    /// D-Bus object path of the access point (e.g., `/org/freedesktop/NetworkManager/AccessPoint/42`).
     pub path: String,
+    /// Service Set Identifier (network name).
     pub ssid: String,
-    pub strength: u8, // 0-100
+    /// Signal strength percentage (0 - 100).
+    pub strength: u8,
+    /// Encryption/security protocol supported by the access point.
     pub security: SecurityType,
+    /// Hardware BSSID MAC address (e.g., `"00:11:22:33:44:55"`).
     pub mac_address: String,
+    /// Operating frequency in MHz (e.g., `2412` for 2.4GHz channel 1, `5180` for 5GHz channel 36).
     pub frequency: u32,
+    /// Whether this access point is currently connected to the active wireless device.
     pub is_connected: bool,
+    /// Whether a saved connection profile exists for this SSID in NetworkManager.
     pub is_saved: bool,
 }
 
+/// Supported Wi-Fi security / encryption standards.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type, Value)]
 pub enum SecurityType {
+    /// Open network (no encryption/passphrase required).
     Open,
+    /// Legacy WEP security.
     Wep,
+    /// First-generation WPA security.
     Wpa,
+    /// WPA2 Personal (RSN with CCMP/TKIP).
     Wpa2,
+    /// WPA3 Personal (SAE).
     Wpa3,
+    /// WPA/WPA2/WPA3 Enterprise (802.1X EAP authentication).
     Enterprise,
+    /// Unclassified or unknown security scheme.
     Unknown,
 }
 
-/// Events emitted by the backend
+/// Asynchronous events emitted by the Wi-Fi backend engine during operation.
 #[derive(Debug, Clone)]
 pub enum WifiEvent {
+    /// Spectrum scan initiated.
     ScanStarted,
+    /// Spectrum scan completed.
     ScanCompleted,
-    AccessPointAdded(String), // AP path
+    /// New access point detected in range (AP object path).
+    AccessPointAdded(String),
+    /// Access point lost or went out of range (AP object path).
     AccessPointRemoved(String),
-    SignalStrengthChanged(String, u8), // AP path, new strength
+    /// Signal strength update for a specific access point (AP object path, new strength percentage).
+    SignalStrengthChanged(String, u8),
+    /// Active connection state change.
     ConnectionStateChanged(ConnectionState),
+    /// Background error event notification.
     Error(String),
 }
 
+/// Lifecycle states of a Wi-Fi connection attempt.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ConnectionState {
+    /// Disconnected state.
     Disconnected,
+    /// Connection request in progress.
     Connecting,
-    Connected(String), // SSID
-    Failed(String),    // Error message
+    /// Successfully connected to target network (SSID).
+    Connected(String),
+    /// Connection attempt failed (error message).
+    Failed(String),
 }

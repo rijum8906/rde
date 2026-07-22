@@ -1,7 +1,7 @@
 /* Allow users in active sessions or network/admin groups to control NetworkManager without password authentication */
 polkit.addRule(function(action, subject) {
     if (action.id.indexOf("org.freedesktop.NetworkManager.") === 0 &&
-        (subject.isInGroup("netdev") || subject.isInGroup("wheel") || subject.isInGroup("sudo"))) {
+        ((subject.local && subject.active) || subject.isInGroup("netdev") || subject.isInGroup("wheel") || subject.isInGroup("sudo"))) {
         return polkit.Result.YES;
     }
 });

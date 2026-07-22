@@ -1,3 +1,8 @@
+//! # Wi-Fi Device Management Module
+//!
+//! This module manages NetworkManager Wi-Fi hardware device detection, device proxy creation,
+//! enabling/disabling the Wi-Fi radio, and triggering asynchronous network scans.
+
 use chrono::Utc;
 use rde_core::errors::{RdeError, RdeResult};
 use std::collections::HashMap;
@@ -6,8 +11,15 @@ use super::WifiBackend;
 use crate::infra::dbus::{DeviceProxy, WirelessProxy};
 
 impl WifiBackend {
-    /// Scans the network devices on the system and selects the first device of type
-    /// Wi-Fi (DeviceType 2) as the active device.
+    /// Scans network interfaces registered with NetworkManager on the host system
+    /// and selects the first wireless device (DeviceType = 2, i.e., `NM_DEVICE_TYPE_WIFI`)
+    /// as the active target hardware interface.
+    ///
+    /// # Process
+    /// 1. Queries NetworkManager via `get_all_devices()` D-Bus method to list device object paths.
+    /// 2. Instantiates a `DeviceProxy` for each path resiliently (skipping disconnected or missing interfaces).
+    /// 3. Inspects the device hardware type using `device_type()`.
+    /// 4. When a Wi-Fi device (`DeviceType == 2`) is found, caches its path and proxy object in `WifiBackend`.
     ///
     /// # Errors
     /// Returns `RdeError` if communication with NetworkManager fails.
@@ -56,7 +68,11 @@ impl WifiBackend {
         Ok(())
     }
 
-    /// Helper method to retrieve the Wireless proxy for the active Wi-Fi device.
+    /// Helper method to retrieve the `WirelessProxy` interface for the active Wi-Fi device.
+    ///
+    /// # Errors
+    /// Returns `RdeError::ConfigNotFound` if no active Wi-Fi device path is cached,
+    /// or `RdeError::Dbus` if D-Bus proxy construction fails.
     pub(super) async fn get_wireless_proxy(&self) -> RdeResult<WirelessProxy<'static>> {
         let path = self
             .current_device_path
@@ -68,7 +84,13 @@ impl WifiBackend {
         Ok(wireless)
     }
 
-    /// Enables or disables the Wi-Fi radio.
+    /// Enables or disables the global Wi-Fi wireless radio on the system via NetworkManager.
+    ///
+    /// # Parameters
+    /// - `enabled`: `true` to turn Wi-Fi radio on, `false` to turn it off.
+    ///
+    /// # Errors
+    /// Returns `RdeError::Dbus` if setting the D-Bus property fails.
     pub async fn set_wifi_enabled(&self, enabled: bool) -> RdeResult<()> {
         self.nm_proxy
             .set_wireless_enabled(enabled)
@@ -77,7 +99,14 @@ impl WifiBackend {
         Ok(())
     }
 
-    /// Checks if the Wi-Fi radio is enabled.
+    /// Checks whether the global Wi-Fi wireless radio is enabled on the system.
+    ///
+    /// # Returns
+    /// - `Ok(true)` if Wi-Fi radio is powered on.
+    /// - `Ok(false)` if Wi-Fi radio is powered off (airplane mode).
+    ///
+    /// # Errors
+    /// Returns `RdeError::Dbus` if querying NetworkManager fails.
     pub async fn is_wifi_enabled(&self) -> RdeResult<bool> {
         let enabled = self
             .nm_proxy
@@ -87,7 +116,13 @@ impl WifiBackend {
         Ok(enabled)
     }
 
-    /// Requests a Wi-Fi scan on the active device.
+    /// Requests an asynchronous Wi-Fi scan on the active wireless device.
+    ///
+    /// NetworkManager will trigger a background spectrum scan for access points.
+    ///
+    /// # Errors
+    /// Returns `RdeError::ConfigNotFound` if no active Wi-Fi device is present,
+    /// or `RdeError::Dbus` if the D-Bus method call fails.
     pub async fn request_scan(&self) -> RdeResult<()> {
         let wireless = self.get_wireless_proxy().await?;
         let options = HashMap::new();
