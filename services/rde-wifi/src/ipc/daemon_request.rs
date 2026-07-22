@@ -1,3 +1,7 @@
+//! # Daemon Request Handler Module
+//!
+//! Processes incoming IPC requests pushed by the `rde-daemon` supervisor process.
+
 use rde_core::errors::RdeResult;
 use rde_ipc::{
     message::{DaemonRequest, ServiceResponse, ServiceStatus},
@@ -7,18 +11,27 @@ use rde_ipc::{
 use crate::{app::Application, ipc::handler::IpcHandler};
 
 impl IpcHandler {
-    /// Handle requests pushed by the daemon (e.g. HealthCheck liveness probe).
+    /// Handles requests pushed by the supervisor daemon (e.g., `HealthCheck` liveness probes, `GetStatus`, `Shutdown`).
+    ///
+    /// # Parameters
+    /// - `request`: The incoming `DaemonRequest` payload from the supervisor.
+    /// - `client`: Active `IpcClient` socket connection for transmitting responses back.
+    ///
+    /// # Errors
+    /// Returns `RdeError` if sending the response over the IPC socket fails.
     pub async fn handle_daemon_request(
         request: DaemonRequest,
         client: &mut IpcClient,
     ) -> RdeResult<()> {
         match request {
+            // Liveness ping from daemon supervisor
             DaemonRequest::HealthCheck => {
                 tracing::debug!(
                     "Received HealthCheck request from daemon, sending Alive response..."
                 );
                 client.send_service_response(ServiceResponse::Alive).await?;
             }
+            // Status query from daemon supervisor
             DaemonRequest::GetStatus(req) => {
                 tracing::debug!("Received GetStatus request from daemon for {}", req.name);
                 let is_running = Application::global().await.lock().await.is_running();
@@ -31,6 +44,7 @@ impl IpcHandler {
                     .send_service_response(ServiceResponse::Status(status))
                     .await?;
             }
+            // Graceful shutdown instruction from daemon supervisor
             DaemonRequest::Shutdown {
                 service_name,
                 reason,

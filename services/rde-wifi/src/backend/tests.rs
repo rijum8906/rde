@@ -1,3 +1,8 @@
+//! # Unit Tests for Wi-Fi Backend Engine
+//!
+//! This module contains isolated unit tests for `WifiBackend` methods, utilizing `mockall`
+//! mocks for NetworkManager D-Bus proxies and Unix stream sockets for dummy D-Bus connections.
+
 use super::WifiBackend;
 use crate::infra::dbus::mock::{
     MockConnectionSettingsProxy, MockDeviceProxy, MockNetworkManagerProxy, MockSettingsProxy,
@@ -7,6 +12,9 @@ use chrono::Utc;
 use std::collections::HashMap;
 use zbus::zvariant::OwnedObjectPath;
 
+/// Constructs an authenticated dummy `zbus::Connection` backed by an in-memory Unix stream pair.
+///
+/// This avoids requiring a running D-Bus system daemon during unit testing.
 async fn dummy_connection() -> zbus::Connection {
     let (stream, _) = tokio::net::UnixStream::pair().unwrap();
     let guid = zbus::Guid::from_static_str("1234567890abcdef1234567890abcdef").unwrap();
@@ -17,6 +25,8 @@ async fn dummy_connection() -> zbus::Connection {
         .unwrap()
 }
 
+/// Tests that `WifiBackend::scan_wifi_devices()` correctly queries system devices
+/// and caches the first Wi-Fi interface (DeviceType 2).
 #[tokio::test]
 async fn test_wifi_backend_init_finds_wifi_device() {
     // 1. Create the mock NetworkManager proxy
@@ -67,6 +77,7 @@ async fn test_wifi_backend_init_finds_wifi_device() {
     );
 }
 
+/// Tests `set_wifi_enabled` and `is_wifi_enabled` by verifying D-Bus method call expectations.
 #[tokio::test]
 async fn test_wifi_backend_set_wifi_enabled() {
     let connection = dummy_connection().await;
@@ -97,6 +108,7 @@ async fn test_wifi_backend_set_wifi_enabled() {
     assert!(enabled);
 }
 
+/// Tests `get_saved_networks` by mocking NetworkManager Settings and ConnectionSettings proxies.
 #[tokio::test]
 async fn test_wifi_backend_get_saved_networks() {
     let connection = dummy_connection().await;
@@ -157,6 +169,7 @@ async fn test_wifi_backend_get_saved_networks() {
     assert_eq!(saved[0], "MyTestSSID");
 }
 
+/// Tests `request_scan` by mocking WirelessProxy's `request_scan` method call.
 #[tokio::test]
 async fn test_wifi_backend_request_scan() {
     let connection = dummy_connection().await;
