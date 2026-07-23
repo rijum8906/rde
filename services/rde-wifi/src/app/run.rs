@@ -2,6 +2,26 @@
 //!
 //! Handles background IPC task spawning with exponential backoff, D-Bus session bus setup,
 //! service name registration (`org.rde.wifi`), and signal monitoring (`Ctrl+C`).
+//!
+//! ## Features
+//! - Spawns background IPC client connecting to `rde-daemon` with retry backoff
+//! - Registers public `WifiInterface` on session D-Bus bus path `/org/rde/wifi`
+//! - Acquires `org.rde.wifi` D-Bus service name
+//! - Listens for OS signal `Ctrl+C` for graceful termination
+//!
+//! ## Related
+//! - [`crate::app::Application`]
+//! - [`crate::dbus::iface::WifiInterface`]
+//! - [`crate::ipc::handler::IpcHandler`]
+//!
+//! ## Authors
+//! - Riju Mondal <rijum8906@gmail.com>
+//!
+//! ## License
+//! MIT License (see LICENSE file for details)
+//!
+//! ## Copyright
+//! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use rde_core::errors::RdeResult;
 

@@ -1,6 +1,23 @@
 //! # Daemon Response Handler Module
 //!
 //! Processes acknowledgment and response messages received from `rde-daemon`.
+//!
+//! ## Features
+//! - Supervisor `RegisterAck` registration outcome handling
+//! - Logging and connection verification state updates
+//!
+//! ## Related
+//! - [`crate::ipc::handler::IpcHandler`]
+//! - [`rde_ipc::message::DaemonResponse`](rde_ipc::message::DaemonResponse)
+//!
+//! ## Authors
+//! - Riju Mondal <rijum8906@gmail.com>
+//!
+//! ## License
+//! MIT License (see LICENSE file for details)
+//!
+//! ## Copyright
+//! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use rde_core::errors::RdeResult;
 use rde_ipc::{message::DaemonResponse, socket::IpcClient};

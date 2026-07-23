@@ -2,6 +2,25 @@
 //!
 //! Manages connection creation, service registration handshakes, incoming message listening loops,
 //! and graceful disconnect operations for communicating with the `rde-daemon` supervisor.
+//!
+//! ## Features
+//! - Thread-safe `IpcClient` socket handle creation via Unix domain socket
+//! - Registration handshake (`RegisterRequest`) with `rde-daemon` supervisor
+//! - Asynchronous message routing loop for incoming IPC messages
+//!
+//! ## Related
+//! - [`crate::ipc::daemon_request`]
+//! - [`crate::ipc::daemon_response`]
+//! - [`rde_ipc::socket::IpcClient`](rde_ipc::socket::IpcClient)
+//!
+//! ## Authors
+//! - Riju Mondal <rijum8906@gmail.com>
+//!
+//! ## License
+//! MIT License (see LICENSE file for details)
+//!
+//! ## Copyright
+//! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use std::sync::Arc;
 

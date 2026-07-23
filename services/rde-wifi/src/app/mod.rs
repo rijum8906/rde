@@ -2,6 +2,25 @@
 //!
 //! Manages global service state, logging subsystem initialization (`rde_core::logger`),
 //! versioning, and thread-safe singleton access via `OnceLock`.
+//!
+//! ## Features
+//! - Thread-safe global Application singleton via `OnceLock`
+//! - Runtime status tracking (running state, start time, IPC connection state)
+//! - Delegated startup and shutdown execution steps
+//!
+//! ## Related
+//! - [`crate::app::run`]
+//! - [`crate::app::shutdown`]
+//! - [`crate::ipc::handler::IpcHandler`]
+//!
+//! ## Authors
+//! - Riju Mondal <rijum8906@gmail.com>
+//!
+//! ## License
+//! MIT License (see LICENSE file for details)
+//!
+//! ## Copyright
+//! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use std::{
     sync::{Arc, OnceLock},

@@ -2,6 +2,26 @@
 //!
 //! The backend module manages hardware interface discovery, device state tracking,
 //! D-Bus connection proxies, and Wi-Fi security flag parsing.
+//!
+//! ## Features
+//! - System D-Bus connection initialization with NetworkManager
+//! - Active wireless interface tracking and caching
+//! - Security flag detection (WPA, WPA2, WPA3, Open, WEP)
+//! - Submodules for device scanning and connection control
+//!
+//! ## Related
+//! - [`crate::backend::device`]
+//! - [`crate::backend::connection`]
+//! - [`crate::infra::dbus::NetworkManagerProxy`]
+//!
+//! ## Authors
+//! - Riju Mondal <rijum8906@gmail.com>
+//!
+//! ## License
+//! MIT License (see LICENSE file for details)
+//!
+//! ## Copyright
+//! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use chrono::{DateTime, Utc};
 use rde_core::errors::{RdeError, RdeResult};

@@ -2,6 +2,24 @@
 //!
 //! Structs and enums representing Wi-Fi access points, encryption standards,
 //! asynchronous backend events, and connection lifecycle states.
+//!
+//! ## Features
+//! - `AccessPointInfo` struct with Serde and `zbus::zvariant` serialization support
+//! - `SecurityType` enum representing Open, WEP, WPA, WPA2, WPA3, and Enterprise protocols
+//! - `WifiState` and `WifiEvent` definitions for reactive UI binding
+//!
+//! ## Related
+//! - [`crate::backend::WifiBackend`]
+//! - [`crate::dbus::iface::WifiInterface`]
+//!
+//! ## Authors
+//! - Riju Mondal <rijum8906@gmail.com>
+//!
+//! ## License
+//! MIT License (see LICENSE file for details)
+//!
+//! ## Copyright
+//! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use serde::{Deserialize, Serialize};
 use zbus::zvariant::{Type, Value};

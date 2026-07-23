@@ -1,6 +1,24 @@
 //! # Daemon Request Handler Module
 //!
 //! Processes incoming IPC requests pushed by the `rde-daemon` supervisor process.
+//!
+//! ## Features
+//! - `HealthCheck` request handling (liveness ping response)
+//! - `GetStatus` status query resolution
+//! - Graceful `Shutdown` request execution
+//!
+//! ## Related
+//! - [`crate::ipc::handler::IpcHandler`]
+//! - [`rde_ipc::message::DaemonRequest`](rde_ipc::message::DaemonRequest)
+//!
+//! ## Authors
+//! - Riju Mondal <rijum8906@gmail.com>
+//!
+//! ## License
+//! MIT License (see LICENSE file for details)
+//!
+//! ## Copyright
+//! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use rde_core::errors::RdeResult;
 use rde_ipc::{

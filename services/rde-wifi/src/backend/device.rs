@@ -1,7 +1,27 @@
 //! # Wi-Fi Device Management Module
 //!
-//! This module manages NetworkManager Wi-Fi hardware device detection, device proxy creation,
+//! Manages NetworkManager Wi-Fi hardware device detection, device proxy creation,
 //! enabling/disabling the Wi-Fi radio, and triggering asynchronous network scans.
+//!
+//! ## Features
+//! - Wireless network interface detection (`DeviceType == 2`)
+//! - Global Wi-Fi hardware radio state toggling (enable/disable)
+//! - Asynchronous Wi-Fi access point scanning request dispatching
+//! - Device path caching and proxy validation
+//!
+//! ## Related
+//! - [`crate::backend::WifiBackend`]
+//! - [`crate::infra::dbus::DeviceProxy`]
+//! - [`crate::infra::dbus::WirelessProxy`]
+//!
+//! ## Authors
+//! - Riju Mondal <rijum8906@gmail.com>
+//!
+//! ## License
+//! MIT License (see LICENSE file for details)
+//!
+//! ## Copyright
+//! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use chrono::Utc;
 use rde_core::errors::{RdeError, RdeResult};

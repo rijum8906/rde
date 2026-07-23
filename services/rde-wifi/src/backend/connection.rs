@@ -1,14 +1,28 @@
 //! # Wi-Fi Connection Management Backend Module
 //!
-//! This module implements connection-level operations for the `WifiBackend` struct.
-//! It interfaces with NetworkManager's D-Bus Settings and Wireless AccessPoint services to:
-//! - Retrieve saved Wi-Fi connection profiles from NetworkManager storage.
-//! - Inspect security features (WPA/WPA2/WPA3/Open) for individual access points.
-//! - Discover and rank available Wi-Fi access points by signal strength.
-//! - Query details of the currently active Wi-Fi connection.
-//! - Connect to open or passphrase-protected Wi-Fi networks via dynamic NetworkManager configuration maps.
-//! - Disconnect active wireless sessions.
-//! - Delete (forget) saved Wi-Fi connection profiles.
+//! Implements connection-level operations for the `WifiBackend` struct.
+//! Interfaces with NetworkManager's D-Bus Settings and Wireless AccessPoint services.
+//!
+//! ## Features
+//! - Querying saved network profiles from NetworkManager Settings
+//! - Scanning and sorting access points by signal strength
+//! - Inspecting access point security protocols (Open, WPA/WPA2/WPA3, WEP)
+//! - Connecting to open or encrypted wireless networks
+//! - Disconnecting active sessions and forgetting saved network profiles
+//!
+//! ## Related
+//! - [`crate::backend::WifiBackend`]
+//! - [`crate::domain::models::AccessPointInfo`]
+//! - [`crate::infra::dbus::SettingsProxy`]
+//!
+//! ## Authors
+//! - Riju Mondal <rijum8906@gmail.com>
+//!
+//! ## License
+//! MIT License (see LICENSE file for details)
+//!
+//! ## Copyright
+//! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use rde_core::errors::{RdeError, RdeResult};
 use std::collections::HashMap;

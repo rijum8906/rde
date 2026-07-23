@@ -1,6 +1,24 @@
 //! # Application Shutdown Handler Module
 //!
 //! Provides clean resource cleanup and shutdown logic for the `Application` instance.
+//!
+//! ## Features
+//! - Sends graceful shutdown signal to daemon supervisor via IPC
+//! - Resets IPC connection state and runtime flags
+//! - Clears startup timestamps and active loop states
+//!
+//! ## Related
+//! - [`crate::app::Application`]
+//! - [`crate::ipc::handler::IpcHandler`]
+//!
+//! ## Authors
+//! - Riju Mondal <rijum8906@gmail.com>
+//!
+//! ## License
+//! MIT License (see LICENSE file for details)
+//!
+//! ## Copyright
+//! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use rde_core::errors::RdeResult;
 

@@ -2,6 +2,25 @@
 //!
 //! Defines strongly-typed Rust traits mapped to NetworkManager's system D-Bus interfaces
 //! (`org.freedesktop.NetworkManager.*`) using the `zbus::proxy` procedural macro.
+//!
+//! ## Features
+//! - `NetworkManager` main proxy interface (`/org/freedesktop/NetworkManager`)
+//! - `Device` and `Wireless` interface proxies (`/org/freedesktop/NetworkManager/Devices/*`)
+//! - `AccessPoint` proxy interface for Wi-Fi signal & BSSID metadata
+//! - `Settings` and `ConnectionSettings` proxies for network profile persistence
+//!
+//! ## Related
+//! - [NetworkManager D-Bus API Specification](https://networkmanager.dev/docs/api/latest/)
+//! - [`crate::backend::WifiBackend`]
+//!
+//! ## Authors
+//! - Riju Mondal <rijum8906@gmail.com>
+//!
+//! ## License
+//! MIT License (see LICENSE file for details)
+//!
+//! ## Copyright
+//! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use std::collections::HashMap;
 use zbus::{
