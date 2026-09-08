@@ -1,11 +1,11 @@
-//! # IPC Client & Message Loop Handler
+//! # IPC Client & Message Loop Handler (`rde-volume`)
 //!
 //! Manages connection creation, service registration handshakes, incoming message listening loops,
 //! and graceful disconnect operations for communicating with the `rde-daemon` supervisor.
 //!
 //! ## Features
 //! - Thread-safe `IpcClient` socket handle creation via Unix domain socket
-//! - Registration handshake (`RegisterRequest`) with `rde-daemon` supervisor
+//! - Registration handshake (`RegisterRequest`) with `rde-daemon` supervisor using service name `"volume"`
 //! - Asynchronous message routing loop for incoming IPC messages
 //!
 //! ## Related
@@ -51,7 +51,7 @@ impl IpcHandler {
     /// Spawns an asynchronous Tokio background task to handle registration handshake and IPC message dispatching.
     ///
     /// # Workflow
-    /// 1. Sends `RegisterRequest` with service name `"wifi"` and package version to `rde-daemon`.
+    /// 1. Sends `RegisterRequest` with service name `"volume"` and package version to `rde-daemon`.
     /// 2. Enters a loop receiving `MessagePayload` objects from the socket.
     /// 3. Routes `DaemonRequest` messages to `handle_daemon_request` and `DaemonResponse` messages to `handle_daemon_response`.
     ///
@@ -60,13 +60,13 @@ impl IpcHandler {
     pub async fn spawn_ipc_message_handler(&mut self) -> tokio::task::JoinHandle<()> {
         let client = self.client.clone();
         tokio::spawn(async move {
-            // Step 1: Send service registration handshake request first
+            // Step 1: Send service registration handshake request first with service name "volume"
             let version = env!("CARGO_PKG_VERSION").to_string();
             let register_msg =
                 rde_ipc::message::Message::new(rde_ipc::message::MessagePayload::ServiceRequest(
                     rde_ipc::message::ServiceRequest::Register(rde_ipc::message::RegisterRequest {
                         pid: std::process::id(),
-                        name: "wifi".to_string(),
+                        name: "volume".to_string(),
                         version,
                         capabilities: vec![],
                     }),
@@ -133,7 +133,7 @@ impl IpcHandler {
             .lock()
             .await
             .send_daemon_request(DaemonRequest::Shutdown {
-                service_name: "wifi".to_string(),
+                service_name: "volume".to_string(),
                 reason: Some("Service process shutting down".to_string()),
             })
             .await?;

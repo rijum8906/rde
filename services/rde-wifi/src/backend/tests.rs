@@ -1,7 +1,25 @@
 //! # Unit Tests for Wi-Fi Backend Engine
 //!
-//! This module contains isolated unit tests for `WifiBackend` methods, utilizing `mockall`
+//! Isolated unit tests for `WifiBackend` methods, utilizing `mockall`
 //! mocks for NetworkManager D-Bus proxies and Unix stream sockets for dummy D-Bus connections.
+//!
+//! ## Features
+//! - Dummy authenticated `zbus::Connection` creation via Unix socket pairs
+//! - Mock unit tests for device scanning, hardware selection, and connection logic
+//! - Offline unit test coverage without system NetworkManager D-Bus requirement
+//!
+//! ## Related
+//! - [`crate::backend::WifiBackend`]
+//! - [`crate::infra::dbus::mock`]
+//!
+//! ## Authors
+//! - Riju Mondal <rijum8906@gmail.com>
+//!
+//! ## License
+//! MIT License (see LICENSE file for details)
+//!
+//! ## Copyright
+//! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use super::WifiBackend;
 use crate::infra::dbus::mock::{

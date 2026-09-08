@@ -1,17 +1,17 @@
-//! # Application Startup & Event Execution Loop
+//! # Application Startup & Event Execution Loop (`rde-volume`)
 //!
 //! Handles background IPC task spawning with exponential backoff, D-Bus session bus setup,
-//! service name registration (`org.rde.wifi`), and signal monitoring (`Ctrl+C`).
+//! service name registration (`org.rde.Volume`), and signal monitoring (`Ctrl+C`).
 //!
 //! ## Features
 //! - Spawns background IPC client connecting to `rde-daemon` with retry backoff
-//! - Registers public `WifiInterface` on session D-Bus bus path `/org/rde/wifi`
-//! - Acquires `org.rde.wifi` D-Bus service name
+//! - Registers public `VolumeInterface` on session D-Bus bus path `/org/rde/Volume`
+//! - Acquires `org.rde.Volume` D-Bus service name
 //! - Listens for OS signal `Ctrl+C` for graceful termination
 //!
 //! ## Related
 //! - [`crate::app::Application`]
-//! - [`crate::dbus::iface::WifiInterface`]
+//! - [`crate::dbus::iface::VolumeInterface`]
 //! - [`crate::ipc::handler::IpcHandler`]
 //!
 //! ## Authors
@@ -23,17 +23,22 @@
 //! ## Copyright
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
-use rde_core::errors::RdeResult;
+use rde_core::errors::{RdeError, RdeResult};
 
-use crate::{app::Application, dbus::iface::WifiInterface, ipc::handler::IpcHandler};
+use crate::{
+    app::Application,
+    dbus::iface::VolumeInterface,
+    domain::models::{DBUS_OBJECT_PATH, DBUS_SERVICE_NAME},
+    ipc::handler::IpcHandler,
+};
 
 impl Application {
     /// Starts the service application event loop.
     ///
     /// # Execution Steps
     /// 1. Spawns background IPC task to connect to `rde-daemon` with exponential backoff retry logic.
-    /// 2. Instantiates `WifiInterface` and registers it on the D-Bus session bus at path `/org/rde/wifi`.
-    /// 3. Requests the D-Bus service name `org.rde.wifi`.
+    /// 2. Instantiates `VolumeInterface` and registers it on the D-Bus session bus at path `/org/rde/Volume`.
+    /// 3. Requests the D-Bus service name `org.rde.Volume`.
     /// 4. Listens for OS signal `Ctrl+C` for graceful shutdown.
     ///
     /// # Errors
@@ -43,32 +48,35 @@ impl Application {
         let ipc_handle = self.spawn_ipc_connector().await;
 
         // Step 2: Initialize D-Bus interface and server object
-        let wifi_interface = WifiInterface::new().await?;
+        let volume_interface = VolumeInterface::new().await?;
 
-        // Step 3: Register org.rde.wifi interface on session D-Bus at path /org/rde/wifi
+        // Step 3: Register org.rde.Volume interface on session D-Bus at path /org/rde/Volume
         let conn = zbus::connection::Builder::session()?
-            .name("org.rde.wifi")?
-            .serve_at("/org/rde/wifi", wifi_interface)?
+            .name(DBUS_SERVICE_NAME)?
+            .serve_at(DBUS_OBJECT_PATH, volume_interface)?
             .build()
             .await?;
 
         // Update application runtime status
         self.is_running = true;
-        self.is_conneced = self.handler.lock().await.is_some();
+        self.is_connected = self.handler.lock().await.is_some();
         self.start_time = Some(std::time::Instant::now());
 
         // Step 4: Confirm name request on session D-Bus
-        tracing::info!("Wifi D-Bus service started successfully on org.rde.wifi");
-        conn.request_name("org.rde.wifi").await?;
+        tracing::info!(
+            "Volume D-Bus service started successfully on {}",
+            DBUS_SERVICE_NAME
+        );
+        let _ = conn.request_name(DBUS_SERVICE_NAME).await;
 
         // Step 5: Wait asynchronously for Ctrl+C interruption signal
-        tokio::signal::ctrl_c().await.unwrap();
+        tokio::signal::ctrl_c().await.map_err(RdeError::Io)?;
         tracing::info!("Received Ctrl+C, shutting down...");
         ipc_handle.abort();
 
         // Step 6: Perform graceful application shutdown
         if let Err(e) = self.shutdown().await {
-            tracing::error!("failed to shutdown, {}", e);
+            tracing::error!("Failed to shutdown volume service cleanly: {}", e);
         }
 
         Ok(())
@@ -92,16 +100,16 @@ impl Application {
 
                         let mut guard = ipc_handler.lock().await;
                         *guard = Some(h);
-                        tracing::info!("connected to ipc");
+                        tracing::info!("Connected to rde-daemon IPC socket");
                         return;
                     }
                     Err(e) => {
                         tracing::warn!(
-                            "failed to connect to ipc, attempt {}/{}",
+                            "Failed to connect to IPC daemon, attempt {}/{}: {}",
                             attempt + 1,
-                            max_attempts
+                            max_attempts,
+                            e
                         );
-                        tracing::error!("{}", e);
                     }
                 }
 

@@ -879,8 +879,14 @@ name = "rde-volume"
 version = "0.1.0"
 dependencies = [
  "alsa",
+ "chrono",
+ "futures-util",
+ "mockall",
  "rde-core",
  "rde-ipc",
+ "serde",
+ "tokio",
+ "tracing",
  "zbus",
 ]
 

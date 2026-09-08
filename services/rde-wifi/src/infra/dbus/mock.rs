@@ -1,6 +1,24 @@
 //! # Mock NetworkManager D-Bus Proxies
 //!
 //! Provides unit test mocks generated using `mockall::mock!` matching NetworkManager D-Bus proxy interfaces.
+//!
+//! ## Features
+//! - Mock implementations for `NetworkManagerProxy`, `DeviceProxy`, `WirelessProxy`
+//! - Mock implementations for `AccessPointProxy`, `SettingsProxy`, `ConnectionSettingsProxy`
+//! - Enabling isolated unit testing without live D-Bus connections
+//!
+//! ## Related
+//! - [`crate::backend::tests`]
+//! - [`crate::infra::dbus::nm_proxy`]
+//!
+//! ## Authors
+//! - Riju Mondal <rijum8906@gmail.com>
+//!
+//! ## License
+//! MIT License (see LICENSE file for details)
+//!
+//! ## Copyright
+//! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use std::collections::HashMap;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};

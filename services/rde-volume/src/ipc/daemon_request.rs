@@ -1,4 +1,4 @@
-//! # Daemon Request Handler Module
+//! # Daemon Request Handler Module (`rde-volume`)
 //!
 //! Processes incoming IPC requests pushed by the `rde-daemon` supervisor process.
 //!

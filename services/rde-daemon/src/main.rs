@@ -5,7 +5,7 @@ use rde_core::{
 };
 use rde_daemon::{app::App, ipc::server::Server};
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> RdeResult<()> {
     // 1. Initialize the global Logger
     let log_dir = rde_service_logs_dir("daemon")?;

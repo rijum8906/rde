@@ -1,8 +1,25 @@
 //! # D-Bus Interface Implementation (`org.rde.wifi`)
 //!
 //! Implements the public D-Bus object interface served at object path `/org/rde/wifi`.
-//! It exposes D-Bus properties (version, enabled, networks, saved_networks), methods (scan, connect, disconnect, forget),
-//! and signals (ScanCompleted, EnabledChanged, ConnStateChanged).
+//! Exposes D-Bus properties, methods, and signals for Wi-Fi management.
+//!
+//! ## Features
+//! - D-Bus properties (`version`, `enabled`, `networks`, `saved_networks`, `active_network`)
+//! - D-Bus methods (`scan`, `connect`, `disconnect`, `forget`, `set_enabled`)
+//! - D-Bus signals (`ScanCompleted`, `EnabledChanged`, `ConnStateChanged`)
+//!
+//! ## Related
+//! - [`crate::backend::WifiBackend`]
+//! - [`crate::domain::models::AccessPointInfo`]
+//!
+//! ## Authors
+//! - Riju Mondal <rijum8906@gmail.com>
+//!
+//! ## License
+//! MIT License (see LICENSE file for details)
+//!
+//! ## Copyright
+//! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use rde_core::errors::RdeResult;
 use zbus::interface;

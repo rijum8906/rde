@@ -1,8 +1,27 @@
-//! Main binary entry point for the `rde-wifi` service.
+//! # Main Binary Entry Point (`rde-wifi`)
 //!
-//! This binary initializes the global singleton `Application` instance, starts the
-//! background IPC link with `rde-daemon`, registers the `org.rde.wifi` session D-Bus interface,
-//! and runs until a termination signal (`Ctrl+C` or daemon request) is received.
+//! Main binary entry point for the `rde-wifi` service. Initializes the global
+//! application singleton, starts background IPC connection to `rde-daemon`, registers
+//! the `org.rde.wifi` session D-Bus interface, and handles runtime event loops.
+//!
+//! ## Features
+//! - Application singleton initialization
+//! - Tokio async runtime execution
+//! - Background daemon IPC connector setup
+//! - Session D-Bus service exposure (`org.rde.wifi`)
+//!
+//! ## Related
+//! - [`rde_wifi::app::Application`](crate::app::Application)
+//! - [`rde_wifi::dbus::iface::WifiInterface`](crate::dbus::iface::WifiInterface)
+//!
+//! ## Authors
+//! - Riju Mondal <rijum8906@gmail.com>
+//!
+//! ## License
+//! MIT License (see LICENSE file for details)
+//!
+//! ## Copyright
+//! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use rde_core::errors::RdeResult;
 use rde_wifi::app::Application;

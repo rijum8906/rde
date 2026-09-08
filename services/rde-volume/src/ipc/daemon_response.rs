@@ -1,4 +1,4 @@
-//! # Daemon Response Handler Module
+//! # Daemon Response Handler Module (`rde-volume`)
 //!
 //! Processes acknowledgment and response messages received from `rde-daemon`.
 //!

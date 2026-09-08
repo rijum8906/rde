@@ -1,7 +1,8 @@
-//! # Inter-Process Communication (IPC) Module
+//! # Inter-Process Communication (IPC) Module (`rde-volume`)
 //!
-//! Handles Unix domain socket communication between `rde-wifi` service and `rde-daemon` supervisor.
-//! Provides health check responses, status updates, registration handshakes, and graceful shutdowns.
+//! Handles Unix domain socket communication between the `rde-volume` service and the
+//! `rde-daemon` supervisor process. Provides health check responses, status updates,
+//! registration handshakes, and graceful shutdowns.
 //!
 //! ## Features
 //! - Daemon request and response message handlers

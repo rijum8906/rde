@@ -1,4 +1,4 @@
-//! # Application Shutdown Handler Module
+//! # Application Shutdown Handler Module (`rde-volume`)
 //!
 //! Provides clean resource cleanup and shutdown logic for the `Application` instance.
 //!
@@ -34,19 +34,24 @@ impl Application {
     /// Returns `RdeError` if sending IPC shutdown messages encounters an unrecoverable failure.
     pub async fn shutdown(&mut self) -> RdeResult<()> {
         if self.is_running {
-            if self.is_conneced {
+            if self.is_connected {
                 let mut handler_guard = self.handler.lock().await;
                 if let Some(ref mut h) = *handler_guard {
                     if let Err(e) = h.shutdown().await {
                         tracing::error!("Failed to shutdown IPC handler: {}", e);
                     }
                 }
-                self.is_conneced = false;
+                self.is_connected = false;
             }
             self.is_running = false;
             self.start_time = None;
         }
 
         Ok(())
+    }
+
+    /// Backward-compatible alias for `shutdown`.
+    pub async fn stop(&mut self) -> RdeResult<()> {
+        self.shutdown().await
     }
 }
