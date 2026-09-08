@@ -7,8 +7,16 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-rde-core = { workspace = true }
-rde-ipc = { workspace = true }
-zbus = { workspace = true }
+# Internal
+rde-core.workspace = true
+rde-ipc.workspace = true
+
+tokio.workspace = true
+serde.workspace = true
+zbus.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+futures-util.workspace = true
 
 alsa = "0.12.0"
+mockall.workspace = true
