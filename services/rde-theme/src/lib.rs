@@ -12,6 +12,14 @@
 //! - Typography and font configuration engine
 //! - Session D-Bus interface (`org.rde.Theme`)
 //! - Unix socket IPC connection for daemon supervision
+//! - Application lifecycle management with daemon integration
+//!
+//! ## Architecture
+//! - **app**: Global application singleton, startup, and shutdown orchestration
+//! - **ipc**: Daemon communication with IPC socket handling and message routing
+//! - **dbus**: D-Bus interface definitions and service exposure
+//! - **domain**: Theme data models and configuration structures
+//! - **backend**: Theme computation and palette generation engines
 //!
 //! ## Related
 //! - [Material Design 3 Specification](https://m3.material.io/)
@@ -27,6 +35,8 @@
 //! ## Copyright
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
+pub mod app;
 pub mod backend;
 pub mod dbus;
 pub mod domain;
+pub mod ipc;
