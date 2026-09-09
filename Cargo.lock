@@ -873,6 +873,15 @@ version = "0.1.0"
 [[package]]
 name = "rde-theme"
 version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "rde-core",
+ "rde-ipc",
+ "serde",
+ "tokio",
+ "tracing",
+ "zbus",
+]
 
 [[package]]
 name = "rde-volume"
