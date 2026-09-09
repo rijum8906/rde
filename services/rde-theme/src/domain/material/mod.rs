@@ -57,7 +57,7 @@ use zbus::zvariant::Type;
 ///
 /// # See Also
 /// - [Material 3 Color Roles Documentation](https://m3.material.io/styles/color/roles)
-#[derive(Type, Serialize, Deserialize, PartialEq)]
+#[derive(Type, Serialize, Deserialize, PartialEq, Debug, Clone, Default)]
 pub struct MaterialColorPalette {
     /// Seed color used to derive this palette (hex string, e.g., "#6DD6DA")
     pub seed_color: String,
@@ -131,39 +131,4 @@ pub struct MaterialColorPalette {
     pub inverse_primary: String,
     /// Text/icon color on inverse_surface
     pub inverse_on_surface: String,
-}
-
-impl Default for MaterialColorPalette {
-    fn default() -> Self {
-        Self {
-            seed_color: String::new(),
-            primary: String::new(),
-            on_primary: String::new(),
-            primary_container: String::new(),
-            on_primary_container: String::new(),
-            secondary: String::new(),
-            on_secondary: String::new(),
-            secondary_container: String::new(),
-            on_secondary_container: String::new(),
-            tertiary: String::new(),
-            on_tertiary: String::new(),
-            tertiary_container: String::new(),
-            on_tertiary_container: String::new(),
-            error: String::new(),
-            on_error: String::new(),
-            error_container: String::new(),
-            on_error_container: String::new(),
-            surface: String::new(),
-            surface_container: String::new(),
-            surface_variant: String::new(),
-            on_surface_variant: String::new(),
-            outline: String::new(),
-            outline_variant: String::new(),
-            shadow: String::new(),
-            scrim: String::new(),
-            inverse_surface: String::new(),
-            inverse_primary: String::new(),
-            inverse_on_surface: String::new(),
-        }
-    }
 }

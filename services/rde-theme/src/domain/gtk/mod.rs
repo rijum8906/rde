@@ -30,5 +30,5 @@ use zbus::zvariant::Type;
 ///
 /// # TODO
 /// Implement GTK palette structure mapping M3 roles to GTK color properties.
-#[derive(Type, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Type, Serialize, Deserialize, PartialEq, Default, Debug, Clone)]
 pub struct GtkColorPalette {}

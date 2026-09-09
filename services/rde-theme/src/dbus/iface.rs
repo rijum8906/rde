@@ -48,12 +48,13 @@ use crate::domain::{
 ///
 /// This struct serves as the runtime object that handles incoming D-Bus method calls,
 /// property accesses, and signal emissions for theme management.
+#[derive(Default)]
 pub struct ThemeInterface {}
 
 impl ThemeInterface {
     /// Creates a new `ThemeInterface` instance.
     pub fn new() -> Self {
-        Self {}
+        Self::default()
     }
 }
 
@@ -319,20 +320,6 @@ impl ThemeInterface {
     /// color scheme switch, or dynamic generation from new seed color.
     #[zbus(signal, name = "ColorPaletteChanged")]
     pub async fn color_palette_changed(
-        signal_emitter: &zbus::object_server::SignalEmitter<'_>,
-    ) -> zbus::Result<()>;
-
-    // Helper signal methods (internal use for emitting signals)
-
-    /// Emitted when the active theme changes.
-    #[zbus(signal, name = "ActiveThemeChanged")]
-    pub async fn active_theme_changed(
-        signal_emitter: &zbus::object_server::SignalEmitter<'_>,
-    ) -> zbus::Result<()>;
-
-    /// Emitted when the color scheme preference changes.
-    #[zbus(signal, name = "ColorSchemeChanged")]
-    pub async fn color_scheme_changed(
         signal_emitter: &zbus::object_server::SignalEmitter<'_>,
     ) -> zbus::Result<()>;
 }
