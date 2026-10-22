@@ -36,11 +36,6 @@ GtkWindow *get_window(WaylandLayerShellPlugin *self)
 
 static FlMethodResponse *is_supported(WaylandLayerShellPlugin *self)
 {
-  if (gtk_layer_is_supported() == 0)
-  {
-    GtkWindow *gtk_window = get_window(self);
-    gtk_widget_show(GTK_WIDGET(gtk_window));
-  }
   g_autoptr(FlValue) result =
       fl_value_new_bool(gtk_layer_is_supported());
   return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
@@ -52,6 +47,9 @@ static FlMethodResponse *initialize(WaylandLayerShellPlugin *self, FlValue *args
   GtkWindow *gtk_window = get_window(self);
   if (gtk_layer_is_supported() == 0)
   {
+    // No layer-shell support: fall back to an ordinary toplevel and map it so
+    // the app is still visible.
+    gtk_widget_show(GTK_WIDGET(gtk_window));
     result = fl_value_new_bool(false);
   }
   else
@@ -60,10 +58,16 @@ static FlMethodResponse *initialize(WaylandLayerShellPlugin *self, FlValue *args
     int height = fl_value_get_int(fl_value_lookup_string(args, "height"));
     gtk_widget_set_size_request(GTK_WIDGET(gtk_window), width, height);
     gtk_layer_init_for_window(gtk_window);
+
+    // Do NOT map the window here. Mapping commits the layer surface, and the
+    // compositor terminates the connection when that first commit carries a
+    // 0x0 size without the left/right anchors. Dart calls initialize() before
+    // setLayer()/setAnchor()/setSurfaceHeight(), so the surface may only be
+    // mapped once that configuration is applied. Flutter's first-frame
+    // callback shows the toplevel after bootstrap has finished.
     result = fl_value_new_bool(true);
   }
 
-  gtk_widget_show(GTK_WIDGET(gtk_window));
   return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
 }
 
@@ -316,6 +320,21 @@ static FlMethodResponse *set_surface_height(WaylandLayerShellPlugin *self, FlVal
   int width = gtk_widget_get_allocated_width(GTK_WIDGET(gtk_window));
   gtk_window_resize(gtk_window, width, height);
   gtk_widget_set_size_request(GTK_WIDGET(gtk_window), -1, height);
+
+  // gtk-layer-shell sends .set_size from the toplevel's last size allocation.
+  // A window that was realized before the layer surface was initialized never
+  // receives another allocation before its first map, so the initial commit
+  // would carry a 0x0 size and compositors reject it ("the layer surface has a
+  // height of 0 but its anchor doesn't include the top and the bottom screen
+  // edge"). Apply the geometry now so the first map commits a valid size.
+  if (gtk_widget_get_realized(GTK_WIDGET(gtk_window)) &&
+      !gtk_widget_get_mapped(GTK_WIDGET(gtk_window)))
+  {
+    GtkAllocation allocation;
+    gtk_widget_get_allocation(GTK_WIDGET(gtk_window), &allocation);
+    allocation.height = height;
+    gtk_widget_size_allocate(GTK_WIDGET(gtk_window), &allocation);
+  }
 
   // Push the size change to the compositor so the anchored layer surface is
   // re-configured at the new height.
