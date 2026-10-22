@@ -11,12 +11,13 @@
 //! - Color scheme management (light/dark mode) with WCAG contrast compliance
 //! - Typography and font configuration engine
 //! - Session D-Bus interface (`org.rde.Theme`)
-//! - Unix socket IPC connection for daemon supervision
+//! - Unix socket supervision task for `rde-daemon`
 //! - Application lifecycle management with daemon integration
 //!
 //! ## Architecture
-//! - **app**: Global application singleton, startup, and shutdown orchestration
-//! - **ipc**: Daemon communication with IPC socket handling and message routing
+//! - **app**: Application singleton ([`app::App`]), event loop, and supervision task
+//! - **handler**: Routing and handling of supervisor requests and responses
+//! - **constants**: Service name, D-Bus contract, and retry policy
 //! - **dbus**: D-Bus interface definitions and service exposure
 //! - **domain**: Theme data models and configuration structures
 //! - **backend**: Theme computation and palette generation engines
@@ -37,6 +38,7 @@
 
 pub mod app;
 pub mod backend;
+pub mod constants;
 pub mod dbus;
 pub mod domain;
-pub mod ipc;
+pub mod handler;

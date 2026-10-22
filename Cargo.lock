@@ -299,9 +299,9 @@ dependencies = [
 
 [[package]]
 name = "dirs"
-version = "6.0.0"
+version = "7.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3e8aa94d75141228480295a7d0e7feb620b1a5ad9f12bc40be62411e38cce4e"
+checksum = "8d57d423b3c82e89b9a24ca3091fee61f456a26edbd28d26c65906f4bc1dcd8f"
 dependencies = [
  "dirs-sys",
 ]
@@ -444,6 +444,12 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "futures-sink"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1944426bf7d03f1d14f708785e4b33efd750b36d48a157b836b3efc15ede8e1d"
 
 [[package]]
 name = "futures-task"
@@ -813,6 +819,7 @@ dependencies = [
  "rde-ipc",
  "tempfile",
  "tokio",
+ "tokio-util",
  "tracing",
  "zbus",
 ]
@@ -835,6 +842,8 @@ dependencies = [
  "serde",
  "tempfile",
  "thiserror",
+ "tokio",
+ "tokio-util",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -847,6 +856,7 @@ version = "0.1.0"
 dependencies = [
  "rde-core",
  "rde-ipc",
+ "tempfile",
  "tokio",
  "tracing",
 ]
@@ -863,12 +873,21 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-util",
  "tracing",
 ]
 
 [[package]]
 name = "rde-notification"
 version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "rde-core",
+ "rde-ipc",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
 
 [[package]]
 name = "rde-theme"
@@ -879,6 +898,7 @@ dependencies = [
  "rde-ipc",
  "serde",
  "tokio",
+ "tokio-util",
  "tracing",
  "zbus",
 ]
@@ -895,6 +915,7 @@ dependencies = [
  "rde-ipc",
  "serde",
  "tokio",
+ "tokio-util",
  "tracing",
  "zbus",
 ]
@@ -1184,6 +1205,20 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "tokio-util"
+version = "0.7.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "494815d09bf52b5548659851081238f0ca39ff638363907596da739561c62c52"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "futures-sink",
+ "futures-util",
+ "pin-project-lite",
+ "tokio",
 ]
 
 [[package]]

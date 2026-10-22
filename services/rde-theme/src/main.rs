@@ -1,28 +1,17 @@
 //! # Main Binary Entry Point (`rde-theme`)
 //!
-//! Main binary entry point for the `rde-theme` service. Initializes the global
-//! application singleton, starts background IPC connection to `rde-daemon`, registers
-//! the `org.rde.Theme` session D-Bus interface, and handles runtime event loops.
+//! Entry point for the theme service. Initialises the application singleton,
+//! publishes `org.rde.Theme` on the session bus, starts the daemon supervision
+//! task, and blocks until termination is requested.
 //!
 //! ## Execution Flow
-//! 1. Initialize application singleton (logger, version, state)
-//! 2. Spawn background IPC connector task (connects to daemon with retry logic)
-//! 3. Register D-Bus interface and service name
-//! 4. Run event loop (wait for signals and handle requests)
-//! 5. Graceful shutdown (cleanup, daemon notification, resource release)
-//!
-//! ## Features
-//! - Application singleton initialization with comprehensive logging
-//! - Tokio async runtime execution
-//! - Background daemon IPC connector setup with exponential backoff
-//! - Session D-Bus service exposure (`org.rde.Theme`)
-//! - Signal handling for graceful termination (Ctrl+C)
-//! - Structured logging throughout lifecycle
+//! 1. Initialise the application singleton (logger and D-Bus object)
+//! 2. Run the event loop ([`App::run`]): D-Bus registration, supervision, signals
+//! 3. Tear down supervision on `SIGINT`, `SIGTERM`, or a supervisor request
 //!
 //! ## Related
-//! - [`rde_theme::app::Application`](rde_theme::app::Application)
-//! - [`rde_theme::dbus::iface::ThemeInterface`](rde_theme::dbus::iface::ThemeInterface)
-//! - [`rde_theme::ipc::handler::IpcHandler`](rde_theme::ipc::handler::IpcHandler)
+//! - [`rde_theme::app::App`]
+//! - [`rde_theme::handler`]
 //!
 //! ## Authors
 //! - Riju Mondal <rijum8906@gmail.com>
@@ -34,33 +23,22 @@
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use rde_core::errors::RdeResult;
-use rde_theme::app::Application;
+use rde_theme::app::App;
 
-/// Main asynchronous entry point powered by Tokio runtime.
-///
-/// # Execution
-/// 1. Acquires global Application singleton
-/// 2. Enters event loop via Application::run()
-/// 3. Handles graceful shutdown on Ctrl+C or error
+/// Theme service entry point on a single-threaded Tokio runtime.
 ///
 /// # Errors
-/// Returns `RdeError` if:
-/// - Application initialization fails (logger setup, etc.)
-/// - D-Bus connection or service registration fails
-/// - Runtime execution encounters fatal failure
-///
-/// # Logging
-/// Comprehensive logging is emitted throughout execution:
-/// - STDOUT: Service startup confirmation
-/// - Log File: All operational events (see `rde_service_logs_dir("theme")`)
+/// Returns [`rde_core::errors::RdeError`] if the logger cannot be installed,
+/// the session bus is unavailable, the name cannot be claimed, or a signal
+/// handler cannot be registered.
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> RdeResult<()> {
-    // Step 1: Acquire exclusive access to the global Application singleton instance
     println!("Starting RDE Theme Service...");
-    let mut app = Application::global().await.lock().await;
 
-    // Step 2: Run the service event loop (D-Bus listener + IPC client)
-    // This is a blocking operation that runs until Ctrl+C is received
+    // Step 1: Initialise logging and the D-Bus object.
+    let mut app = App::global()?.lock().await;
+
+    // Step 2: Serve D-Bus and supervision until shutdown is requested.
     app.run().await?;
 
     println!("RDE Theme Service exited successfully");

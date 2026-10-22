@@ -7,10 +7,13 @@ An independent, decoupled system microservice for managing master audio volume a
 ## 🛠️ Architecture Overview
 
 The crate is structured as follows:
-- **`app/`**: Core daemon lifecycle control, handling startup, event loops, and graceful shutdown sequence.
-  - [`app/mod.rs`](src/app/mod.rs): Application singleton, logging initialization, and status tracking.
-  - [`app/run.rs`](src/app/run.rs): Session D-Bus registration, IPC connector spawning, and signal monitoring.
-  - [`app/shutdown.rs`](src/app/shutdown.rs): Clean resource teardown and supervisor disconnection.
+- **`app/`**: Service lifecycle control, handling startup, event loops, and graceful shutdown.
+  - [`app/mod.rs`](src/app/mod.rs): global `App` singleton, D-Bus registration, signal handling, and shutdown.
+  - [`app/thread.rs`](src/app/thread.rs): daemon supervision task (connect, register, serve, deregister).
+- **`handler/`**: Supervision protocol handling.
+  - [`handler/request.rs`](src/handler/request.rs): `HealthCheck`, `GetStatus`, `Shutdown`.
+  - [`handler/response.rs`](src/handler/response.rs): `RegisterAck`.
+- **`constants.rs`**: service name, D-Bus contract, and retry policy.
 - **`backend/`**: Audio business logic engine and calculation rules.
   - [`backend/mod.rs`](src/backend/mod.rs): Master volume clamping, incremental step calculation, and mute toggling.
   - [`backend/tests.rs`](src/backend/tests.rs): Comprehensive unit tests covering boundary limits and error propagation.
@@ -21,11 +24,6 @@ The crate is structured as follows:
 - **`infra/`**: Hardware driver integrations and test mocks.
   - [`infra/alsa.rs`](src/infra/alsa.rs): Native Linux ALSA mixer controller with automatic fallback discovery.
   - [`infra/mock.rs`](src/infra/mock.rs): In-memory simulated audio hardware for CI/virtualized environments.
-- **`ipc/`**: Supervision protocol handler for communicating with `rde-daemon`.
-  - [`ipc/handler.rs`](src/ipc/handler.rs): IPC socket connector, retry loops, and message dispatch.
-  - [`ipc/daemon_request.rs`](src/ipc/daemon_request.rs): Handlers for `HealthCheck`, `GetStatus`, and `Shutdown`.
-  - [`ipc/daemon_response.rs`](src/ipc/daemon_response.rs): Handlers for `RegisterAck`.
-
 ---
 
 ## 📡 D-Bus API Reference

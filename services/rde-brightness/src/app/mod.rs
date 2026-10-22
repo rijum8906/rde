@@ -1,20 +1,18 @@
-//! # Application Module
+//! # Application Lifecycle (`rde-brightness`)
 //!
-//! Core application lifecycle management and D-Bus service orchestration.
-//! Implements the singleton pattern for the Brightness service.
+//! Owns the brightness service runtime: the global [`App`] singleton, D-Bus
+//! service registration, daemon supervision, and graceful shutdown.
 //!
-//! ## Architecture
-//! The Application manages:
-//! - D-Bus connection and interface registration
-//! - Daemon supervisor communication via Unix domain sockets
-//! - Service lifecycle (startup, shutdown, signal handling)
-//! - Graceful error handling and logging
+//! ## Features
+//! - Poison-safe singleton access through [`App::global`] (no panics on startup)
+//! - D-Bus registration of `org.rde.Brightness` at `/org/rde/Brightness`
+//! - Supervision task started through [`crate::app::thread`]
+//! - Graceful teardown on `SIGINT`, `SIGTERM`, or a supervisor request
 //!
-//! ## Design Patterns
-//! - **Singleton Pattern**: Global static instance via `OnceLock` for exclusive service access
-//! - **Async/Await**: Tokio-based async runtime for I/O operations
-//! - **Thread-Safety**: Mutex-protected state for safe concurrent access
-//! - **Exponential Backoff**: Socket connection retries with configurable timing
+//! ## Related
+//! - [`crate::app::thread`]: supervision socket task
+//! - [`crate::handler`]: daemon message routing
+//! - [`crate::dbus::iface::BrightnessInterface`]: served D-Bus object
 //!
 //! ## Authors
 //! - Riju Mondal <rijum8906@gmail.com>
@@ -25,11 +23,13 @@
 //! ## Copyright
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
-pub mod handler;
+mod thread;
 
 use std::{
-    process,
-    sync::{Arc, OnceLock},
+    sync::{
+        Arc, OnceLock,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Instant,
 };
 
@@ -38,365 +38,273 @@ use rde_core::{
     errors::{RdeError, RdeResult},
     fs::rde_service_logs_dir,
     logger::{LogLevel, Logger},
-    utils::ipc::get_socket_path,
 };
-use rde_ipc::{
-    message::{Message, MessagePayload, RegisterRequest, ServiceRequest},
-    socket::IpcClient,
-};
-use tokio::signal;
-use tokio::sync::Mutex as TokioMutex;
+use rde_ipc::{IpcCommand, message::ServiceStatus, thread::IpcThread};
+use tokio::signal::unix::{SignalKind, signal};
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
-use crate::{constants::MAX_SOCKET_CONN_RETRY_COUNT, dbus::iface::BrightnessInterface};
+use crate::{
+    constants::{DBUS_OBJECT_PATH, DBUS_SERVICE_NAME, SERVICE_NAME, SHUTDOWN_TIMEOUT},
+    dbus::iface::BrightnessInterface,
+};
 
-/// Main application singleton for the Brightness service.
-///
-/// Manages the complete service lifecycle including D-Bus registration, daemon
-/// communication, signal handling, and graceful shutdown. Thread-safe via mutex wrapping.
-///
-/// # Fields
-/// - `version`: Semantic version from Cargo.toml
-/// - `is_running`: Service execution state
-/// - `start_time`: Timestamp when service started (for uptime tracking)
-/// - `is_conneced`: Connected to daemon supervisor (NOTE: typo preserved for compatibility)
-/// - `client`: Async mutex-protected IPC client for daemon communication
-/// - `interface`: D-Bus interface handler (consumed after registration)
-///
-/// # Thread Safety
-/// All access to the global singleton is protected by `futures_util::Mutex` to ensure
-/// thread-safe state mutations across async task boundaries.
-pub struct App {
-    /// Service version (e.g., "0.1.0")
-    version: String,
-
-    /// Whether service is currently running
-    is_running: bool,
-
-    /// Service startup timestamp for uptime calculation
-    start_time: Option<Instant>,
-
-    /// Connected to daemon supervisor (typo: `is_conneced` from original codebase)
-    is_conneced: bool,
-
-    /// Async-safe IPC client for daemon communication
-    /// Wrapped in TokioMutex for background task access
-    client: Arc<TokioMutex<Option<IpcClient>>>,
-
-    /// D-Bus interface handler (moved into D-Bus connection, becomes None after run)
-    interface: Option<BrightnessInterface>,
-}
-
-/// Global singleton application instance
-///
-/// Use `App::global()` to access. Initialized on first access via `get_or_init`.
-/// Panics during initialization if App::new() fails.
+/// Global service state, initialised on first use.
 static APP_INSTANCE: OnceLock<Mutex<App>> = OnceLock::new();
 
+/// Process-wide state for the brightness service.
+///
+/// # Fields
+/// - `version`: package version from `CARGO_PKG_VERSION`
+/// - `is_running`: whether the event loop is currently serving requests
+/// - `start_time`: instant the service started, used for uptime reporting
+/// - `connected`: set from the supervision task once the socket is connected
+/// - `interface`: D-Bus object handed to the connection during [`App::run`]
+/// - `ipc_thread`: handle to the supervision task, owned for clean teardown
+/// - `shutdown_token`: cancellation signal any component may trigger
+pub struct App {
+    /// Package version string (`CARGO_PKG_VERSION`).
+    version: String,
+
+    /// Whether the service event loop is running.
+    is_running: Arc<AtomicBool>,
+
+    /// Instant at which the service started.
+    start_time: Option<Instant>,
+
+    /// Whether the supervision socket is connected to `rde-daemon`.
+    connected: Arc<AtomicBool>,
+
+    /// D-Bus object served at [`DBUS_OBJECT_PATH`].
+    interface: Option<BrightnessInterface>,
+
+    /// Background supervision task, taken during shutdown.
+    ipc_thread: Option<IpcThread>,
+
+    /// Cancellation signal used to break out of the event loop.
+    shutdown_token: CancellationToken,
+}
+
 impl App {
-    /// Creates a new `App` instance.
+    /// Builds the application: configures logging and the backlight interface.
     ///
     /// # Workflow
-    /// 1. Initialize structured logger in `~/.local/share/rde/logs/brightness/`
-    /// 2. Create D-Bus interface handler (initializes hardware backend)
-    /// 3. Set service state to stopped
+    /// 1. Resolve the service log directory and install the global logger
+    /// 2. Create the [`BrightnessInterface`], which opens the backlight backend
+    /// 3. Return an idle application state (not running, no supervision task)
     ///
     /// # Errors
-    /// Returns `RdeError` if:
-    /// - Log directory cannot be created
-    /// - Logger initialization fails
-    /// - Brightness interface creation fails (no backlight hardware)
+    /// Returns [`RdeError`] when the log directory cannot be created, the
+    /// logging subscriber cannot be installed, or no usable backlight exists.
     fn new() -> RdeResult<Self> {
-        // Initialize the global Logger
-        debug!("Initializing Logger for Brightness service...");
-        let log_dir = rde_service_logs_dir("brightness")?;
-        let logger = Logger::new(LogLevel::Info, log_dir, "brightness");
+        debug!("Initialising logger for the brightness service");
+
+        // Step 1: Install structured logging before touching backlight hardware.
+        let log_dir = rde_service_logs_dir(SERVICE_NAME)?;
+        let logger = Logger::new(LogLevel::Info, log_dir, SERVICE_NAME);
         logger.init()?;
 
-        info!("Creating BrightnessInterface (hardware backend initialization)...");
-        // Create a new brightness service
-        let brightness_interface = BrightnessInterface::new(logger)?;
+        // Step 2: Build the interface, which initialises the backlight backend.
+        let interface = BrightnessInterface::new(logger)?;
 
-        debug!("App instance created successfully");
         Ok(Self {
             version: env!("CARGO_PKG_VERSION").to_string(),
-            is_running: false,
+            is_running: Arc::new(AtomicBool::new(false)),
             start_time: None,
-            client: Arc::new(TokioMutex::new(None)),
-            interface: Some(brightness_interface),
-            is_conneced: false,
+            connected: Arc::new(AtomicBool::new(false)),
+            interface: Some(interface),
+            ipc_thread: None,
+            shutdown_token: CancellationToken::new(),
         })
     }
 
-    /// Retrieves or creates the global singleton App instance.
-    ///
-    /// # Behavior
-    /// - First call: Initializes via `App::new()` and stores in static `APP_INSTANCE`
-    /// - Subsequent calls: Returns reference to already-initialized instance
-    ///
-    /// # Panics
-    /// Panics if `App::new()` fails (e.g., no backlight hardware found).
-    /// This is intentional to prevent service startup without hardware capability.
-    ///
-    /// # Returns
-    /// Static reference to the global `App` instance wrapped in Mutex
-    pub fn global() -> &'static Mutex<App> {
-        APP_INSTANCE.get_or_init(|| {
-            let app = App::new().expect("Failed to initialize App - no backlight hardware found");
-            Mutex::new(app)
-        })
-    }
-
-    /// Spawns a background task to establish daemon communication and register service.
-    ///
-    /// # Workflow
-    /// 1. Resolve daemon socket path via `get_socket_path()`
-    /// 2. Attempt socket connection with retry logic (MAX_SOCKET_CONN_RETRY_COUNT attempts)
-    /// 3. Send `RegisterRequest` with service metadata (PID, name, version, capabilities)
-    /// 4. Start supervisor message handling loop to process:
-    ///    - HealthCheck requests (liveness monitoring)
-    ///    - GetStatus requests (service state reporting)
-    ///    - Shutdown requests (graceful termination signal)
-    /// 5. On connection loss or error, exit loop and log reason
-    ///
-    /// # Retry Strategy
-    /// - Attempts: 5 (MAX_SOCKET_CONN_RETRY_COUNT)
-    /// - Delay: 2000ms between attempts
-    /// - Total timeout: ~10 seconds
-    /// - Warnings logged for each failed attempt
-    /// - Error logged if all attempts exhausted
-    ///
-    /// # Async Context
-    /// Runs in a spawned tokio task separate from main service execution.
-    /// Errors during registration do not block service startup.
-    ///
-    /// # Logging
-    /// - WARN: Socket connection retries
-    /// - INFO: Successful registration
-    /// - ERROR: Fatal failures (socket path resolution, registration failure, connection loss)
-    fn start_daemon_monitor(&mut self) {
-        let client_clone = Arc::clone(&self.client);
-        let version = self.version.clone();
-        self.is_conneced = true;
-
-        debug!("Spawning daemon monitor background task...");
-
-        tokio::spawn(async move {
-            info!("Daemon monitor: Starting daemon communication task");
-
-            // 1. Resolve socket path
-            let socket_path = match get_socket_path() {
-                Ok(path) => {
-                    debug!("Daemon socket path resolved: {:?}", path);
-                    path
-                }
-                Err(e) => {
-                    error!("Failed to get UDS socket path: {}", e);
-                    return;
-                }
-            };
-
-            // 2. Attempt socket connection with retry logic
-            let mut connected_client = None;
-            for i in 0..MAX_SOCKET_CONN_RETRY_COUNT {
-                match IpcClient::connect(&socket_path).await {
-                    Ok(c) => {
-                        info!(
-                            "Successfully connected to daemon socket on attempt {}",
-                            i + 1
-                        );
-                        connected_client = Some(c);
-                        break;
-                    }
-                    Err(e) => {
-                        warn!(
-                            "Failed to connect to daemon socket (attempt {}/{}): {}",
-                            i + 1,
-                            MAX_SOCKET_CONN_RETRY_COUNT,
-                            e
-                        );
-                    }
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
-            }
-
-            if connected_client.is_none() {
-                error!(
-                    "Could not connect to daemon socket after {} retries",
-                    MAX_SOCKET_CONN_RETRY_COUNT
-                );
-                return;
-            }
-
-            let mut client = connected_client.unwrap();
-
-            // 3. Register with daemon
-            info!("Sending service registration request to daemon...");
-            let message = Message::new(MessagePayload::ServiceRequest(ServiceRequest::Register(
-                RegisterRequest {
-                    pid: process::id(),
-                    name: "brightness".to_string(),
-                    version,
-                    capabilities: vec![],
-                },
-            )));
-
-            if let Err(e) = client.send(&message).await {
-                error!("Failed to send registration request: {}", e);
-                return;
-            }
-
-            info!("Service registered with daemon successfully");
-
-            // Save the successfully connected client in the shared mutex
-            {
-                let mut client_guard = client_clone.lock().await;
-                *client_guard = Some(client);
-                debug!("IPC client stored in shared state");
-            }
-
-            // 4. Process incoming supervisor socket messages
-            use crate::app::handler::Handler;
-            let mut handler = Handler::new("brightness");
-            debug!("Starting supervisor message handling loop...");
-
-            loop {
-                // Lock client only to call recv()
-                let msg_res = {
-                    let mut client_guard = client_clone.lock().await;
-                    if let Some(ref mut c) = *client_guard {
-                        c.recv().await
-                    } else {
-                        break;
-                    }
-                };
-
-                match msg_res {
-                    Ok(msg) => {
-                        debug!("Received message from supervisor");
-                        // Lock client to process the message and send responses
-                        let mut client_guard = client_clone.lock().await;
-                        if let Some(ref mut c) = *client_guard {
-                            let res = handler.handle_message(msg, c).await;
-                            if let Err(e) = res {
-                                error!("Error handling supervisor message: {}", e);
-                                break;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        error!("UDS connection to daemon supervisor lost: {}", e);
-                        break;
-                    }
-                }
-            }
-
-            warn!("Daemon monitor loop exited - supervisor communication ended");
-        });
-    }
-
-    /// Runs the Brightness service with D-Bus integration.
-    ///
-    /// # Workflow
-    /// 1. Extract D-Bus interface (consumes `self.interface`)
-    /// 2. Create D-Bus session connection and register at `/org/rde/Brightness`
-    /// 3. Spawn daemon supervisor communication task in background
-    /// 4. Update service state (is_running=true, start_time=now)
-    /// 5. Request D-Bus name `org.rde.Brightness`
-    /// 6. Wait for Ctrl+C signal
-    /// 7. Perform graceful shutdown
+    /// Returns the process-wide application state, creating it on first use.
     ///
     /// # Errors
-    /// Returns `RdeError` if:
-    /// - D-Bus interface already taken (run called twice)
-    /// - D-Bus connection creation fails
-    /// - D-Bus name registration fails
-    /// - Signal handling fails
-    ///
-    /// # Signals
-    /// - Ctrl+C (SIGINT): Triggers graceful shutdown sequence
+    /// Returns the initialisation error from [`App::new`] instead of panicking,
+    /// so the binary can report a clean failure to the session manager.
     ///
     /// # Returns
-    /// `Ok(())` on clean shutdown, `Err(RdeError)` on fatal error
-    pub async fn run(&mut self) -> RdeResult<()> {
-        info!("Starting Brightness Application...");
+    /// A static reference to the mutex-protected application state.
+    pub fn global() -> RdeResult<&'static Mutex<App>> {
+        if let Some(app) = APP_INSTANCE.get() {
+            return Ok(app);
+        }
 
-        // Take the brightness interface
+        // Initialise outside the cell: if a concurrent caller wins the race,
+        // its instance is the one kept and this one is dropped.
+        let app = Self::new()?;
+        let _ = APP_INSTANCE.set(Mutex::new(app));
+
+        APP_INSTANCE
+            .get()
+            .ok_or_else(|| RdeError::Internal("application state failed to initialise".to_string()))
+    }
+
+    /// Serves the D-Bus interface and blocks until shutdown is requested.
+    ///
+    /// # Workflow
+    /// 1. Take the D-Bus object (guarding against a second `run` call)
+    /// 2. Claim `org.rde.Brightness` and serve the object on the session bus
+    /// 3. Spawn the supervision task and mark the service as running
+    /// 4. Wait for `SIGINT`, `SIGTERM`, or a supervisor shutdown request
+    /// 5. Tear everything down through [`App::shutdown`]
+    ///
+    /// # Errors
+    /// Returns [`RdeError`] when the D-Bus object was already consumed, when
+    /// the session bus cannot be reached, or when the name cannot be claimed.
+    pub async fn run(&mut self) -> RdeResult<()> {
+        info!("Starting brightness service");
+
+        // Step 1: The interface is consumed exactly once.
         let interface = self.interface.take().ok_or_else(|| {
-            error!("BrightnessInterface already taken or run() called multiple times");
-            RdeError::Socket("BrightnessInterface has already been taken or run".to_string())
+            error!("Brightness interface already consumed, run() must only be called once");
+            RdeError::Internal("brightness interface already initialised".to_string())
         })?;
 
-        // Build D-Bus connection and register the brightness interface
-        info!("Establishing D-Bus session connection...");
-        let conn = zbus::connection::Builder::session()?
-            .name("org.rde.Brightness")?
-            .serve_at("/org/rde/Brightness", interface)?
+        // Step 2: Publish the object and own the well-known name. `name()`
+        // acquires the name as part of `build()`, so no second request is needed.
+        let connection = zbus::connection::Builder::session()?
+            .name(DBUS_SERVICE_NAME)?
+            .serve_at(DBUS_OBJECT_PATH, interface)?
             .build()
-            .await
-            .map_err(RdeError::Dbus)?;
+            .await?;
 
-        debug!("D-Bus interface registered at /org/rde/Brightness");
+        debug!(
+            service = DBUS_SERVICE_NAME,
+            path = DBUS_OBJECT_PATH,
+            pid = std::process::id(),
+            "D-Bus interface registered"
+        );
 
-        // Spawn connection and supervisor monitoring loop asynchronously in a background task
-        info!("Spawning daemon monitor task...");
-        self.start_daemon_monitor();
+        // Step 3: Start daemon supervision and mark the runtime as active.
+        self.spawn_daemon_thread();
+        self.start();
 
-        // Update app states
-        self.is_running = true;
-        self.start_time = Some(Instant::now());
+        info!(
+            service = DBUS_SERVICE_NAME,
+            version = %self.version,
+            "Brightness service is ready"
+        );
 
-        // Start the D-Bus service
-        info!("Requesting D-Bus name: org.rde.Brightness");
-        conn.request_name("org.rde.Brightness").await?;
-        info!("Brightness D-Bus service started successfully");
-
-        // Wait for Ctrl+C to exit
-        info!("Waiting for Ctrl+C signal to shutdown...");
-        signal::ctrl_c().await?;
-
-        info!("Ctrl+C signal received. Shutting down Brightness Application...");
-        self.shutdown().await;
-
-        Ok(())
-    }
-
-    /// Performs graceful shutdown of the service.
-    ///
-    /// # Workflow
-    /// 1. Close IPC client connection to daemon (if connected)
-    /// 2. Clear start time and is_running flags
-    /// 3. Log shutdown completion
-    ///
-    /// # Behavior
-    /// - Uses `try_lock()` to avoid blocking on client mutex
-    /// - Logs warnings if client close fails (non-fatal)
-    /// - Logs info on successful clean shutdown
-    ///
-    /// # Errors
-    /// Does not return errors; all failures logged as warnings
-    pub async fn shutdown(&mut self) {
-        info!("Performing App cleanup...");
-
-        if self.is_conneced {
-            let lock_res = self.client.try_lock();
-            if let Ok(mut guard) = lock_res {
-                if let Some(mut client) = guard.take() {
-                    if let Err(e) = client.close().await {
-                        warn!("Failed to close ipc client: {}", e);
-                    } else {
-                        debug!("IPC client closed successfully");
-                    }
-                }
-                *guard = None;
-            } else {
-                warn!("Could not acquire lock on IPC client for shutdown");
+        // Step 4: Block until a signal or the supervisor asks us to stop.
+        tokio::select! {
+            _ = self.shutdown_token.cancelled() => {
+                info!("Shutdown requested by the daemon supervisor");
+            }
+            result = wait_for_shutdown_signal() => {
+                result?;
+                info!("Termination signal received");
             }
         }
 
-        self.is_running = false;
+        // Step 5: Release the supervision socket and runtime state.
+        self.shutdown().await;
+        drop(connection);
+
+        info!("Brightness service stopped");
+        Ok(())
+    }
+
+    /// Requests a graceful shutdown without blocking the caller.
+    ///
+    /// Used by the supervision handler, which runs inside the supervision task
+    /// and therefore must not wait for that task to finish. [`App::run`] picks
+    /// up the cancellation and performs the actual teardown.
+    pub fn request_shutdown(&self) {
+        if self.shutdown_token.is_cancelled() {
+            debug!("Shutdown already requested");
+            return;
+        }
+
+        info!("Graceful shutdown requested");
+        self.shutdown_token.cancel();
+    }
+
+    /// Stops the supervision task and clears the runtime state.
+    ///
+    /// # Workflow
+    /// 1. Cancel the supervision task and ask it to stop through its channel
+    /// 2. Wait for the task to finish, bounded by [`SHUTDOWN_TIMEOUT`]
+    /// 3. Reset the running, uptime, and connection flags
+    ///
+    /// # Note
+    /// Must be called from the task that owns the application state
+    /// (the binary entry point), never from the supervision task itself.
+    pub async fn shutdown(&mut self) {
+        // Step 1: Ask the supervision task to stop.
+        if let Some(ipc_thread) = self.ipc_thread.take() {
+            ipc_thread.cancellation_token.cancel();
+
+            if let Err(error) = ipc_thread.tx.send(IpcCommand::Shutdown).await {
+                warn!(%error, "Supervision task already stopped accepting commands");
+            }
+
+            // Step 2: Bounded wait so a stuck socket cannot block exit.
+            match tokio::time::timeout(SHUTDOWN_TIMEOUT, ipc_thread.handle).await {
+                Ok(Ok(())) => debug!("Supervision task stopped"),
+                Ok(Err(error)) => warn!(%error, "Supervision task terminated with an error"),
+                Err(_) => warn!("Timed out waiting for the supervision task to stop"),
+            }
+        }
+
+        // Step 3: Clear runtime state so any later status query reports Stopped.
+        self.connected.store(false, Ordering::Relaxed);
+        self.is_running.store(false, Ordering::Relaxed);
         self.start_time = None;
-        info!("Brightness service shut down cleanly.");
+
+        info!("Brightness service shut down cleanly");
+    }
+
+    /// Returns the package version of the service.
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+
+    /// Returns whether the service event loop is running.
+    pub fn is_running(&self) -> bool {
+        self.is_running.load(Ordering::Relaxed)
+    }
+
+    /// Returns whether the supervision socket is connected.
+    pub fn is_connected(&self) -> bool {
+        self.connected.load(Ordering::Relaxed)
+    }
+
+    /// Returns the execution status reported to the daemon supervisor.
+    pub fn status(&self) -> ServiceStatus {
+        if self.is_running() {
+            ServiceStatus::Running
+        } else {
+            ServiceStatus::Stopped
+        }
+    }
+
+    /// Returns the number of whole seconds the service has been running.
+    ///
+    /// # Returns
+    /// `None` while the service is not running.
+    pub fn uptime_secs(&self) -> Option<u64> {
+        self.start_time.map(|start| start.elapsed().as_secs())
+    }
+
+    /// Marks the runtime as started and records the start instant.
+    fn start(&mut self) {
+        self.is_running.store(true, Ordering::Relaxed);
+        self.start_time = Some(Instant::now());
+    }
+}
+
+/// Waits for `SIGINT` (Ctrl+C) or `SIGTERM` (session exit / `systemctl stop`).
+///
+/// # Errors
+/// Returns [`RdeError::Io`] when the signal handlers cannot be registered.
+async fn wait_for_shutdown_signal() -> RdeResult<()> {
+    let mut terminate = signal(SignalKind::terminate()).map_err(RdeError::Io)?;
+
+    tokio::select! {
+        result = tokio::signal::ctrl_c() => result.map_err(RdeError::Io),
+        _ = terminate.recv() => Ok(()),
     }
 }
 
@@ -404,39 +312,90 @@ impl App {
 mod tests {
     use super::*;
 
+    /// Builds a state that does not touch logging or backlight hardware.
+    fn test_app() -> App {
+        App {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            is_running: Arc::new(AtomicBool::new(false)),
+            start_time: None,
+            connected: Arc::new(AtomicBool::new(false)),
+            interface: None,
+            ipc_thread: None,
+            shutdown_token: CancellationToken::new(),
+        }
+    }
+
+    #[test]
+    fn lifecycle_tracks_running_state_and_uptime() {
+        let mut app = test_app();
+        assert!(!app.is_running());
+        assert_eq!(app.status(), ServiceStatus::Stopped);
+        assert!(app.uptime_secs().is_none());
+
+        app.start();
+        assert!(app.is_running());
+        assert_eq!(app.status(), ServiceStatus::Running);
+        assert!(app.uptime_secs().is_some());
+    }
+
+    #[test]
+    fn request_shutdown_is_idempotent() {
+        let app = test_app();
+        assert!(!app.shutdown_token.is_cancelled());
+
+        app.request_shutdown();
+        app.request_shutdown();
+
+        assert!(app.shutdown_token.is_cancelled());
+    }
+
     #[tokio::test]
-    async fn test_brightness_app_lifecycle() {
-        let backlight_exists = std::path::Path::new("/sys/class/backlight/")
+    async fn shutdown_resets_runtime_state() {
+        let mut app = test_app();
+        app.connected.store(true, Ordering::Relaxed);
+        app.start();
+
+        app.shutdown().await;
+
+        assert!(!app.is_running());
+        assert!(!app.is_connected());
+        assert!(app.uptime_secs().is_none());
+    }
+
+    #[tokio::test]
+    async fn run_without_interface_fails_cleanly() {
+        let mut app = test_app();
+
+        let error = app.run().await.err();
+        assert!(
+            matches!(error, Some(RdeError::Internal(_))),
+            "a second run must fail with an internal error"
+        );
+    }
+
+    #[test]
+    fn initialisation_follows_hardware_presence() {
+        let has_backlight = std::path::Path::new("/sys/class/backlight")
             .read_dir()
-            .map(|mut entries| entries.any(|e| e.is_ok()))
+            .map(|mut entries| entries.any(|entry| entry.is_ok()))
             .unwrap_or(false);
-        let app_res = App::new();
 
-        if backlight_exists {
-            assert!(
-                app_res.is_ok(),
-                "Expected App::new to succeed on host with backlight. Error: {:?}",
-                app_res.err()
-            );
-            let mut app = app_res.unwrap();
+        let app = App::new();
 
-            assert!(!app.is_running, "App should not be running initially");
+        if has_backlight {
             assert!(
-                app.start_time.is_none(),
-                "Start time should be None initially"
+                app.is_ok(),
+                "expected initialisation to succeed with a backlight present: {:?}",
+                app.err()
             );
-
-            // Test shutdown state transitions
-            app.shutdown().await;
-            assert!(!app.is_running, "App should be stopped after shutdown");
-            assert!(
-                app.start_time.is_none(),
-                "Start time should be None after shutdown"
-            );
+            if let Ok(app) = app {
+                assert!(!app.is_running(), "service must start in the stopped state");
+                assert_eq!(app.status(), ServiceStatus::Stopped);
+            }
         } else {
             assert!(
-                app_res.is_err(),
-                "Expected App::new to fail with ConfigNotFound in test/CI environment without backlight"
+                app.is_err(),
+                "expected initialisation to fail without a backlight"
             );
         }
     }

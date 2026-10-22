@@ -12,8 +12,8 @@
 //! - Cross-desktop portal integration (Freedesktop Portal)
 //!
 //! ## Related
-//! - [`crate::domain`]: Core theme data structures
-//! - [`crate::dbus::iface::ThemeInterface`]: D-Bus API layer
+//! - [`crate::domain`][]: Core theme data structures
+//! - [`crate::dbus::iface::ThemeInterface`][]: D-Bus API layer
 //!
 //! ## Authors
 //! - Riju Mondal <rijum8906@gmail.com>

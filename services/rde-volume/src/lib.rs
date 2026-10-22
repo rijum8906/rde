@@ -8,8 +8,17 @@
 //! - Master volume and mute state querying and mutations
 //! - Public session D-Bus interface (`org.rde.Volume`) at `/org/rde/Volume`
 //! - Reactive signals for volume and mute state transitions
-//! - Unix socket IPC connection for daemon supervision
+//! - Unix socket supervision task for `rde-daemon`
 //! - Pluggable audio controller abstraction supporting ALSA and test mocks
+//!
+//! ## Architecture
+//! - **app**: Application singleton ([`app::App`]), event loop, and supervision task
+//! - **handler**: Routing and handling of supervisor requests and responses
+//! - **constants**: Service name, D-Bus contract, and retry policy
+//! - **backend**: Volume business logic and boundary handling
+//! - **dbus**: D-Bus interface and signal definitions
+//! - **domain**: Volume state model and limits
+//! - **infra**: ALSA and mock audio controller implementations
 //!
 //! ## Related
 //! - [`rde-daemon`](../rde-daemon)
@@ -27,7 +36,8 @@
 
 pub mod app;
 pub mod backend;
+pub mod constants;
 pub mod dbus;
 pub mod domain;
+pub mod handler;
 pub mod infra;
-pub mod ipc;

@@ -1,18 +1,17 @@
 //! # Main Binary Entry Point (`rde-volume`)
 //!
-//! Main binary entry point for the `rde-volume` service. Initializes the global
-//! application singleton, starts background IPC connection to `rde-daemon`, registers
-//! the `org.rde.Volume` session D-Bus interface, and handles runtime event loops.
+//! Entry point for the volume service. Initialises the application singleton,
+//! publishes `org.rde.Volume` on the session bus, starts the daemon supervision
+//! task, and blocks until termination is requested.
 //!
-//! ## Features
-//! - Application singleton initialization
-//! - Tokio async runtime execution
-//! - Background daemon IPC connector setup
-//! - Session D-Bus service exposure (`org.rde.Volume`)
+//! ## Execution Flow
+//! 1. Initialise the application singleton (logger and audio backend)
+//! 2. Run the event loop ([`App::run`]): D-Bus registration, supervision, signals
+//! 3. Tear down supervision on `SIGINT`, `SIGTERM`, or a supervisor request
 //!
 //! ## Related
-//! - [`rde_volume::app::Application`](crate::app::Application)
-//! - [`rde_volume::dbus::iface::VolumeInterface`](crate::dbus::iface::VolumeInterface)
+//! - [`rde_volume::app::App`]
+//! - [`rde_volume::handler`]
 //!
 //! ## Authors
 //! - Riju Mondal <rijum8906@gmail.com>
@@ -24,20 +23,24 @@
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use rde_core::errors::RdeResult;
-use rde_volume::app::Application;
+use rde_volume::app::App;
 
-/// Main asynchronous entry point powered by Tokio runtime.
+/// Volume service entry point on a single-threaded Tokio runtime.
 ///
 /// # Errors
-/// Returns `RdeError` if initialization, logging setup, D-Bus service registration,
-/// or runtime execution encounters a fatal failure.
-#[tokio::main]
+/// Returns [`rde_core::errors::RdeError`] if the logger or audio backend cannot
+/// be initialised, the session bus is unavailable, the name cannot be claimed,
+/// or a signal handler cannot be registered.
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> RdeResult<()> {
-    // Acquire exclusive access to the global Application singleton instance
-    let mut app = Application::global().await.lock().await;
+    println!("Starting RDE Volume Service...");
 
-    // Run the service event loop (D-Bus listener + IPC client)
+    // Step 1: Initialise logging and the audio-backed D-Bus object.
+    let mut app = App::global()?.lock().await;
+
+    // Step 2: Serve D-Bus and supervision until shutdown is requested.
     app.run().await?;
 
+    println!("RDE Volume Service exited successfully");
     Ok(())
 }

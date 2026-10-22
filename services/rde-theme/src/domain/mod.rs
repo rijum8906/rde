@@ -5,9 +5,9 @@
 //! theme management and are serialized over D-Bus interfaces.
 //!
 //! ## Modules
-//! - [`theme`]: Theme metadata, color schemes, dynamic configuration
-//! - [`material`]: Material 3 color palette and color role definitions
-//! - [`gtk`]: GTK-specific color palette structures and conversions
+//! - [`theme`][]: Theme metadata, color schemes, dynamic configuration
+//! - [`material`][]: Material 3 color palette and color role definitions
+//! - [`gtk`][]: GTK-specific color palette structures and conversions
 //!
 //! ## Related
 //! - [`crate::dbus::iface::ThemeInterface`]
