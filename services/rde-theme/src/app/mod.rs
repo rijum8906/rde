@@ -47,6 +47,8 @@ use tracing::{debug, error, info, warn};
 use crate::{
     constants::{DBUS_OBJECT_PATH, DBUS_SERVICE_NAME, SERVICE_NAME, SHUTDOWN_TIMEOUT},
     dbus::iface::ThemeInterface,
+    paths::ThemePaths,
+    theme_store::ThemeStore,
 };
 
 /// Global service state, initialised on first use.
@@ -86,16 +88,19 @@ pub struct App {
 }
 
 impl App {
-    /// Builds the application: configures logging and the D-Bus object.
+    /// Builds the application: configures logging, the theme database, and the
+    /// D-Bus object.
     ///
     /// # Workflow
     /// 1. Resolve the service log directory and install the global logger
-    /// 2. Create the [`ThemeInterface`] D-Bus object
-    /// 3. Return an idle application state (not running, no supervision task)
+    /// 2. Resolve and open the theme database, seeding or repairing it as needed
+    /// 3. Create the [`ThemeInterface`] D-Bus object around the store
+    /// 4. Return an idle application state (not running, no supervision task)
     ///
     /// # Errors
-    /// Returns [`RdeError`] when the log directory cannot be created or the
-    /// logging subscriber cannot be installed.
+    /// Returns [`RdeError`] when the log directory cannot be created, the
+    /// logging subscriber cannot be installed, the theme data directory cannot
+    /// be resolved, or the theme database cannot be loaded.
     fn new() -> RdeResult<Self> {
         debug!("Initialising logger for the theme service");
 
@@ -103,8 +108,21 @@ impl App {
         let log_dir = rde_service_logs_dir(SERVICE_NAME)?;
         Logger::new(LogLevel::Info, log_dir, SERVICE_NAME).init()?;
 
-        // Step 2: Build the D-Bus object that `run` will publish.
-        let interface = ThemeInterface::new();
+        // Step 2: Open the theme database below the XDG data home. A failure to
+        // load it is fatal for this service: without themes no palette can be
+        // produced, so report it with full context instead of serving an empty
+        // interface.
+        let paths = ThemePaths::resolve().map_err(|error| {
+            error!(%error, "Unable to resolve the theme data directory");
+            error
+        })?;
+        let store = ThemeStore::open(paths).map_err(|error| {
+            error!(%error, "Unable to open the theme database");
+            error
+        })?;
+
+        // Step 3: Build the D-Bus object that `run` will publish.
+        let interface = ThemeInterface::new(Arc::new(store));
 
         Ok(Self {
             version: env!("CARGO_PKG_VERSION").to_string(),

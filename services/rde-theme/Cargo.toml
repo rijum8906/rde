@@ -14,6 +14,9 @@ rde-ipc.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 serde.workspace = true
+toml.workspace = true
 zbus.workspace = true
 tracing.workspace = true
 futures-util.workspace = true
+
+material-color-utilities = { version = "1.0.0-dev.18", features = ["serde"] }

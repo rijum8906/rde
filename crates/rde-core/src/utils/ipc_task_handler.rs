@@ -5,6 +5,12 @@ pub struct IpcTaskHandler {
     pub cancellation_token: CancellationToken,
 }
 
+impl Default for IpcTaskHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IpcTaskHandler {
     pub fn new() -> Self {
         Self {

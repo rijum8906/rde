@@ -7,20 +7,22 @@
 //!
 //! ## Features
 //! - Material 3 (M3) dynamic color generation and tonal palette synthesis
-//! - Cross-toolkit theme synchronization (GTK 3/4, Qt 5/6)
+//! - Persistent theme database under `$XDG_DATA_HOME/rde/rde-theme`
+//! - Theme creation from a single source color, install, activate, and delete
 //! - Color scheme management (light/dark mode) with WCAG contrast compliance
-//! - Typography and font configuration engine
-//! - Session D-Bus interface (`org.rde.Theme`)
+//! - Session D-Bus interface (`org.rde.Theme`) with typed FDO errors and signals
 //! - Unix socket supervision task for `rde-daemon`
 //! - Application lifecycle management with daemon integration
 //!
 //! ## Architecture
 //! - **app**: Application singleton ([`app::App`]), event loop, and supervision task
 //! - **handler**: Routing and handling of supervisor requests and responses
-//! - **constants**: Service name, D-Bus contract, and retry policy
+//! - **constants**: Service name, D-Bus contract, storage layout, and retry policy
 //! - **dbus**: D-Bus interface definitions and service exposure
-//! - **domain**: Theme data models and configuration structures
-//! - **backend**: Theme computation and palette generation engines
+//! - **domain**: Theme models, color helpers, and the Material 3 palette engine
+//! - **theme_store**: Registry and manifest persistence for installed themes
+//! - **paths**: XDG-compliant theme database locations
+//! - **backend**: Manifest to palette resolution engine
 //!
 //! ## Related
 //! - [Material Design 3 Specification](https://m3.material.io/)
@@ -42,3 +44,5 @@ pub mod constants;
 pub mod dbus;
 pub mod domain;
 pub mod handler;
+pub mod paths;
+pub mod theme_store;

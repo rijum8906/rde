@@ -13,6 +13,9 @@ pub enum RdeError {
     #[error("Not Found: {0}")]
     NotFound(String),
 
+    #[error("Already exists: {0}")]
+    AlreadyExists(String),
+
     // ============================================
     // System-Level Errors (OS, Hardware)
     // ============================================
