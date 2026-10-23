@@ -105,9 +105,12 @@ $XDG_DATA_HOME/rde/rde-theme/
 
 ### 2. Qt Theme Management Engine (Qt 5 & Qt 6)
 
-- **Qt Environment Integration**: Supports standard Qt style engines (`qt5ct`, `qt6ct`, and `kvantum`).
-- **KConfig / KDE Globals Generation**: Writes M3 color schemes to `~/.config/kdeglobals` and `~/.config/qt5ct/colors/rde_m3.conf` so Qt 5 and Qt 6 applications render matching colors.
-- **Palette Mapping**: Maps M3 roles to Qt color roles (`WindowText`, `Button`, `Light`, `Midlight`, `Dark`, `Mid`, `Text`, `BrightText`, `ButtonText`, `Base`, `Window`, `Shadow`, `Highlight`, `HighlightedText`, `Link`).
+Implemented in `backend/qt/` and invoked at startup and after every theme or scheme change.
+
+- **qt5ct / qt6ct Schemes**: Writes `~/.config/qt{5,6}ct/colors/RdeM3.conf` with active, inactive, and disabled color lists in `QPalette::ColorRole` order (21 roles through `PlaceholderText`; qt6ct derives `Accent` from `Highlight` on Qt 6.6+), and activates them through `color_scheme_path` + `custom_palette=true` in the tool configuration.
+- **KDE Integration**: Writes the standalone `~/.local/share/color-schemes/RdeM3.colors` scheme and merges the same `[Colors:Window|View|Button|Selection|Tooltip|Complementary|Header]` and `[WM]` groups into `~/.config/kdeglobals`, selecting `ColorScheme=RdeM3`.
+- **Palette Mapping**: Maps M3 roles to Qt color roles: `Window` from `surface`, `Base` from `surface_container_lowest`, `Text`/`WindowText` from `on_surface`, `Button` from `surface_container`, bevel roles from the surface container tiers, `Highlight` from `primary`, `HighlightedText` from `on_primary`, links from `primary`/`tertiary`, and tooltips from `inverse_surface`.
+- **Merging and Atomicity**: Existing Qt/KDE configuration is parsed line-by-line so comments, styles, fonts, icons, and unrelated keys survive; files are written atomically and only when their contents change. A failure in one file (for example an unwritable `qt6ct` directory) is reported without preventing the other files or the theme change itself.
 
 ---
 
@@ -141,7 +144,8 @@ $XDG_DATA_HOME/rde/rde-theme/
    - The backend expands the theme's source color into the 37 M3 color roles for the requested light/dark scheme. Palettes are derived on demand and never persisted.
 4. **Signal Dispatch**:
    - Emits `ThemeChanged`, `ColorSchemeChanged`, `PaletteChanged`, or `InstalledThemesChanged` over the `org.rde.Theme` session D-Bus interface, plus the standard `PropertiesChanged` signal for mutated properties.
-5. **Toolkit Synchronization** (planned):
-   - Writes updated GTK (`gtk.css`/`settings.ini`), Qt (`kdeglobals`/`qt5ct`), and Fontconfig files, and updates Freedesktop Portal settings (`color-scheme` key).
+5. **Toolkit Synchronization**:
+   - Writes the Qt/KDE color schemes (`RdeM3.conf`, `RdeM3.colors`, and `kdeglobals`) so Qt applications pick up the palette without a session restart.
+   - GTK (`gtk.css`/`settings.ini`), Fontconfig, and Freedesktop Portal synchronization are planned.
 6. **Supervisor Status**:
    - Responds to `rde-daemon` IPC `HealthCheck` probes.

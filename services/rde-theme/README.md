@@ -22,7 +22,9 @@ bus as `org.rde.Theme`.
   - [`domain/theme_config_file.rs`](src/domain/theme_config_file.rs): the `themes.toml` registry model.
   - [`domain/material/mod.rs`](src/domain/material/mod.rs): Material 3 palette generation.
   - [`domain/color.rs`](src/domain/color.rs): hex color parsing and formatting.
-- **`backend.rs`**: resolves manifests into palettes; the seam for future toolkit writers.
+- **`backend/`**: palette resolution and toolkit output.
+  - [`backend/mod.rs`](src/backend/mod.rs): `ThemeBackend` resolves manifests into palettes.
+  - [`backend/qt/`](src/backend/qt/mod.rs): writes qt5ct/qt6ct and KDE color schemes.
 - **`dbus/`**: `org.rde.Theme` interface at `/org/rde/Theme`.
 
 ## Theme Database
@@ -118,6 +120,10 @@ Errors are mapped to standard FDO names: unknown themes report
 `org.freedesktop.DBus.Error.InvalidArgs`, and write failures
 `org.freedesktop.DBus.Error.IOError`.
 
+Every successful `SetTheme`, `SetSourceColor`, `ColorScheme` write,
+`ToggleColorScheme`, and `Reload` also rewrites the [Qt color schemes](#qt-integration)
+before its signals are emitted.
+
 ### Signals
 
 | Signal | Signature | Emitted when |
@@ -149,6 +155,54 @@ gdbus call --session --dest org.rde.Theme --object-path /org/rde/Theme \
 
 ## Workflows
 
+## Qt Integration
+
+Qt and KDE applications are re-colored automatically. The service writes:
+
+| File | Purpose |
+| :--- | :--- |
+| `$XDG_DATA_HOME/color-schemes/RdeM3.colors` | Standard KDE color scheme, discoverable in System Settings |
+| `$XDG_CONFIG_HOME/kdeglobals` | Color groups used by KDE applications plus titlebar colors |
+| `$XDG_CONFIG_HOME/qt5ct/colors/RdeM3.conf` | qt5ct color scheme |
+| `$XDG_CONFIG_HOME/qt5ct/qt5ct.conf` | Activates the scheme (`custom_palette=true`, `color_scheme_path=…`) |
+| `$XDG_CONFIG_HOME/qt6ct/colors/RdeM3.conf` | qt6ct color scheme |
+| `$XDG_CONFIG_HOME/qt6ct/qt6ct.conf` | Activates the scheme for Qt 6 |
+
+Defaults are `~/.local/share` and `~/.config`; the XDG variables are honored.
+
+- **Material 3 mapping**: the palette is mapped onto Qt's `QPalette` roles
+  (`Window`/`Base`/`Text` from surface roles, `Highlight` from `primary`, tooltips from
+  `inverse_surface`, and so on) in `WindowText, Button, Light, …` serialization order.
+  21 roles are written, which is the exact `QPalette::NColorRoles` count for Qt 5.12+
+  and Qt 6, and works for qt6ct on Qt 6.6+, where `Accent` is derived from `Highlight`.
+- **Plasma accent**: `kdeglobals [General] AccentColor` is pinned to the theme's
+  primary color so Plasma 6 accent-colored widgets follow the theme.
+- **Three color groups**: active and inactive share colors; disabled widgets keep the
+  surfaces but neutralize text and links to outline tones.
+- **Non-destructive merging**: only the appearance keys and color groups the service
+  owns are changed. Comments, styles, fonts, icons, and unrelated keys in `kdeglobals`,
+  `qt5ct.conf`, and `qt6ct.conf` are preserved.
+- **Idempotent**: files are written atomically and only when their content changes, so
+  Qt's configuration watcher is not woken up needlessly.
+- **Best effort**: an unwritable Qt directory is logged as a warning and reported in the
+  apply result; it never blocks theme changes or service startup.
+
+Qt applications must use `QT_QPA_PLATFORMTHEME=qt5ct` (or `qt6ct`) for the palette to be
+picked up; KDE applications read `kdeglobals` directly. Restart Qt applications that were
+started before the first application to pick up the new palette. Qt 5.12+ and Qt 6 are
+supported; older Qt 5 releases expect the pre-`PlaceholderText` color list and fall back
+to their system palette.
+
+Verify the generated files after a theme change:
+
+```bash
+cat ~/.config/qt5ct/colors/RdeM3.conf
+cat ~/.local/share/color-schemes/RdeM3.colors
+cat ~/.config/kdeglobals
+```
+
+## Workflows
+
 ### Theme creation
 
 1. `CreateTheme(name, source_color)` validates the identifier and normalizes the color.
@@ -165,6 +219,7 @@ gdbus call --session --dest org.rde.Theme --object-path /org/rde/Theme \
 4. Seed the built-in `default` theme when no manifest exists.
 5. Reconcile the installed list and active theme with the manifests, then persist the
    registry only when something changed.
+6. Apply the active theme to Qt and KDE so a fresh session starts themed.
 
 An active theme is always guaranteed once the service is up, and the active theme
 cannot be deleted: switch to another theme first.
@@ -183,10 +238,10 @@ cannot be deleted: switch to another theme first.
 - Theme creation from a source color, activation, deletion, and re-seeding
 - Material 3 palettes in light and dark schemes, exposed role by role over D-Bus
 - Persistent light/dark preference
+- Qt 5/6 and KDE color schemes applied at startup and on every theme change
 
 ## Upcoming Features
 
 - GTK 3/4 `gtk.css` and `settings.ini` generation
-- Qt 5/6 `kdeglobals` and `qt5ct` color scheme generation
 - Freedesktop Portal `color-scheme` synchronization
 - Typography and cursor configuration

@@ -22,7 +22,8 @@
 //! - **domain**: Theme models, color helpers, and the Material 3 palette engine
 //! - **theme_store**: Registry and manifest persistence for installed themes
 //! - **paths**: XDG-compliant theme database locations
-//! - **backend**: Manifest to palette resolution engine
+//! - **backend**: Manifest to palette resolution and Qt/KDE color scheme output
+//! - **file_utils**: Atomic configuration file helpers
 //!
 //! ## Related
 //! - [Material Design 3 Specification](https://m3.material.io/)
@@ -43,6 +44,7 @@ pub mod backend;
 pub mod constants;
 pub mod dbus;
 pub mod domain;
+mod file_utils;
 pub mod handler;
 pub mod paths;
 pub mod theme_store;

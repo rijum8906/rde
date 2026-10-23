@@ -27,6 +27,12 @@
 //! - `PaletteChanged(theme: s, source_color: s)`: active theme was re-seeded
 //! - `InstalledThemesChanged(themes: as)`: installed theme list changed
 //!
+//! ## Side Effects
+//! Every successful theme or scheme change is also written to the Qt and KDE
+//! configuration through [`crate::backend::qt`]. That step is best effort: a
+//! failure is logged and never turns a persisted theme change into a D-Bus
+//! error.
+//!
 //! ## Related
 //! - [`crate::theme_store::ThemeStore`][]: authoritative state
 //! - [`crate::domain::theme::ColorScheme`][]: accepted scheme values
@@ -48,6 +54,7 @@ use tracing::{debug, info, warn};
 use zbus::{interface, object_server::SignalEmitter};
 
 use crate::{
+    backend::qt,
     domain::theme::{ColorScheme, ThemeId},
     theme_store::ThemeStore,
 };
@@ -99,6 +106,36 @@ impl ThemeInterface {
         }
         if let Err(error) = Self::scheme_changed(emitter, color_scheme.to_string()).await {
             warn!(%error, "failed to emit the ColorSchemeChanged signal");
+        }
+    }
+
+    /// Applies the active theme to the Qt and KDE configuration files.
+    ///
+    /// Qt integration is best effort: a failure is logged and the theme change
+    /// is still reported to D-Bus clients, because the theme database is the
+    /// source of truth and a missing Qt installation must not block it.
+    fn apply_qt(&self) {
+        let theme = match self.store.active_theme() {
+            Ok(theme) => theme,
+            Err(error) => {
+                warn!(%error, "Skipping Qt theme application: no resolvable active theme");
+                return;
+            }
+        };
+
+        match qt::apply(&theme) {
+            Ok(report) if report.is_complete() => debug!(
+                theme = %theme.manifest.name,
+                scheme = %theme.color_scheme,
+                written = report.written.len(),
+                "Qt color scheme applied"
+            ),
+            Ok(report) => warn!(
+                theme = %theme.manifest.name,
+                failures = report.failures.len(),
+                "Qt color scheme applied with warnings"
+            ),
+            Err(error) => warn!(%error, "Unable to apply the Qt color scheme"),
         }
     }
 
@@ -182,6 +219,9 @@ impl ThemeInterface {
     /// # Signals
     /// Emits `ColorSchemeChanged`, and the standard `PropertiesChanged` signal
     /// after a successful update.
+    ///
+    /// # Side Effects
+    /// Applies the new scheme to the Qt and KDE color schemes.
     #[zbus(property)]
     pub async fn set_color_scheme(
         &self,
@@ -198,9 +238,12 @@ impl ThemeInterface {
             .set_color_scheme(color_scheme)
             .map_err(to_fdo_error)?;
 
+        // Step 3: Mirror the scheme into the Qt/KDE configuration.
+        self.apply_qt();
+
         info!(scheme = %color_scheme, "color scheme updated over D-Bus");
 
-        // Step 3: Notify subscribers of the semantic change.
+        // Step 4: Notify subscribers of the semantic change.
         self.emit_scheme(&emitter, color_scheme).await;
         Ok(())
     }
@@ -234,6 +277,9 @@ impl ThemeInterface {
     /// # Signals
     /// Emits `ThemeChanged`, the `CurrentTheme` and `SourceColor` property
     /// changes, and `PropertiesChanged`.
+    ///
+    /// # Side Effects
+    /// Applies the new theme to the Qt and KDE color schemes.
     #[zbus(name = "SetTheme")]
     pub async fn set_theme(
         &self,
@@ -246,9 +292,12 @@ impl ThemeInterface {
         let theme = parse_theme(&theme)?;
         self.store.set_theme(&theme).map_err(to_fdo_error)?;
 
+        // Step 2: Apply the palette to Qt and KDE.
+        self.apply_qt();
+
         info!(theme = %theme, "active theme updated over D-Bus");
 
-        // Step 2: Signal the new active theme.
+        // Step 3: Signal the new active theme.
         self.emit_active_theme(&emitter).await;
         Ok(())
     }
@@ -344,6 +393,9 @@ impl ThemeInterface {
     /// # Signals
     /// Emits `PaletteChanged`, the `SourceColor` property change, and
     /// `PropertiesChanged`.
+    ///
+    /// # Side Effects
+    /// Regenerates the Qt and KDE color schemes from the new palette.
     #[zbus(name = "SetSourceColor")]
     pub async fn set_source_color(
         &self,
@@ -355,13 +407,16 @@ impl ThemeInterface {
         // Step 1: Update the active manifest.
         let manifest = self.store.set_source_color(&color).map_err(to_fdo_error)?;
 
+        // Step 2: Regenerate the Qt/KDE color schemes from the new palette.
+        self.apply_qt();
+
         info!(
             theme = %manifest.name,
             source_color = %manifest.source_color,
             "active theme re-seeded over D-Bus"
         );
 
-        // Step 2: Signal the regenerated palette.
+        // Step 3: Signal the regenerated palette.
         if let Err(error) = self.source_color_changed(&emitter).await {
             warn!(%error, "failed to emit the SourceColor property change");
         }
@@ -384,6 +439,9 @@ impl ThemeInterface {
     ///
     /// # Signals
     /// Emits `ColorSchemeChanged` and the `ColorScheme` property change.
+    ///
+    /// # Side Effects
+    /// Applies the new scheme to the Qt and KDE color schemes.
     #[zbus(name = "ToggleColorScheme")]
     pub async fn toggle_color_scheme(
         &self,
@@ -394,9 +452,12 @@ impl ThemeInterface {
         // Step 1: Flip and persist the scheme.
         let color_scheme = self.store.toggle_color_scheme().map_err(to_fdo_error)?;
 
+        // Step 2: Apply the new scheme to Qt and KDE.
+        self.apply_qt();
+
         info!(scheme = %color_scheme, "color scheme toggled over D-Bus");
 
-        // Step 2: Notify subscribers.
+        // Step 3: Notify subscribers.
         self.emit_scheme(&emitter, color_scheme).await;
         Ok(color_scheme.to_string())
     }
@@ -487,6 +548,9 @@ impl ThemeInterface {
     /// # Signals
     /// Emits `ThemeChanged`, `ColorSchemeChanged`, `InstalledThemesChanged`, and
     /// the corresponding property changes.
+    ///
+    /// # Side Effects
+    /// Re-applies the reloaded theme to the Qt and KDE color schemes.
     #[zbus(name = "Reload")]
     pub async fn reload(
         &self,
@@ -497,7 +561,10 @@ impl ThemeInterface {
         // Step 1: Re-read and reconcile the database.
         self.store.reload().map_err(to_fdo_error)?;
 
-        // Step 2: Re-publish every property that may have changed.
+        // Step 2: Re-apply the reloaded theme to Qt and KDE.
+        self.apply_qt();
+
+        // Step 3: Re-publish every property that may have changed.
         self.emit_installed_themes(&emitter).await;
         self.emit_active_theme(&emitter).await;
         self.emit_scheme(&emitter, self.store.color_scheme()).await;

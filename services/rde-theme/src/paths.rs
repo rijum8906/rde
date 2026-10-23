@@ -14,6 +14,8 @@
 //!
 //! ## Features
 //! - `XDG_DATA_HOME` support with a `~/.local/share` fallback
+//! - `XDG_CONFIG_HOME` support with a `~/.config` fallback, used by the Qt
+//!   integration
 //! - Path derivation that cannot escape the theme directory because it takes a
 //!   validated [`ThemeId`]
 //! - Directory creation in a single [`ThemePaths::ensure`] call
@@ -22,6 +24,7 @@
 //! - [`crate::constants`][]: file and directory names
 //! - [`crate::domain::theme::ThemeId`][]: validated theme identifier
 //! - [`crate::theme_store::ThemeStore`][]: consumer of these paths
+//! - [`crate::backend::qt`][]: consumes the XDG helpers for Qt output
 //!
 //! ## Authors
 //! - Riju Mondal <rijum8906@gmail.com>
@@ -72,12 +75,7 @@ impl ThemePaths {
     /// Returns [`RdeError::NotFound`] when neither `XDG_DATA_HOME` nor `HOME`
     /// is available, since the database location cannot be determined.
     pub fn resolve() -> RdeResult<Self> {
-        let data_home = match env::var_os("XDG_DATA_HOME").filter(|value| !value.is_empty()) {
-            Some(value) => PathBuf::from(value),
-            None => home_dir()?.join(".local").join("share"),
-        };
-
-        Ok(Self::from_root(data_home.join(DATA_HOME_SUBDIR)))
+        Ok(Self::from_root(xdg_data_home()?.join(DATA_HOME_SUBDIR)))
     }
 
     /// Builds a layout rooted at an explicit directory.
@@ -120,6 +118,45 @@ impl ThemePaths {
     pub fn ensure(&self) -> RdeResult<()> {
         std::fs::create_dir_all(self.themes_dir()).map_err(RdeError::Io)
     }
+}
+
+/// Returns the XDG data home, where user data such as the theme database and
+/// KDE color scheme files live.
+///
+/// # Returns
+/// `$XDG_DATA_HOME` when it is set to a non-empty value, otherwise
+/// `$HOME/.local/share`.
+///
+/// # Errors
+/// Returns [`RdeError::NotFound`] when neither variable provides a directory.
+pub fn xdg_data_home() -> RdeResult<PathBuf> {
+    match environment_dir("XDG_DATA_HOME") {
+        Some(directory) => Ok(directory),
+        None => Ok(home_dir()?.join(".local").join("share")),
+    }
+}
+
+/// Returns the XDG configuration home used by the Qt and KDE configuration
+/// files.
+///
+/// # Returns
+/// `$XDG_CONFIG_HOME` when it is set to a non-empty value, otherwise
+/// `$HOME/.config`.
+///
+/// # Errors
+/// Returns [`RdeError::NotFound`] when neither variable provides a directory.
+pub fn xdg_config_home() -> RdeResult<PathBuf> {
+    match environment_dir("XDG_CONFIG_HOME") {
+        Some(directory) => Ok(directory),
+        None => Ok(home_dir()?.join(".config")),
+    }
+}
+
+/// Reads an environment variable as a non-empty directory path.
+fn environment_dir(variable: &str) -> Option<PathBuf> {
+    env::var_os(variable)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
 }
 
 /// Returns the user's home directory from the environment.

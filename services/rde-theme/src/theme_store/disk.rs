@@ -40,6 +40,7 @@ use crate::{
         theme::{ThemeId, ThemeManifest},
         theme_config_file::ThemeRegistryFile,
     },
+    file_utils::write_atomic,
     paths::ThemePaths,
 };
 
@@ -234,36 +235,6 @@ fn read_toml<T: DeserializeOwned>(path: &Path) -> RdeResult<Option<T>> {
     toml::from_str(&contents).map(Some).map_err(|error| {
         RdeError::InvalidConfig(format!("failed to parse {}: {error}", path.display()))
     })
-}
-
-/// Writes a file atomically by renaming a fully written temporary file.
-///
-/// # Errors
-/// Returns [`RdeError::InvalidConfig`] when the path has no file name and
-/// [`RdeError::Io`] when the parent directory cannot be created or the file
-/// cannot be written or renamed.
-fn write_atomic(path: &Path, contents: &str) -> RdeResult<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(RdeError::Io)?;
-    }
-
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| RdeError::InvalidConfig(format!("invalid path {}", path.display())))?;
-    let temporary = path.with_file_name(format!("{file_name}.tmp"));
-
-    // Step 1: Write the complete document to a sibling temporary file.
-    fs::write(&temporary, contents).map_err(RdeError::Io)?;
-
-    // Step 2: Atomically replace the destination; clean up on failure so a
-    // read-only filesystem does not accumulate stale temporary files.
-    if let Err(error) = fs::rename(&temporary, path) {
-        let _ = fs::remove_file(&temporary);
-        return Err(RdeError::Io(error));
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]

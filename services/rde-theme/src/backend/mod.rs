@@ -2,18 +2,21 @@
 //!
 //! Turns stored theme definitions into the palettes that consumers apply. This
 //! is the seam where the persistence layer meets the Material 3 color engine,
-//! and where future toolkit writers (GTK CSS, Qt palettes, Freedesktop Portal)
-//! will plug in without touching storage or D-Bus code.
+//! and where toolkit writers live: Qt and KDE today, with GTK CSS and the
+//! Freedesktop Portal planned, all without touching storage or D-Bus code.
 //!
 //! ## Responsibilities
 //! - Palette generation from a manifest's source color
 //! - Resolution of a manifest plus a color scheme into a [`Theme`]
-//! - A single place for future toolkit output generation
+//! - Toolkit output generation, currently the Qt color schemes in [`qt`]
 //!
 //! ## Related
 //! - [`crate::domain::material::MaterialColorPalette`][]: palette engine
 //! - [`crate::domain::theme::ThemeManifest`][]: source of truth for a theme
 //! - [`crate::theme_store::ThemeStore`][]: caller
+//!
+//! ## Modules
+//! - [`qt`]: writes qt5ct/qt6ct and KDE color schemes from a resolved theme
 //!
 //! ## Authors
 //! - Riju Mondal <rijum8906@gmail.com>
@@ -30,6 +33,8 @@ use crate::domain::{
     material::MaterialColorPalette,
     theme::{ColorScheme, Theme, ThemeManifest},
 };
+
+pub mod qt;
 
 /// Stateless engine translating theme definitions into concrete palettes.
 ///

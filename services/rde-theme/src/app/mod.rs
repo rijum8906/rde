@@ -45,6 +45,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 use crate::{
+    backend::qt,
     constants::{DBUS_OBJECT_PATH, DBUS_SERVICE_NAME, SERVICE_NAME, SHUTDOWN_TIMEOUT},
     dbus::iface::ThemeInterface,
     paths::ThemePaths,
@@ -94,8 +95,9 @@ impl App {
     /// # Workflow
     /// 1. Resolve the service log directory and install the global logger
     /// 2. Resolve and open the theme database, seeding or repairing it as needed
-    /// 3. Create the [`ThemeInterface`] D-Bus object around the store
-    /// 4. Return an idle application state (not running, no supervision task)
+    /// 3. Apply the active theme to Qt and KDE
+    /// 4. Create the [`ThemeInterface`] D-Bus object around the store
+    /// 5. Return an idle application state (not running, no supervision task)
     ///
     /// # Errors
     /// Returns [`RdeError`] when the log directory cannot be created, the
@@ -121,7 +123,12 @@ impl App {
             error
         })?;
 
-        // Step 3: Build the D-Bus object that `run` will publish.
+        // Step 3: Apply the active theme to Qt and KDE so a fresh session
+        // starts with the stored colors. Failures are non-fatal: the service
+        // still serves the theme database even when Qt is not installed.
+        apply_qt_theme(&store);
+
+        // Step 4: Build the D-Bus object that `run` will publish.
         let interface = ThemeInterface::new(Arc::new(store));
 
         Ok(Self {
@@ -309,6 +316,42 @@ impl App {
     fn start(&mut self) {
         self.is_running.store(true, Ordering::Relaxed);
         self.start_time = Some(Instant::now());
+    }
+}
+
+/// Applies the active theme to the Qt and KDE configuration files.
+///
+/// # Parameters
+/// - `store`: initialized theme database
+///
+/// # Behaviour
+/// Qt integration is optional tooling: a missing or read-only configuration
+/// directory is logged as a warning and never prevents the service from
+/// starting or serving its D-Bus interface.
+fn apply_qt_theme(store: &ThemeStore) {
+    // Step 1: Resolve the active theme; without one there is nothing to apply.
+    let theme = match store.active_theme() {
+        Ok(theme) => theme,
+        Err(error) => {
+            warn!(%error, "Skipping Qt theme application: no resolvable active theme");
+            return;
+        }
+    };
+
+    // Step 2: Write the Qt/KDE color schemes and report the outcome.
+    match qt::apply(&theme) {
+        Ok(report) if report.is_complete() => info!(
+            theme = %theme.manifest.name,
+            scheme = %theme.color_scheme,
+            written = report.written.len(),
+            "Applied the Qt color scheme"
+        ),
+        Ok(report) => warn!(
+            theme = %theme.manifest.name,
+            failures = report.failures.len(),
+            "Qt color scheme applied with warnings"
+        ),
+        Err(error) => warn!(%error, "Unable to apply the Qt color scheme"),
     }
 }
 
