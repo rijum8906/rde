@@ -1,37 +1,7 @@
 //! # Qt Theme Integration
 //!
-//! Applies the active RDE theme to Qt and KDE applications. Qt has no central
-//! palette daemon, so the service writes the configuration files read by the
-//! common Qt platform themes:
-//!
-//! | File | Purpose |
-//! | :--- | :--- |
-//! | `$XDG_DATA_HOME/color-schemes/RdeM3.colors` | KDE color scheme (discoverable in System Settings) |
-//! | `$XDG_CONFIG_HOME/kdeglobals` | Color groups for KDE applications and titlebars |
-//! | `$XDG_CONFIG_HOME/qt5ct/colors/RdeM3.conf` | qt5ct color scheme |
-//! | `$XDG_CONFIG_HOME/qt5ct/qt5ct.conf` | Activates the qt5ct scheme |
-//! | `$XDG_CONFIG_HOME/qt6ct/colors/RdeM3.conf` | qt6ct color scheme |
-//! | `$XDG_CONFIG_HOME/qt6ct/qt6ct.conf` | Activates the qt6ct scheme |
-//!
-//! ## Features
-//! - Applies light and dark Material 3 palettes to Qt 5 and Qt 6 roles
-//! - Merges into existing configurations, preserving unrelated user settings
-//! - Writes only when content changed, so Qt does not reload needlessly
-//! - Partial failures are reported instead of aborting the whole application
-//!
-//! ## Related
-//! - [`crate::backend::ThemeBackend`][]: resolves themes into palettes
-//! - [`QtPalette`][]: semantic to Qt role mapping
-//! - [`crate::app`] / [`crate::dbus::iface`]: callers
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Writes Qt and KDE color schemes so the active theme reaches Qt applications
+//! without a session restart.
 
 mod ini;
 mod kde;

@@ -1,39 +1,7 @@
 //! # Theme Database Paths
 //!
-//! Resolves the XDG-compliant location of the theme database and derives the
-//! path of every file and directory the service owns.
-//!
-//! ## Layout
-//! ```text
-//! $XDG_DATA_HOME/rde/rde-theme/          (defaults to ~/.local/share)
-//! ├── themes.toml                        registry: active theme, scheme, installed list
-//! └── themes/
-//!     └── <theme-id>/
-//!         └── theme.toml                 manifest: source color and theme metadata
-//! ```
-//!
-//! ## Features
-//! - `XDG_DATA_HOME` support with a `~/.local/share` fallback
-//! - `XDG_CONFIG_HOME` support with a `~/.config` fallback, used by the Qt
-//!   integration
-//! - Path derivation that cannot escape the theme directory because it takes a
-//!   validated [`ThemeId`]
-//! - Directory creation in a single [`ThemePaths::ensure`] call
-//!
-//! ## Related
-//! - [`crate::constants`][]: file and directory names
-//! - [`crate::domain::theme::ThemeId`][]: validated theme identifier
-//! - [`crate::theme_store::ThemeStore`][]: consumer of these paths
-//! - [`crate::backend::qt`][]: consumes the XDG helpers for Qt output
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Resolves the XDG theme database location (`themes.toml` plus one manifest per
+//! theme) and every path derived from it.
 
 use std::{
     env,

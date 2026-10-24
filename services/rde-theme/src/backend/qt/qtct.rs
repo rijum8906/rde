@@ -1,35 +1,7 @@
 //! # qt5ct / qt6ct Color Schemes
 //!
-//! Renders the color scheme files and the `[Appearance]` activation keys
-//! understood by qt5ct and qt6ct. Both tools load a color scheme when
-//! `custom_palette=true` and `color_scheme_path` points at a scheme file, which
-//! is what makes the generated palette apply to Qt applications that use
-//! `QT_QPA_PLATFORMTHEME=qt5ct` or `qt6ct`.
-//!
-//! ## Generated Scheme
-//! ```ini
-//! [ColorScheme]
-//! active_colors=#ff..., #ff..., ...
-//! inactive_colors=#ff..., #ff..., ...
-//! disabled_colors=#ff..., #ff..., ...
-//! ```
-//!
-//! Each list holds 21 `#AARRGGBB` colors in `QPalette::ColorRole` order; see
-//! [`super::palette`] for the mapping.
-//!
-//! ## Related
-//! - [`super::palette::QtPalette`][]: color source
-//! - [`super::ini::IniDocument`][]: activation key merging
-//! - [`super::QT_COLOR_SCHEME_NAME`][]: scheme file name
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Renders qt5ct and qt6ct color schemes and activates them in the tool
+//! configuration.
 
 use std::path::Path;
 

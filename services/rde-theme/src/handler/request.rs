@@ -1,24 +1,7 @@
-//! # Supervisor Request Handler (`rde-theme`)
+//! # Supervisor Request Handler
 //!
-//! Answers requests pushed by the `rde-daemon` supervisor.
-//!
-//! ## Request Types
-//! - `HealthCheck`: liveness probe answered with `Alive`
-//! - `GetStatus`: reports whether the event loop is running
-//! - `Shutdown`: requests cooperative shutdown of the service
-//!
-//! ## Related
-//! - [`crate::app::App`][]: source of the reported status and shutdown token
-//! - [`crate::handler::handle_message`][]: caller
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Answers `HealthCheck`, `GetStatus`, and `Shutdown` requests from the daemon
+//! supervisor.
 
 use rde_core::errors::{RdeError, RdeResult};
 use rde_ipc::{

@@ -1,37 +1,7 @@
 //! # Theme Registry (`themes.toml`)
 //!
-//! Models the session state stored in `$XDG_DATA_HOME/rde/rde-theme/themes.toml`:
-//! which theme is active, which appearance the user prefers, and which themes
-//! are installed.
-//!
-//! ## Example
-//! ```toml
-//! schema_version = 1
-//! current_theme = "default"
-//! color_scheme = "dark"
-//! installed = ["default", "ocean"]
-//! ```
-//!
-//! ## Design Notes
-//! - The registry never stores palette values; they are derived from each
-//!   theme's manifest so a source color change cannot desynchronize the two.
-//! - The installed list is advisory. [`crate::theme_store::ThemeStore`]
-//!   reconciles it against the manifests found on disk at startup, which makes
-//!   the file self-healing after manual edits or interrupted writes.
-//!
-//! ## Related
-//! - [`crate::domain::theme::ThemeId`][]: validated theme identifier
-//! - [`crate::domain::theme::ColorScheme`][]: light/dark preference
-//! - [`crate::theme_store`][]: load, reconcile, and persist operations
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Models the session state in `themes.toml`: the active theme, the color scheme,
+//! and the installed themes.
 
 use serde::{Deserialize, Serialize};
 

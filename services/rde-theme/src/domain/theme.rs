@@ -1,33 +1,7 @@
 //! # Theme Domain Models
 //!
-//! Defines the theme concepts persisted by the service: validated theme
-//! identifiers, the light/dark preference, the per-theme manifest, and the
-//! resolved theme handed to callers and the D-Bus API.
-//!
-//! ## Models
-//! - [`ThemeId`][]: validated, path-safe theme identifier
-//! - [`ColorScheme`][]: light or dark appearance preference
-//! - [`ThemeManifest`][]: content of `themes/<id>/theme.toml`
-//! - [`Theme`][]: manifest resolved into a palette for one scheme
-//!
-//! ## Features
-//! - Identifier validation prevents path traversal before any file is touched
-//! - Manifest constructors normalize the source color to `#RRGGBB`
-//! - Themes carry a toolkit-neutral [`Palette`], never a toolkit color type
-//!
-//! ## Related
-//! - [`crate::domain::palette::Palette`][]: generated colors
-//! - [`crate::domain::theme_config::ThemeRegistry`][]: installed list
-//! - [`crate::theme_store`][]: persistence layer
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Theme identifiers, the light/dark preference, manifests, and themes resolved
+//! with a palette.
 
 use std::{fmt, str::FromStr};
 

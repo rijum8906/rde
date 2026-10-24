@@ -1,40 +1,7 @@
 //! # Material 3 Scheme Computation
 //!
-//! Expands a [`SeedColor`] into the complete set of semantic color roles for a
-//! Material 3 scheme, using the Google Material color utilities. The output is
-//! a toolkit-neutral [`Palette`], so consumers never depend on the Material
-//! crate's types.
-//!
-//! ## Color Roles
-//! Material 3 defines semantic roles rather than raw colors:
-//! - **Primary family**: main action color, its container, and foregrounds
-//! - **Secondary family**: lower-emphasis UI elements
-//! - **Tertiary family**: complementary accents
-//! - **Error family**: destructive actions and error containers
-//! - **Surface family**: backgrounds, containers, and their foregrounds
-//! - **Outline family**: borders, dividers, and structural lines
-//! - **Inverse family**: high-contrast surfaces such as snackbars
-//! - **Effect colors**: shadow and scrim
-//!
-//! ## Features
-//! - Light, dark, medium-contrast, and high-contrast variants
-//! - Canonical role-name to `#RRGGBB` map for D-Bus and toolkit consumers
-//! - WCAG-compliant tone selection handled by Material Color Utilities
-//!
-//! ## Related
-//! - [Material 3 color roles](https://m3.material.io/styles/color/roles)
-//! - [`crate::domain::theme::ColorScheme`][]: light/dark preference
-//! - [`crate::domain::palette::Palette`][]: generated roles
-//! - [`super::seed::SeedColor`][]: input color
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Expands a [`SeedColor`] into the semantic roles of a light, dark, or
+//! contrast-enhanced scheme.
 
 use material_color_utilities::dynamiccolor::{DynamicSchemeBuilder, Variant};
 

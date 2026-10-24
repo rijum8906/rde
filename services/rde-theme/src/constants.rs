@@ -1,30 +1,7 @@
 //! # Service Constants
 //!
-//! Compile-time configuration shared by the theme service lifecycle, the
-//! on-disk theme database, the D-Bus interface, and the daemon supervision task.
-//!
-//! ## Constants
-//! - [`SERVICE_NAME`][]: name registered with the daemon supervisor
-//! - [`DBUS_SERVICE_NAME`] / [`DBUS_OBJECT_PATH`][]: public D-Bus contract
-//! - [`MAX_SOCKET_CONN_RETRY_COUNT`] / [`SOCKET_CONN_RETRY_DELAY_MS`][]: socket retry policy
-//! - [`SHUTDOWN_TIMEOUT`][]: upper bound when waiting for supervision teardown
-//! - [`DATA_HOME_SUBDIR`][]: theme database location below the XDG data home
-//! - [`REGISTRY_FILE_NAME`] / [`THEMES_DIR_NAME`] / [`MANIFEST_FILE_NAME`][]: on-disk layout
-//! - [`DEFAULT_THEME_*`][]: seed values used to bootstrap a fresh installation
-//!
-//! ## Related
-//! - [`crate::paths::ThemePaths`][]: turns these names into filesystem paths
-//! - [`crate::app`][]: consumes the retry and shutdown policy
-//! - [`crate::dbus::iface`][]: served at [`DBUS_OBJECT_PATH`]
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Compile-time configuration for the service lifecycle, theme database, D-Bus
+//! contract, and supervision task.
 
 use std::time::Duration;
 

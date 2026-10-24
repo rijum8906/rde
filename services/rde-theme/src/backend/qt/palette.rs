@@ -1,34 +1,6 @@
 //! # Qt Palette Mapping
 //!
-//! Maps the Material 3 color roles onto the Qt palette roles used by qt5ct,
-//! qt6ct, and KDE. A single mapping feeds every generated file so Qt
-//! applications, KDE applications, and the desktop shell render the same
-//! colors.
-//!
-//! ## Role Order
-//! The color lists written to qt5ct/qt6ct are positional: element `i` is
-//! `QPalette::ColorRole(i)`. The order below mirrors Qt 5.15 and Qt 6 verbatim
-//! (both keep the enum stable for serialization), which yields 21 colors up to
-//! `PlaceholderText`. qt6ct appends `Accent` from `Highlight` itself on Qt 6.6+,
-//! and qt5ct accepts the exact 21-role list, so one list works for both tools.
-//!
-//! ## Features
-//! - Material 3 to Qt role mapping with accessible foreground/background pairs
-//! - Active, inactive (identical), and disabled color groups
-//! - `#AARRGGBB` output for qt5ct/qt6ct and `r,g,b` output for KDE
-//!
-//! ## Related
-//! - [`crate::domain::palette::Palette`][]: source colors
-//! - [`super::qtct`] / [`super::kde`]: consumers of this mapping
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Maps semantic color roles onto Qt palette roles for qt5ct, qt6ct, and KDE.
 
 use crate::domain::palette::Palette;
 
