@@ -38,7 +38,7 @@ use crate::{
     constants::{MANIFEST_FILE_NAME, MANIFEST_SCHEMA_VERSION, REGISTRY_SCHEMA_VERSION},
     domain::{
         theme::{ThemeId, ThemeManifest},
-        theme_config_file::ThemeRegistryFile,
+        theme_config::ThemeRegistry,
     },
     file_utils::write_atomic,
     paths::ThemePaths,
@@ -49,8 +49,8 @@ use crate::{
 /// # Errors
 /// Returns [`RdeError::Io`] when the file exists but cannot be read and
 /// [`RdeError::InvalidConfig`] when it cannot be parsed.
-pub(super) fn read_registry(path: &Path) -> RdeResult<Option<ThemeRegistryFile>> {
-    let registry = read_toml::<ThemeRegistryFile>(path)?;
+pub(super) fn read_registry(path: &Path) -> RdeResult<Option<ThemeRegistry>> {
+    let registry = read_toml::<ThemeRegistry>(path)?;
 
     if let Some(registry) = &registry
         && registry.schema_version > REGISTRY_SCHEMA_VERSION
@@ -71,7 +71,7 @@ pub(super) fn read_registry(path: &Path) -> RdeResult<Option<ThemeRegistryFile>>
 /// # Errors
 /// Returns [`RdeError::Io`] when the file or its parent directory cannot be
 /// written.
-pub(super) fn write_registry(path: &Path, registry: &ThemeRegistryFile) -> RdeResult<()> {
+pub(super) fn write_registry(path: &Path, registry: &ThemeRegistry) -> RdeResult<()> {
     let encoded = toml::to_string_pretty(registry).map_err(|error| {
         RdeError::InvalidConfig(format!("theme registry could not be encoded: {error}"))
     })?;

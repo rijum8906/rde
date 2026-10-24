@@ -47,13 +47,13 @@ use tracing::{debug, info, warn};
 mod disk;
 
 use crate::{
-    backend::ThemeBackend,
+    backend::{MaterialBackend, ThemeBackend},
     constants::REGISTRY_SCHEMA_VERSION,
     domain::{
         color::normalize_hex_color,
-        material::MaterialColorPalette,
+        palette::Palette,
         theme::{ColorScheme, Theme, ThemeId, ThemeManifest},
-        theme_config_file::ThemeRegistryFile,
+        theme_config::ThemeRegistry,
     },
     paths::ThemePaths,
 };
@@ -61,7 +61,7 @@ use crate::{
 /// In-memory mirror of the theme database.
 struct StoreState {
     /// Session state persisted in `themes.toml`.
-    registry: ThemeRegistryFile,
+    registry: ThemeRegistry,
 
     /// Installed manifests keyed by identifier, ordered for stable output.
     manifests: BTreeMap<ThemeId, ThemeManifest>,
@@ -75,6 +75,9 @@ struct StoreState {
 pub struct ThemeStore {
     /// Filesystem layout of the database.
     paths: ThemePaths,
+
+    /// Color engine used to resolve manifests into palettes.
+    backend: Box<dyn ThemeBackend + Send + Sync>,
 
     /// Current registry and manifest mirror.
     state: RwLock<StoreState>,
@@ -99,6 +102,24 @@ impl ThemeStore {
     /// and [`RdeError::InvalidConfig`] when the default theme cannot be
     /// generated.
     pub fn open(paths: ThemePaths) -> RdeResult<Self> {
+        Self::open_with_backend(paths, Box::new(MaterialBackend))
+    }
+
+    /// Opens the theme database with an explicit color engine.
+    ///
+    /// The default [`ThemeStore::open`] uses [`MaterialBackend`]; this variant
+    /// exists so alternative engines can be supplied without touching storage.
+    ///
+    /// # Parameters
+    /// - `paths`: resolved database layout
+    /// - `backend`: palette engine used to resolve themes
+    ///
+    /// # Errors
+    /// Returns the same errors as [`ThemeStore::open`].
+    pub fn open_with_backend(
+        paths: ThemePaths,
+        backend: Box<dyn ThemeBackend + Send + Sync>,
+    ) -> RdeResult<Self> {
         let state = load_state(&paths)?;
 
         info!(
@@ -115,6 +136,7 @@ impl ThemeStore {
 
         Ok(Self {
             paths,
+            backend,
             state: RwLock::new(state),
         })
     }
@@ -174,7 +196,7 @@ impl ThemeStore {
         let state = self.read_state();
         let manifest = active_manifest(&state)?;
 
-        ThemeBackend::resolve(manifest, state.registry.color_scheme)
+        self.backend.resolve(manifest, state.registry.color_scheme)
     }
 
     /// Generates the palette of an installed theme for a specific scheme.
@@ -186,14 +208,10 @@ impl ThemeStore {
     /// # Errors
     /// Returns [`RdeError::NotFound`] when the theme is not installed and
     /// [`RdeError::InvalidValue`] when its source color is invalid.
-    pub fn palette(
-        &self,
-        theme: &ThemeId,
-        color_scheme: ColorScheme,
-    ) -> RdeResult<MaterialColorPalette> {
+    pub fn palette(&self, theme: &ThemeId, color_scheme: ColorScheme) -> RdeResult<Palette> {
         let manifest = self.manifest(theme)?;
 
-        ThemeBackend::palette(&manifest.source_color, color_scheme)
+        self.backend.palette(&manifest.source_color, color_scheme)
     }
 
     /// Activates an installed theme and persists the choice.
@@ -466,7 +484,7 @@ fn load_state(paths: &ThemePaths) -> RdeResult<StoreState> {
         Ok(None) => {
             debug!("theme registry does not exist yet; a new one will be written");
             needs_persist = true;
-            ThemeRegistryFile::default()
+            ThemeRegistry::default()
         }
         Err(error) => {
             warn!(%error, "theme registry could not be loaded; rebuilding it from the theme manifests");
@@ -477,7 +495,7 @@ fn load_state(paths: &ThemePaths) -> RdeResult<StoreState> {
                 }
             }
             needs_persist = true;
-            ThemeRegistryFile::default()
+            ThemeRegistry::default()
         }
     };
 
@@ -527,7 +545,7 @@ fn load_state(paths: &ThemePaths) -> RdeResult<StoreState> {
         needs_persist = true;
     }
 
-    let registry = ThemeRegistryFile {
+    let registry = ThemeRegistry {
         schema_version: REGISTRY_SCHEMA_VERSION,
         current_theme,
         color_scheme: loaded.color_scheme,
@@ -622,6 +640,21 @@ mod tests {
         ThemeId::new(value).expect("valid theme id")
     }
 
+    /// Backend that marks every palette with a sentinel primary color.
+    struct FakeBackend;
+
+    /// Primary color only [`FakeBackend`] produces.
+    const FAKE_PRIMARY: u32 = 0xFF12_3456;
+
+    impl ThemeBackend for FakeBackend {
+        fn palette(&self, source_color: &str, color_scheme: ColorScheme) -> RdeResult<Palette> {
+            let mut palette = MaterialBackend.palette(source_color, color_scheme)?;
+            palette.primary = FAKE_PRIMARY;
+
+            Ok(palette)
+        }
+    }
+
     #[test]
     fn open_seeds_the_default_theme() {
         let root = TempRoot::new("seed");
@@ -639,6 +672,41 @@ mod tests {
             store.active_theme().is_ok(),
             "the seeded theme must resolve to a palette"
         );
+    }
+
+    #[test]
+    fn injected_backend_supplies_palettes_to_the_store() {
+        let root = TempRoot::new("backend-injection");
+        let store = ThemeStore::open_with_backend(root.paths(), Box::new(FakeBackend))
+            .expect("open theme store with a custom backend");
+
+        let active = store.active_theme().expect("active theme");
+        assert_eq!(active.color_scheme, ColorScheme::Light);
+        assert_eq!(active.palette.primary, FAKE_PRIMARY);
+
+        let dark = store
+            .palette(&id("default"), ColorScheme::Dark)
+            .expect("palette for another scheme");
+        assert_eq!(dark.primary, FAKE_PRIMARY);
+        assert_ne!(
+            dark.surface, active.palette.surface,
+            "the requested scheme must still reach the backend"
+        );
+    }
+
+    #[test]
+    fn default_store_uses_the_material_backend() {
+        let root = TempRoot::new("default-backend");
+        let store = root.open();
+
+        let palette = store
+            .palette(&id("default"), ColorScheme::Light)
+            .expect("default palette");
+        let expected = MaterialBackend
+            .palette("#6DD6DA", ColorScheme::Light)
+            .expect("material palette");
+
+        assert_eq!(palette, expected);
     }
 
     #[test]

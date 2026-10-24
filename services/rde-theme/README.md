@@ -17,14 +17,16 @@ bus as `org.rde.Theme`.
 - **`theme_store/`**: persistence and state.
   - [`theme_store/mod.rs`](src/theme_store/mod.rs): registry + manifest state, CRUD, reconciliation.
   - [`theme_store/disk.rs`](src/theme_store/disk.rs): atomic TOML reads/writes, manifest scanning.
-- **`domain/`**: theme models and color engine.
+- **`domain/`**: pure theme models. No toolkit or color-engine types.
   - [`domain/theme.rs`](src/domain/theme.rs): `ThemeId`, `ColorScheme`, `ThemeManifest`, `Theme`.
-  - [`domain/theme_config_file.rs`](src/domain/theme_config_file.rs): the `themes.toml` registry model.
-  - [`domain/material/mod.rs`](src/domain/material/mod.rs): Material 3 palette generation.
+  - [`domain/palette.rs`](src/domain/palette.rs): semantic color roles (`primary`, `surface`, ...).
+  - [`domain/theme_config.rs`](src/domain/theme_config.rs): the `themes.toml` registry model.
   - [`domain/color.rs`](src/domain/color.rs): hex color parsing and formatting.
-- **`backend/`**: palette resolution and toolkit output.
-  - [`backend/mod.rs`](src/backend/mod.rs): `ThemeBackend` resolves manifests into palettes.
+- **`backend/`**: palette engines and toolkit output.
+  - [`backend/mod.rs`](src/backend/mod.rs): `ThemeBackend` trait that resolves manifests into palettes.
+  - [`backend/material/`](src/backend/material/mod.rs): Material 3 seed and scheme computation.
   - [`backend/qt/`](src/backend/qt/mod.rs): writes qt5ct/qt6ct and KDE color schemes.
+  - [`backend/gtk/`](src/backend/gtk/mod.rs): renders GTK CSS `@define-color` overrides.
 - **`dbus/`**: `org.rde.Theme` interface at `/org/rde/Theme`.
 
 ## Theme Database

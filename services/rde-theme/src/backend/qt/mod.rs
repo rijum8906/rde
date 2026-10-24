@@ -20,8 +20,8 @@
 //! - Partial failures are reported instead of aborting the whole application
 //!
 //! ## Related
-//! - [`super::ThemeBackend`][]: resolves themes into palettes
-//! - [`super::palette`][]: Material 3 to Qt role mapping
+//! - [`crate::backend::ThemeBackend`][]: resolves themes into palettes
+//! - [`QtPalette`][]: semantic to Qt role mapping
 //! - [`crate::app`] / [`crate::dbus::iface`]: callers
 //!
 //! ## Authors
@@ -320,7 +320,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        backend::ThemeBackend,
+        backend::{MaterialBackend, ThemeBackend},
         domain::theme::{ColorScheme, ThemeId, ThemeManifest},
     };
 
@@ -367,7 +367,9 @@ mod tests {
         let manifest = ThemeManifest::new(ThemeId::new("default").expect("valid id"), "#6DD6DA")
             .expect("valid manifest");
 
-        ThemeBackend::resolve(&manifest, scheme).expect("resolve theme")
+        MaterialBackend
+            .resolve(&manifest, scheme)
+            .expect("resolve theme")
     }
 
     #[test]

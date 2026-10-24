@@ -19,10 +19,11 @@
 //! - **handler**: Routing and handling of supervisor requests and responses
 //! - **constants**: Service name, D-Bus contract, storage layout, and retry policy
 //! - **dbus**: D-Bus interface definitions and service exposure
-//! - **domain**: Theme models, color helpers, and the Material 3 palette engine
+//! - **domain**: Toolkit-neutral theme models, color helpers, and semantic roles
 //! - **theme_store**: Registry and manifest persistence for installed themes
 //! - **paths**: XDG-compliant theme database locations
-//! - **backend**: Manifest to palette resolution and Qt/KDE color scheme output
+//! - **backend**: The `ThemeBackend` trait, Material 3 palette generation, and
+//!   Qt/KDE and GTK output
 //! - **file_utils**: Atomic configuration file helpers
 //!
 //! ## Related

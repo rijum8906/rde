@@ -18,7 +18,7 @@
 //! - `#AARRGGBB` output for qt5ct/qt6ct and `r,g,b` output for KDE
 //!
 //! ## Related
-//! - [`crate::domain::material::MaterialColorPalette`][]: source colors
+//! - [`crate::domain::palette::Palette`][]: source colors
 //! - [`super::qtct`] / [`super::kde`]: consumers of this mapping
 //!
 //! ## Authors
@@ -30,7 +30,7 @@
 //! ## Copyright
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
-use crate::domain::material::MaterialColorPalette;
+use crate::domain::palette::Palette;
 
 /// Number of Qt palette roles written to qt5ct/qt6ct color schemes.
 ///
@@ -176,7 +176,7 @@ impl QtPalette {
     /// # Parameters
     /// - `palette`: Material 3 palette the theme resolved to
     /// - `group`: active, inactive, or disabled color group
-    pub fn new(palette: &MaterialColorPalette, group: QtColorGroup) -> Self {
+    pub fn new(palette: &Palette, group: QtColorGroup) -> Self {
         let mut colors = [0_u32; QT_COLOR_ROLE_COUNT];
 
         for role in QtColorRole::ALL {
@@ -226,7 +226,7 @@ impl QtPalette {
 }
 
 /// Maps a Material 3 role to a Qt role for the active and inactive groups.
-fn active_role_color(role: QtColorRole, palette: &MaterialColorPalette) -> u32 {
+fn active_role_color(role: QtColorRole, palette: &Palette) -> u32 {
     match role {
         QtColorRole::WindowText | QtColorRole::Text | QtColorRole::BrightText => palette.on_surface,
         QtColorRole::ButtonText => palette.on_surface,
@@ -255,7 +255,7 @@ fn active_role_color(role: QtColorRole, palette: &MaterialColorPalette) -> u32 {
 /// Backgrounds keep their active colors; text and links are neutralized with
 /// the outline roles so disabled widgets read as inactive without losing the
 /// theme's surfaces.
-fn disabled_role_color(role: QtColorRole, palette: &MaterialColorPalette) -> u32 {
+fn disabled_role_color(role: QtColorRole, palette: &Palette) -> u32 {
     match role {
         QtColorRole::WindowText
         | QtColorRole::Text
@@ -288,10 +288,14 @@ pub(super) fn format_rgb(argb: u32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::theme::ColorScheme;
+    use crate::{
+        backend::{MaterialBackend, ThemeBackend},
+        domain::theme::ColorScheme,
+    };
 
-    fn palette() -> MaterialColorPalette {
-        MaterialColorPalette::from_source_color("#006A6A", ColorScheme::Light)
+    fn palette() -> Palette {
+        MaterialBackend
+            .palette("#006A6A", ColorScheme::Light)
             .expect("palette generation")
     }
 

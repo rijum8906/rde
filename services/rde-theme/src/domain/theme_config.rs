@@ -1,4 +1,4 @@
-//! # Theme Registry File (`themes.toml`)
+//! # Theme Registry (`themes.toml`)
 //!
 //! Models the session state stored in `$XDG_DATA_HOME/rde/rde-theme/themes.toml`:
 //! which theme is active, which appearance the user prefers, and which themes
@@ -20,7 +20,8 @@
 //!   the file self-healing after manual edits or interrupted writes.
 //!
 //! ## Related
-//! - [`crate::domain::theme::ThemeManifest`][]: per-theme definition
+//! - [`crate::domain::theme::ThemeId`][]: validated theme identifier
+//! - [`crate::domain::theme::ColorScheme`][]: light/dark preference
 //! - [`crate::theme_store`][]: load, reconcile, and persist operations
 //!
 //! ## Authors
@@ -39,7 +40,7 @@ use crate::{
     domain::theme::{ColorScheme, ThemeId},
 };
 
-/// Content of the `themes.toml` registry file.
+/// Content of the `themes.toml` registry.
 ///
 /// # Fields
 /// - `schema_version`: registry format version
@@ -47,7 +48,7 @@ use crate::{
 /// - `color_scheme`: active light/dark appearance
 /// - `installed`: identifiers of the installed themes
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ThemeRegistryFile {
+pub struct ThemeRegistry {
     /// Registry format version.
     pub schema_version: u32,
 
@@ -63,7 +64,7 @@ pub struct ThemeRegistryFile {
     pub installed: Vec<ThemeId>,
 }
 
-impl Default for ThemeRegistryFile {
+impl Default for ThemeRegistry {
     fn default() -> Self {
         Self {
             schema_version: REGISTRY_SCHEMA_VERSION,
@@ -80,7 +81,7 @@ mod tests {
 
     #[test]
     fn registry_round_trips_through_toml() {
-        let registry = ThemeRegistryFile {
+        let registry = ThemeRegistry {
             schema_version: REGISTRY_SCHEMA_VERSION,
             current_theme: Some(ThemeId::new("ocean").expect("valid id")),
             color_scheme: ColorScheme::Dark,
@@ -94,13 +95,13 @@ mod tests {
         assert!(encoded.contains("current_theme = \"ocean\""));
         assert!(encoded.contains("color_scheme = \"dark\""));
 
-        let decoded: ThemeRegistryFile = toml::from_str(&encoded).expect("deserialize registry");
+        let decoded: ThemeRegistry = toml::from_str(&encoded).expect("deserialize registry");
         assert_eq!(decoded, registry);
     }
 
     #[test]
     fn absent_current_theme_is_not_serialized() {
-        let registry = ThemeRegistryFile::default();
+        let registry = ThemeRegistry::default();
         let encoded = toml::to_string_pretty(&registry).expect("serialize registry");
 
         assert!(!encoded.contains("current_theme"));

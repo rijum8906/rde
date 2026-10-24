@@ -17,7 +17,7 @@ It bridges modern **Material 3 (M3)** design principles with Linux desktop toolk
 
 ## 🎨 Material 3 Design System Engine
 
-`rde-theme` uses Google's Material 3 design system to construct harmonious color schemes from seed colors (or wallpaper images).
+`rde-theme` uses Google's Material 3 design system to construct harmonious color schemes from seed colors (or wallpaper images). The engine lives in `backend/material/` behind the `ThemeBackend` trait and emits the toolkit-neutral `domain::palette::Palette`, so storage, D-Bus, and toolkit writers never depend on Material types.
 
 ### 1. Color Role Mapping Schema
 
@@ -93,6 +93,8 @@ $XDG_DATA_HOME/rde/rde-theme/
 ## 🛠️ Toolkit Integration Architecture
 
 ### 1. GTK Theme Management Engine (GTK 3 & GTK 4)
+
+Implemented in `backend/gtk/`. CSS emission (`backend/gtk/css.rs`) renders every semantic role as a GTK `@define-color` declaration; writing the files and the synchronization steps below are planned.
 
 - **`settings.ini` Configuration**: Writes GTK configuration options to `~/.config/gtk-3.0/settings.ini` and `~/.config/gtk-4.0/settings.ini`:
   - `gtk-theme-name`

@@ -21,7 +21,7 @@
 //! - `kdeglobals` merging that preserves unrelated user settings
 //!
 //! ## Related
-//! - [`crate::domain::material::MaterialColorPalette`][]: color source
+//! - [`crate::domain::palette::Palette`][]: color source
 //! - [`super::ini::IniDocument`][]: `kdeglobals` merging
 //! - [`super::QT_COLOR_SCHEME_NAME`][]: scheme name written to `[General]`
 //!
@@ -34,7 +34,7 @@
 //! ## Copyright
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
-use crate::domain::material::MaterialColorPalette;
+use crate::domain::palette::Palette;
 
 use super::{QT_COLOR_SCHEME_NAME, ini::IniDocument, palette::format_rgb};
 
@@ -51,7 +51,7 @@ type ColorGroup = (&'static str, Vec<(&'static str, u32)>);
 ///
 /// # Returns
 /// The complete color scheme file content.
-pub(crate) fn render_color_scheme(palette: &MaterialColorPalette) -> String {
+pub(crate) fn render_color_scheme(palette: &Palette) -> String {
     let mut document = String::new();
 
     // Step 1: Emit every color group in a stable order.
@@ -82,7 +82,7 @@ pub(crate) fn render_color_scheme(palette: &MaterialColorPalette) -> String {
 ///
 /// # Returns
 /// The updated document, with every unrelated setting preserved.
-pub(crate) fn merge_kdeglobals(existing: &str, palette: &MaterialColorPalette) -> String {
+pub(crate) fn merge_kdeglobals(existing: &str, palette: &Palette) -> String {
     let mut document = IniDocument::parse(existing);
 
     // Step 1: Update the color groups used by KDE applications.
@@ -105,7 +105,7 @@ pub(crate) fn merge_kdeglobals(existing: &str, palette: &MaterialColorPalette) -
 }
 
 /// Builds every KDE color group for a Material 3 palette.
-fn color_groups(palette: &MaterialColorPalette) -> Vec<ColorGroup> {
+fn color_groups(palette: &Palette) -> Vec<ColorGroup> {
     vec![
         (
             "Colors:Window",
@@ -163,7 +163,7 @@ fn color_groups(palette: &MaterialColorPalette) -> Vec<ColorGroup> {
 
 /// Builds the entries shared by window-like groups (Window, View, Button, ...).
 fn window_like_entries(
-    palette: &MaterialColorPalette,
+    palette: &Palette,
     background: u32,
     background_alternate: u32,
 ) -> Vec<(&'static str, u32)> {
@@ -184,7 +184,7 @@ fn window_like_entries(
 }
 
 /// Builds the selection group, which uses primary colors for full contrast.
-fn selection_entries(palette: &MaterialColorPalette) -> Vec<(&'static str, u32)> {
+fn selection_entries(palette: &Palette) -> Vec<(&'static str, u32)> {
     vec![
         ("BackgroundNormal", palette.primary),
         ("BackgroundAlternate", palette.primary_container),
@@ -202,7 +202,7 @@ fn selection_entries(palette: &MaterialColorPalette) -> Vec<(&'static str, u32)>
 }
 
 /// Builds the tooltip group from the inverse (high-contrast) surface colors.
-fn tooltip_entries(palette: &MaterialColorPalette) -> Vec<(&'static str, u32)> {
+fn tooltip_entries(palette: &Palette) -> Vec<(&'static str, u32)> {
     vec![
         ("BackgroundNormal", palette.inverse_surface),
         ("BackgroundAlternate", palette.inverse_surface),
@@ -220,7 +220,7 @@ fn tooltip_entries(palette: &MaterialColorPalette) -> Vec<(&'static str, u32)> {
 }
 
 /// Builds the titlebar (`[WM]`) entries.
-fn window_manager_entries(palette: &MaterialColorPalette) -> Vec<(&'static str, u32)> {
+fn window_manager_entries(palette: &Palette) -> Vec<(&'static str, u32)> {
     vec![
         ("activeBackground", palette.surface_container),
         ("activeForeground", palette.on_surface),
@@ -234,10 +234,14 @@ fn window_manager_entries(palette: &MaterialColorPalette) -> Vec<(&'static str, 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::theme::ColorScheme;
+    use crate::{
+        backend::{MaterialBackend, ThemeBackend},
+        domain::theme::ColorScheme,
+    };
 
-    fn palette() -> MaterialColorPalette {
-        MaterialColorPalette::from_source_color("#6DD6DA", ColorScheme::Dark)
+    fn palette() -> Palette {
+        MaterialBackend
+            .palette("#6DD6DA", ColorScheme::Dark)
             .expect("palette generation")
     }
 

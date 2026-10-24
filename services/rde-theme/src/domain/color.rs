@@ -9,16 +9,17 @@
 //! - `#RGB` and `RGB` shorthand (each digit is doubled)
 //!
 //! All output is normalized to uppercase `#RRGGBB`. Colors are carried as packed
-//! ARGB (`0xFFRRGGBB`) because the Material color utilities operate on packed
-//! ARGB integers; the alpha channel is always opaque.
+//! ARGB (`0xFFRRGGBB`) because that is the representation the color engines and
+//! toolkit writers consume; the alpha channel is always opaque.
 //!
 //! ## Features
 //! - Tolerant parsing of user-provided source colors
 //! - Canonical formatting for storage and D-Bus
-//! - No third-party color dependency beyond Material Color Utilities
+//! - No toolkit or color-engine dependency
 //!
 //! ## Related
-//! - [`crate::domain::material`][]: consumes packed ARGB seeds
+//! - [`crate::domain::palette::Palette`][]: consumes packed ARGB roles
+//! - [`crate::backend::material`][]: derives palettes from a hex seed
 //! - [`crate::domain::theme::ThemeManifest`][]: stores the normalized source color
 //!
 //! ## Authors

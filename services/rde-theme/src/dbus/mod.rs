@@ -14,7 +14,7 @@
 //! ## Related
 //! - [`crate::theme_store::ThemeStore`][]: authoritative theme state
 //! - [`crate::domain::theme::Theme`]
-//! - [`crate::domain::material::MaterialColorPalette`]
+//! - [`crate::domain::palette::Palette`]
 //!
 //! ## Authors
 //! - Riju Mondal <rijum8906@gmail.com>

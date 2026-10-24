@@ -8,16 +8,16 @@
 //! - [`ThemeId`][]: validated, path-safe theme identifier
 //! - [`ColorScheme`][]: light or dark appearance preference
 //! - [`ThemeManifest`][]: content of `themes/<id>/theme.toml`
-//! - [`Theme`][]: manifest resolved into a Material 3 palette for one scheme
+//! - [`Theme`][]: manifest resolved into a palette for one scheme
 //!
 //! ## Features
 //! - Identifier validation prevents path traversal before any file is touched
 //! - Manifest constructors normalize the source color to `#RRGGBB`
-//! - Palette resolution is delegated to the Material 3 engine
+//! - Themes carry a toolkit-neutral [`Palette`], never a toolkit color type
 //!
 //! ## Related
-//! - [`crate::domain::material::MaterialColorPalette`][]: generated colors
-//! - [`crate::domain::theme_config_file::ThemeRegistryFile`][]: installed list
+//! - [`crate::domain::palette::Palette`][]: generated colors
+//! - [`crate::domain::theme_config::ThemeRegistry`][]: installed list
 //! - [`crate::theme_store`][]: persistence layer
 //!
 //! ## Authors
@@ -40,7 +40,7 @@ use crate::{
         DEFAULT_THEME_SOURCE_COLOR, DEFAULT_THEME_VERSION, MANIFEST_SCHEMA_VERSION,
         MAX_THEME_ID_LEN,
     },
-    domain::{color::normalize_hex_color, material::MaterialColorPalette},
+    domain::{color::normalize_hex_color, palette::Palette},
 };
 
 /// System-wide light/dark appearance preference.
@@ -278,19 +278,6 @@ impl ThemeManifest {
         manifest.description = DEFAULT_THEME_DESCRIPTION.to_string();
         Ok(manifest)
     }
-
-    /// Derives the Material 3 palette for the requested scheme.
-    ///
-    /// # Parameters
-    /// - `color_scheme`: light or dark variant to generate
-    ///
-    /// # Errors
-    /// Returns [`RdeError::InvalidValue`] when the stored source color is not a
-    /// valid hexadecimal color, which can only happen after the manifest file
-    /// was edited by hand.
-    pub fn palette(&self, color_scheme: ColorScheme) -> RdeResult<MaterialColorPalette> {
-        MaterialColorPalette::from_source_color(&self.source_color, color_scheme)
-    }
 }
 
 /// A manifest resolved into a concrete palette for one color scheme.
@@ -301,7 +288,7 @@ impl ThemeManifest {
 /// # Fields
 /// - `manifest`: theme definition
 /// - `color_scheme`: scheme the palette was generated for
-/// - `palette`: Material 3 color roles
+/// - `palette`: semantic color roles
 #[derive(Debug, Clone, PartialEq)]
 pub struct Theme {
     /// Theme definition loaded from the manifest.
@@ -310,8 +297,8 @@ pub struct Theme {
     /// Scheme used to generate the palette.
     pub color_scheme: ColorScheme,
 
-    /// Material 3 color roles for this scheme.
-    pub palette: MaterialColorPalette,
+    /// Semantic color roles for this scheme.
+    pub palette: Palette,
 }
 
 impl Theme {
@@ -389,7 +376,6 @@ mod tests {
         assert_eq!(manifest.source_color, "#6DD6DA");
         assert_eq!(manifest.display_name, "ocean");
         assert_eq!(manifest.schema_version, MANIFEST_SCHEMA_VERSION);
-        assert!(manifest.palette(ColorScheme::Dark).is_ok());
     }
 
     #[test]

@@ -33,7 +33,7 @@
 
 use std::path::Path;
 
-use crate::domain::material::MaterialColorPalette;
+use crate::domain::palette::Palette;
 
 use super::{
     ini::IniDocument,
@@ -47,7 +47,7 @@ use super::{
 ///
 /// # Returns
 /// The complete `[ColorScheme]` document.
-pub(crate) fn render_scheme(palette: &MaterialColorPalette) -> String {
+pub(crate) fn render_scheme(palette: &Palette) -> String {
     let active = QtPalette::new(palette, QtColorGroup::Active);
     let inactive = QtPalette::new(palette, QtColorGroup::Inactive);
     let disabled = QtPalette::new(palette, QtColorGroup::Disabled);
@@ -87,10 +87,14 @@ pub(crate) fn activate_config(existing: &str, scheme_path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::theme::ColorScheme;
+    use crate::{
+        backend::{MaterialBackend, ThemeBackend},
+        domain::theme::ColorScheme,
+    };
 
-    fn palette() -> MaterialColorPalette {
-        MaterialColorPalette::from_source_color("#FF6200", ColorScheme::Dark)
+    fn palette() -> Palette {
+        MaterialBackend
+            .palette("#FF6200", ColorScheme::Dark)
             .expect("palette generation")
     }
 
