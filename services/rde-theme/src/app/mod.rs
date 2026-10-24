@@ -1,27 +1,7 @@
-//! # Application Lifecycle (`rde-theme`)
+//! # Application Lifecycle
 //!
-//! Owns the theme service runtime: the global [`App`] singleton, D-Bus service
-//! registration, daemon supervision, and graceful shutdown.
-//!
-//! ## Features
-//! - Poison-safe singleton access through [`App::global`] (no panics on startup)
-//! - D-Bus registration of `org.rde.Theme` at `/org/rde/Theme`
-//! - Supervision task started through [`crate::app::thread`]
-//! - Graceful teardown on `SIGINT`, `SIGTERM`, or a supervisor request
-//!
-//! ## Related
-//! - [`crate::app::thread`][]: supervision socket task
-//! - [`crate::handler`][]: daemon message routing
-//! - [`crate::dbus::iface::ThemeInterface`][]: served D-Bus object
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Owns the service runtime: the global [`App`] singleton, D-Bus registration,
+//! daemon supervision, and graceful shutdown.
 
 mod thread;
 
@@ -145,7 +125,7 @@ impl App {
     /// Returns the process-wide application state, creating it on first use.
     ///
     /// # Errors
-    /// Returns the initialisation error from [`App::new`] instead of panicking,
+    /// Returns the initialisation error from `App::new` instead of panicking,
     /// so the binary can report a clean failure to the session manager.
     ///
     /// # Returns

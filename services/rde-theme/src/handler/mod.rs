@@ -1,25 +1,7 @@
-//! # Daemon Message Handler (`rde-theme`)
+//! # Daemon Message Handler
 //!
-//! Routes messages received from the `rde-daemon` supervisor to the request and
-//! response handlers.
-//!
-//! ## Features
-//! - `DaemonRequest` dispatch (health checks, status queries, shutdown)
-//! - `DaemonResponse` dispatch (registration acknowledgement)
-//! - Warning-only handling of unexpected payload categories
-//!
-//! ## Related
-//! - [`crate::handler::request`][]: request implementation
-//! - [`crate::handler::response`][]: response implementation
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Routes supervisor messages from `rde-daemon` to the request and response
+//! handlers.
 
 use std::sync::{
     Arc,

@@ -1,31 +1,7 @@
 //! # Material 3 Theme Backend
 //!
-//! Implements [`ThemeBackend`] on top of Google's Material color utilities. A
-//! single source color is expanded into the complete set of semantic color
-//! roles for light, dark, and contrast-enhanced schemes.
-//!
-//! ## Modules
-//! - [`seed`][]: parses the source color into the HCT color space
-//! - [`scheme`][]: computes a [`Palette`] for a light/dark scheme
-//!
-//! ## Features
-//! - Palette generation from a single `#RRGGBB` source color
-//! - Standard, medium-contrast, and high-contrast variants
-//! - Toolkit-neutral output: the rest of the service never sees Material types
-//!
-//! ## Related
-//! - [Material Design 3 Specification](https://m3.material.io/)
-//! - [`crate::backend::ThemeBackend`][]: the trait this backend implements
-//! - [`crate::domain::palette::Palette`][]: generated roles
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Implements [`ThemeBackend`] with Google's Material color utilities, expanding a
+//! single seed color into a complete set of semantic roles.
 
 pub mod scheme;
 pub mod seed;

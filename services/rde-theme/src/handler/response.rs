@@ -1,21 +1,7 @@
-//! # Supervisor Response Handler (`rde-theme`)
+//! # Supervisor Response Handler
 //!
-//! Processes acknowledgements sent back by the `rde-daemon` supervisor.
-//!
-//! ## Response Types
-//! - `RegisterAck`: registration outcome, including a rejection reason
-//!
-//! ## Related
-//! - [`crate::handler::handle_message`][]: caller
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Processes acknowledgements, including registration rejections, sent by the
+//! daemon supervisor.
 
 use rde_core::errors::RdeResult;
 use rde_ipc::{message::DaemonResponse, socket::IpcClient};

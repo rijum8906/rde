@@ -1,35 +1,7 @@
 //! # Color Encoding Helpers
 //!
-//! Parses and formats the hexadecimal colors used by the theme database and the
-//! D-Bus API. Keeping the encoding in one place guarantees that a source color
-//! written to a manifest is byte-for-byte the color reported back to clients.
-//!
-//! ## Supported Input
-//! - `#RRGGBB` and `RRGGBB`
-//! - `#RGB` and `RGB` shorthand (each digit is doubled)
-//!
-//! All output is normalized to uppercase `#RRGGBB`. Colors are carried as packed
-//! ARGB (`0xFFRRGGBB`) because that is the representation the color engines and
-//! toolkit writers consume; the alpha channel is always opaque.
-//!
-//! ## Features
-//! - Tolerant parsing of user-provided source colors
-//! - Canonical formatting for storage and D-Bus
-//! - No toolkit or color-engine dependency
-//!
-//! ## Related
-//! - [`crate::domain::palette::Palette`][]: consumes packed ARGB roles
-//! - [`crate::backend::material`][]: derives palettes from a hex seed
-//! - [`crate::domain::theme::ThemeManifest`][]: stores the normalized source color
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Parses and formats the hexadecimal colors stored in manifests and published
+//! over D-Bus.
 
 use rde_core::errors::{RdeError, RdeResult};
 

@@ -1,32 +1,7 @@
 //! # Semantic Color Palette
 //!
-//! Toolkit-neutral description of every color a theme exposes: backgrounds,
-//! foregrounds, containers, accents, borders, and effects. The palette is the
-//! contract between the domain, the color engines in [`crate::backend`], and
-//! the desktop components that consume it.
-//!
-//! ## Design Notes
-//! - Roles are semantic, not decorative: `surface` is a background, `on_surface`
-//!   is the foreground drawn on it, and `primary` is the high-emphasis accent.
-//! - Colors are packed opaque ARGB (`0xFFRRGGBB`) so no toolkit color type
-//!   leaks into the domain.
-//! - The domain does not know how a palette is generated; the Material backend
-//!   derives these roles from a source color.
-//!
-//! ## Related
-//! - [`crate::domain::color`][]: hex parsing and canonical formatting
-//! - [`crate::domain::theme::Theme`][]: carries a palette for one scheme
-//! - [Material 3 color roles](https://m3.material.io/styles/color/roles): the
-//!   role set the current backend implements
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Toolkit-neutral color roles (primary, surface, outline, ...) produced by a
+//! backend and consumed by every toolkit writer.
 
 use std::collections::BTreeMap;
 

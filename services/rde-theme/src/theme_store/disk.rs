@@ -1,28 +1,7 @@
 //! # Theme Database Disk Operations
 //!
-//! Low-level, atomic file access for the theme database. The store keeps the
-//! in-memory view consistent with these files; this module only knows how to
-//! read, write, scan, and remove them.
-//!
-//! ## Features
-//! - Atomic writes through a temporary file plus `rename`, so a crash never
-//!   leaves a half-written `themes.toml` or manifest behind
-//! - Corrupt files are quarantined instead of silently discarded
-//! - Manifest scanning tolerates broken entries and reports them as warnings
-//! - Schema-version warnings for files written by a newer service version
-//!
-//! ## Related
-//! - [`crate::paths::ThemePaths`][]: path derivation
-//! - [`crate::theme_store::ThemeStore`][]: owner of the in-memory state
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Atomic TOML reads, writes, manifest scanning, and quarantine for the on-disk
+//! theme database.
 
 use std::{
     collections::BTreeMap,

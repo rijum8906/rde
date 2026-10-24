@@ -1,26 +1,7 @@
-//! # Daemon Supervision Task (`rde-theme`)
+//! # Daemon Supervision Task
 //!
-//! Connects to the `rde-daemon` supervision socket, registers the service,
-//! routes incoming daemon messages, and deregisters on disconnect.
-//!
-//! ## Features
-//! - Connection attempts with a bounded retry policy
-//! - `Register` / `Deregister` handshake using the shared `rde-ipc` protocol
-//! - Cooperative cancellation through the application shutdown token
-//! - Message dispatch delegated to [`crate::handler`]
-//!
-//! ## Related
-//! - [`crate::app::App::spawn_daemon_thread`][]: spawns this task
-//! - [`crate::handler::handle_message`][]: message routing
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Connects to the `rde-daemon` supervision socket, registers the service, routes
+//! supervisor messages, and deregisters on disconnect.
 
 use std::{
     path::PathBuf,

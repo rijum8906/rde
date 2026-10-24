@@ -40,28 +40,13 @@ To maintain codebase integrity, all agents must adhere to the following rules:
 Agents working on RDE must follow these specific coding style standards:
 
 1. **Comprehensive Documentation & Comments**:
-   - **Module & Crate Docs (`//!`)**: Every crate and module file must begin with a top-level module documentation comment following the standard file comment boilerplate schema:
+   - **Module & Crate Docs (`//!`)**: Every crate and module file must begin with a concise top-level documentation comment: a title, a spacer line, and a one-to-two-sentence description of the module's responsibility.
      ```rust
      //! # <Module / Feature Title>
      //!
-     //! <Detailed description of module purpose and architecture>
-     //!
-     //! ## Features
-     //! - <Feature 1>
-     //! - <Feature 2>
-     //!
-     //! ## Related
-     //! - <Related modules, traits, or specifications>
-     //!
-     //! ## Authors
-     //! - Riju Mondal <rijum8906@gmail.com>
-     //!
-     //! ## License
-     //! MIT License (see LICENSE file for details)
-     //!
-     //! ## Copyright
-     //! Copyright (c) 2026 Riju Mondal. All rights reserved.
+     //! <Short description of module purpose and architecture>
      ```
+     Do not add `Features`, `Related`, `Authors`, `License`, or `Copyright` sections to module headers; keep those details in crate-level docs, the service README/ARCHITECTURE files, or symbol rustdoc.
    - **Symbol Rustdoc (`///`)**: All public structs, enums, fields, functions, methods, traits, and D-Bus properties/methods must have detailed rustdoc comments explaining parameters, return values (`# Returns`), error conditions (`# Errors`), and execution steps.
    - **Step-by-Step Inline Comments (`//`)**: Use numbered/step-by-step inline comments inside function bodies to clarify non-obvious logic, algorithm flow, D-Bus property dict construction, hardware interaction routines, and fallback error paths.
 2. **Resilient Error Handling**:

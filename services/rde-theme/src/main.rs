@@ -1,26 +1,7 @@
-//! # Main Binary Entry Point (`rde-theme`)
+//! # Main Binary Entry Point
 //!
-//! Entry point for the theme service. Initialises the application singleton,
-//! publishes `org.rde.Theme` on the session bus, starts the daemon supervision
-//! task, and blocks until termination is requested.
-//!
-//! ## Execution Flow
-//! 1. Initialise the application singleton (logger and D-Bus object)
-//! 2. Run the event loop ([`App::run`]): D-Bus registration, supervision, signals
-//! 3. Tear down supervision on `SIGINT`, `SIGTERM`, or a supervisor request
-//!
-//! ## Related
-//! - [`rde_theme::app::App`]
-//! - [`rde_theme::handler`]
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Starts the theme service, publishes `org.rde.Theme` on the session bus, and
+//! runs until shutdown is requested.
 
 use rde_core::errors::RdeResult;
 use rde_theme::app::App;

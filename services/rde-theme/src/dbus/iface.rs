@@ -1,51 +1,7 @@
-//! # D-Bus Object Interface Definition (`org.rde.Theme`)
+//! # D-Bus Object Interface (`org.rde.Theme`)
 //!
-//! Public D-Bus surface of the theme service. Every call is a thin adapter over
-//! [`ThemeStore`]: the store owns validation and persistence, this module maps
-//! results onto D-Bus types, FDO errors, and signals.
-//!
-//! ## Properties
-//! - `Version` (s, read-only): service version
-//! - `CurrentTheme` (s, read-only): identifier of the active theme
-//! - `InstalledThemes` (as, read-only): identifiers of installed themes
-//! - `ColorScheme` (s, read-write): `light` or `dark`
-//! - `SourceColor` (s, read-only): source color of the active theme
-//!
-//! ## Methods
-//! - `SetTheme(name: s)`: activate an installed theme
-//! - `CreateTheme(name: s, source_color: s)`: create a theme from a seed color
-//! - `DeleteTheme(name: s)`: remove a non-active theme
-//! - `SetSourceColor(color: s)`: re-seed the active theme
-//! - `ToggleColorScheme() -> s`: switch light/dark, returning the new scheme
-//! - `GetPalette(name: s, scheme: s) -> a{ss}`: palette role map in `#RRGGBB`
-//! - `GetThemeInfo(name: s) -> a{ss}`: manifest metadata for theme pickers
-//! - `Reload()`: re-read the database after external changes
-//!
-//! ## Signals
-//! - `ThemeChanged(theme: s, color_scheme: s)`: active theme changed
-//! - `ColorSchemeChanged(color_scheme: s)`: light/dark preference changed
-//! - `PaletteChanged(theme: s, source_color: s)`: active theme was re-seeded
-//! - `InstalledThemesChanged(themes: as)`: installed theme list changed
-//!
-//! ## Side Effects
-//! Every successful theme or scheme change is also written to the Qt and KDE
-//! configuration through [`crate::backend::qt`]. That step is best effort: a
-//! failure is logged and never turns a persisted theme change into a D-Bus
-//! error.
-//!
-//! ## Related
-//! - [`crate::theme_store::ThemeStore`][]: authoritative state
-//! - [`crate::domain::theme::ColorScheme`][]: accepted scheme values
-//! - [`crate::app`][]: publishes this object on the session bus
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Public D-Bus surface of the service: a thin adapter over [`ThemeStore`] for
+//! types, FDO errors, and signals.
 
 use std::{collections::BTreeMap, sync::Arc};
 

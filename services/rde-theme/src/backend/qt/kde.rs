@@ -1,38 +1,7 @@
 //! # KDE Color Schemes
 //!
-//! Renders the KDE/Plasma color scheme format twice: as a standalone
-//! `.colors` file installed in the user's color scheme directory, and as the
-//! color groups merged into `~/.config/kdeglobals` so running KDE applications
-//! pick the palette up without a session restart.
-//!
-//! ## Format
-//! KDE stores colors as `r,g,b` triplets inside named groups:
-//!
-//! ```ini
-//! [Colors:Window]
-//! BackgroundNormal=28,27,31
-//! ForegroundNormal=230,225,229
-//! ```
-//!
-//! ## Features
-//! - Complete `Window`, `View`, `Button`, `Selection`, `Tooltip`,
-//!   `Complementary`, and `Header` groups
-//! - Titlebar colors in the `[WM]` group
-//! - `kdeglobals` merging that preserves unrelated user settings
-//!
-//! ## Related
-//! - [`crate::domain::palette::Palette`][]: color source
-//! - [`super::ini::IniDocument`][]: `kdeglobals` merging
-//! - [`super::QT_COLOR_SCHEME_NAME`][]: scheme name written to `[General]`
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Renders the standalone KDE color scheme and merges the same color groups into
+//! `kdeglobals`.
 
 use crate::domain::palette::Palette;
 

@@ -1,28 +1,7 @@
 //! # Atomic File Helpers
 //!
-//! Small filesystem utilities shared by the theme database and the Qt
-//! integration. Every configuration file the service owns is replaced
-//! atomically, so a crash or a full disk cannot leave a truncated document that
-//! a toolkit would fail to parse.
-//!
-//! ## Features
-//! - Atomic replacement through a sibling temporary file and `rename`
-//! - Conditional writes that skip unchanged content, avoiding needless
-//!   modification times that would make Qt reload its configuration
-//! - Temporary files are cleaned up when the rename fails
-//!
-//! ## Related
-//! - [`crate::theme_store::disk`][]: theme database persistence
-//! - [`crate::backend::qt`][]: generated Qt and KDE configuration files
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Filesystem helpers that replace configuration files atomically, so a crash
+//! cannot leave a truncated document behind.
 
 use std::{
     fs,

@@ -1,28 +1,7 @@
 //! # Minimal INI Editor
 //!
-//! Comment-preserving INI document used to update the user's existing Qt and
-//! KDE configuration. Qt's `QSettings` and KDE's `KConfig` both use an INI-like
-//! format where only a handful of keys belong to the theme service; rewriting
-//! the whole file would discard unrelated user settings.
-//!
-//! ## Features
-//! - Preserves comments, blank lines, ordering, and unknown sections/keys
-//! - Updates an existing key in place, inserts a missing key at the end of its
-//!   section, and appends a missing section
-//! - CRLF input is normalized to `\n` via [`str::lines`]
-//!
-//! ## Related
-//! - [`super::kde`]: merges a color scheme into `kdeglobals`
-//! - [`super::qtct`]: activates the generated scheme in `qt5ct/qt6ct` configs
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Comment-preserving INI document used to update only the Qt and KDE keys the
+//! theme service owns.
 
 /// Line-oriented INI document that preserves everything it does not modify.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

@@ -1,40 +1,7 @@
 //! # Theme Store
 //!
-//! Owns the theme database and is the only component allowed to mutate it. The
-//! store keeps an in-memory mirror of the registry and of every installed
-//! manifest, persisting each change atomically before it is acknowledged.
-//!
-//! ## Storage Model
-//! ```text
-//! $XDG_DATA_HOME/rde/rde-theme/
-//! ├── themes.toml                 active theme, color scheme, installed list
-//! └── themes/
-//!     ├── default/theme.toml      built-in theme seeded on first start
-//!     └── ocean/theme.toml        user-created theme
-//! ```
-//!
-//! ## Features
-//! - Self-healing startup: the registry is reconciled with the manifests on
-//!   disk, and a missing or corrupt `themes.toml` is quarantined and rebuilt
-//! - Theme creation from a single source color, with generated M3 palettes
-//! - Atomic writes; failed persistence rolls the in-memory state back
-//! - The active theme cannot be deleted, so the desktop always has a palette
-//! - A built-in `default` theme is seeded when the database is empty
-//!
-//! ## Related
-//! - [`crate::paths::ThemePaths`][]: on-disk layout
-//! - [`crate::domain::theme`][]: manifests and validated identifiers
-//! - [`crate::backend::ThemeBackend`][]: palette resolution
-//! - [`crate::dbus::iface::ThemeInterface`][]: consumer
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Owns the in-memory theme database, persists changes atomically, and reconciles
+//! the registry with the manifests on disk.
 
 use std::{
     collections::BTreeMap,

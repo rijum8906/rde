@@ -1,26 +1,7 @@
 //! # Source Color (Seed)
 //!
-//! Parses the seed color a theme is derived from and converts it into the HCT
-//! color space the Material color utilities operate on. A seed is the only
-//! input of palette generation: every role in a scheme descends from it.
-//!
-//! ## Features
-//! - Accepts the same hexadecimal forms as the rest of the service
-//! - Keeps the packed ARGB value so writers can reuse the original color
-//! - Owns exactly one HCT value, which the scheme builder clones per variant
-//!
-//! ## Related
-//! - [`crate::domain::color::parse_hex_color`][]: hexadecimal decoding
-//! - [`super::scheme::MaterialPaletteBuilder`][]: turns a seed into a palette
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Parses a theme's source color and converts it into the HCT space Material color
+//! utilities operate on.
 
 use material_color_utilities::hct::Hct;
 use rde_core::errors::RdeResult;
