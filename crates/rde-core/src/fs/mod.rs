@@ -37,11 +37,11 @@ pub fn rde_service_cache_dir(service_name: &str) -> RdeResult<PathBuf> {
 }
 
 /// Returns the path to the rde logs directory
-/// i.e., ~/.local/rde/logs
+/// i.e., ~/.local/state/rde/logs/
 pub fn rde_logs_dir() -> RdeResult<PathBuf> {
     let home = get_home_dir()?;
 
-    let rde_logs_dir = home.join(".local").join("rde").join("logs");
+    let rde_logs_dir = home.join(".local").join("state").join("rde/logs");
     // create the rde logs directory if it doesn't exist
     std::fs::create_dir_all(&rde_logs_dir).map_err(|e| RdeError::NotFound(e.to_string()))?;
 
@@ -49,7 +49,7 @@ pub fn rde_logs_dir() -> RdeResult<PathBuf> {
 }
 
 /// Returns the path to the rde service logs directory
-/// i.e., ~/.local/rde/logs/{service_name}/
+/// i.e., ~/.local/state/rde/logs/{service_name}/
 pub fn rde_service_logs_dir(service_name: &str) -> RdeResult<PathBuf> {
     let rde_logs_dir = rde_logs_dir()?;
 
@@ -58,4 +58,27 @@ pub fn rde_service_logs_dir(service_name: &str) -> RdeResult<PathBuf> {
     std::fs::create_dir_all(&service_logs_dir).map_err(|e| RdeError::NotFound(e.to_string()))?;
 
     Ok(service_logs_dir)
+}
+
+/// Returns the path to the rde data directory
+/// i.e., ~/.local/rde
+pub fn rde_data_dir() -> RdeResult<PathBuf> {
+    let home = get_home_dir()?;
+    let rde_data_dir = home.join(".local").join("rde");
+    // create the rde data directory if it doesn't exist
+    std::fs::create_dir_all(&rde_data_dir).map_err(|e| RdeError::NotFound(e.to_string()))?;
+
+    Ok(rde_data_dir)
+}
+
+/// Returns the path to the rde service data directory
+/// i.e., ~/.local/rde/{service_name}/
+pub fn rde_service_data_dir(service_name: &str) -> RdeResult<PathBuf> {
+    let rde_data_dir = rde_data_dir()?;
+
+    let service_data_dir = rde_data_dir.join(service_name);
+    // create the service data directory if it doesn't exist
+    std::fs::create_dir_all(&service_data_dir).map_err(|e| RdeError::NotFound(e.to_string()))?;
+
+    Ok(service_data_dir)
 }

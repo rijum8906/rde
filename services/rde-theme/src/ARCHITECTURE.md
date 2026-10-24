@@ -17,7 +17,7 @@ It bridges modern **Material 3 (M3)** design principles with Linux desktop toolk
 
 ## 🎨 Material 3 Design System Engine
 
-`rde-theme` uses Google's Material 3 design system to construct harmonious color schemes from seed colors (or wallpaper images).
+`rde-theme` uses Google's Material 3 design system to construct harmonious color schemes from seed colors (or wallpaper images). The engine lives in `backend/material/` behind the `ThemeBackend` trait and emits the toolkit-neutral `domain::palette::Palette`, so storage, D-Bus, and toolkit writers never depend on Material types.
 
 ### 1. Color Role Mapping Schema
 
@@ -41,10 +41,20 @@ The engine maintains a strict, strongly-typed Material 3 color role system:
 | **`OnError`** | Text/icon color drawn on top of `Error`. |
 | **`ErrorContainer`** | Background fill for error banners or alert dialogs. |
 | **`OnErrorContainer`** | Text/icon color drawn on top of `ErrorContainer`. |
+| **`Background`** | Legacy background role kept for toolkits that still request it. |
+| **`OnBackground`** | Legibility color for `Background`. |
 | **`Surface`** | Standard background surface color for application windows and panels. |
+| **`SurfaceDim`** | Dimmed surface for large dark areas in a light scheme. |
+| **`SurfaceBright`** | Brightened surface for large light areas in a dark scheme. |
 | **`OnSurface`** | Primary text and high-emphasis icons drawn on top of `Surface`. |
 | **`SurfaceVariant`** | Secondary surface variant for cards, dividers, and sidebars. |
 | **`OnSurfaceVariant`** | Medium-emphasis text and icons drawn on top of `SurfaceVariant`. |
+| **`SurfaceContainerLowest`** | Lowest elevation container for subtle layering. |
+| **`SurfaceContainerLow`** | Low elevation container for cards and lists. |
+| **`SurfaceContainer`** | Default container for panels and sidebars. |
+| **`SurfaceContainerHigh`** | High elevation container for sheets and menus. |
+| **`SurfaceContainerHighest`** | Highest elevation container for dialogs and popovers. |
+| **`SurfaceTint`** | Tint applied to elevated surfaces to signal brand color. |
 | **`Outline`** | Borders, outlines, and structural divider lines. |
 | **`OutlineVariant`** | Subtle border tint for low-contrast card outlines. |
 | **`InverseSurface`** | High-contrast surface fill for snackbars and floating toasts. |
@@ -57,12 +67,34 @@ The engine maintains a strict, strongly-typed Material 3 color role system:
 
 - **Dynamic Color Extraction**: Generates dynamic palettes from user seed hex colors or dominant wallpaper colors.
 - **Light / Dark Mode Variants**: Automatically derives both Light and Dark M3 color schemes from the active tonal palette, adjusting contrast ratios according to Web Content Accessibility Guidelines (WCAG 2.1 AA standard).
+- **Role Exposure**: Palettes are published as a stable `role_name → #RRGGBB` map (37 roles), so consumers never depend on Rust struct layout.
+
+---
+
+## 🗂️ Theme Database
+
+All state lives in an XDG data directory, defaulting to `~/.local/share/rde/rde-theme/`:
+
+```
+$XDG_DATA_HOME/rde/rde-theme/
+├── themes.toml                 registry: active theme, color scheme, installed list
+└── themes/<name>/theme.toml    manifest: source color and theme metadata
+```
+
+- **Registry (`themes.toml`)**: session state only. It stores `schema_version`, `current_theme`, `color_scheme`, and `installed`. It never duplicates palette values, so a source color change cannot desynchronize colors from the theme definition.
+- **Manifest (`themes/<name>/theme.toml`)**: authoritative definition of a theme (`name`, `display_name`, `description`, `author`, `license`, `version`, `source_color`). The built-in `default` theme is seeded when the database is empty.
+- **Atomic persistence**: every write goes to a sibling temporary file and is renamed into place, so a crash cannot leave a truncated document.
+- **Self-healing startup**: the installed list is reconciled with the manifests on disk (missing entries dropped, external manifests adopted), and an unparsable registry is moved to `themes.toml.invalid` and rebuilt. Theme directories with invalid names or manifests are skipped with a warning instead of preventing the service from starting.
+- **Identifier safety**: theme names are validated (ASCII alphanumerics, `-`, `_`, `.`, leading alphanumeric, max 64 characters) before they are ever used as a path component.
+- **Invariants**: the active theme is always installed and cannot be deleted; the active theme always resolves to a palette.
 
 ---
 
 ## 🛠️ Toolkit Integration Architecture
 
 ### 1. GTK Theme Management Engine (GTK 3 & GTK 4)
+
+Implemented in `backend/gtk/`. CSS emission (`backend/gtk/css.rs`) renders every semantic role as a GTK `@define-color` declaration; writing the files and the synchronization steps below are planned.
 
 - **`settings.ini` Configuration**: Writes GTK configuration options to `~/.config/gtk-3.0/settings.ini` and `~/.config/gtk-4.0/settings.ini`:
   - `gtk-theme-name`
@@ -75,9 +107,12 @@ The engine maintains a strict, strongly-typed Material 3 color role system:
 
 ### 2. Qt Theme Management Engine (Qt 5 & Qt 6)
 
-- **Qt Environment Integration**: Supports standard Qt style engines (`qt5ct`, `qt6ct`, and `kvantum`).
-- **KConfig / KDE Globals Generation**: Writes M3 color schemes to `~/.config/kdeglobals` and `~/.config/qt5ct/colors/rde_m3.conf` so Qt 5 and Qt 6 applications render matching colors.
-- **Palette Mapping**: Maps M3 roles to Qt color roles (`WindowText`, `Button`, `Light`, `Midlight`, `Dark`, `Mid`, `Text`, `BrightText`, `ButtonText`, `Base`, `Window`, `Shadow`, `Highlight`, `HighlightedText`, `Link`).
+Implemented in `backend/qt/` and invoked at startup and after every theme or scheme change.
+
+- **qt5ct / qt6ct Schemes**: Writes `~/.config/qt{5,6}ct/colors/RdeM3.conf` with active, inactive, and disabled color lists in `QPalette::ColorRole` order (21 roles through `PlaceholderText`; qt6ct derives `Accent` from `Highlight` on Qt 6.6+), and activates them through `color_scheme_path` + `custom_palette=true` in the tool configuration.
+- **KDE Integration**: Writes the standalone `~/.local/share/color-schemes/RdeM3.colors` scheme and merges the same `[Colors:Window|View|Button|Selection|Tooltip|Complementary|Header]` and `[WM]` groups into `~/.config/kdeglobals`, selecting `ColorScheme=RdeM3`.
+- **Palette Mapping**: Maps M3 roles to Qt color roles: `Window` from `surface`, `Base` from `surface_container_lowest`, `Text`/`WindowText` from `on_surface`, `Button` from `surface_container`, bevel roles from the surface container tiers, `Highlight` from `primary`, `HighlightedText` from `on_primary`, links from `primary`/`tertiary`, and tooltips from `inverse_surface`.
+- **Merging and Atomicity**: Existing Qt/KDE configuration is parsed line-by-line so comments, styles, fonts, icons, and unrelated keys survive; files are written atomically and only when their contents change. A failure in one file (for example an unwritable `qt6ct` directory) is reported without preventing the other files or the theme change itself.
 
 ---
 
@@ -104,13 +139,15 @@ The engine maintains a strict, strongly-typed Material 3 color role system:
 ## ⚡ System Event Flow & D-Bus Contracts
 
 1. **User Request / Configuration Change**:
-   - `rde-cli` or desktop control panel calls `org.rde.Theme.SetTheme(...)` or `org.rde.Theme.SetColorSeed(...)`.
-2. **Palette Computation**:
-   - `rde-theme` backend calculates the 27 M3 color roles and verifies contrast ratios.
-3. **Toolkit File Generation**:
-   - `rde-theme` writes updated GTK (`gtk.css`/`settings.ini`), Qt (`kdeglobals`/`qt5ct`), and Fontconfig files.
+   - `rde-cli` or a desktop control panel calls `org.rde.Theme.SetTheme(...)`, `CreateTheme(name, source_color)`, `SetSourceColor(...)`, or writes the `ColorScheme` property.
+2. **Validation and Persistence**:
+   - The store validates the identifier and source color, then writes the affected manifest and/or registry atomically. Failed writes roll the in-memory state back.
+3. **Palette Computation**:
+   - The backend expands the theme's source color into the 37 M3 color roles for the requested light/dark scheme. Palettes are derived on demand and never persisted.
 4. **Signal Dispatch**:
-   - Emits `ThemeChanged` and `ColorPaletteChanged` signals over `org.rde.Theme` session D-Bus.
-   - Updates Freedesktop Portal settings (`color-scheme` key: `0` = No preference, `1` = Prefer dark, `2` = Prefer light).
-5. **Supervisor Status**:
+   - Emits `ThemeChanged`, `ColorSchemeChanged`, `PaletteChanged`, or `InstalledThemesChanged` over the `org.rde.Theme` session D-Bus interface, plus the standard `PropertiesChanged` signal for mutated properties.
+5. **Toolkit Synchronization**:
+   - Writes the Qt/KDE color schemes (`RdeM3.conf`, `RdeM3.colors`, and `kdeglobals`) so Qt applications pick up the palette without a session restart.
+   - GTK (`gtk.css`/`settings.ini`), Fontconfig, and Freedesktop Portal synchronization are planned.
+6. **Supervisor Status**:
    - Responds to `rde-daemon` IPC `HealthCheck` probes.

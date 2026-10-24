@@ -7,19 +7,24 @@
 //!
 //! ## Features
 //! - Material 3 (M3) dynamic color generation and tonal palette synthesis
-//! - Cross-toolkit theme synchronization (GTK 3/4, Qt 5/6)
+//! - Persistent theme database under `$XDG_DATA_HOME/rde/rde-theme`
+//! - Theme creation from a single source color, install, activate, and delete
 //! - Color scheme management (light/dark mode) with WCAG contrast compliance
-//! - Typography and font configuration engine
-//! - Session D-Bus interface (`org.rde.Theme`)
-//! - Unix socket IPC connection for daemon supervision
+//! - Session D-Bus interface (`org.rde.Theme`) with typed FDO errors and signals
+//! - Unix socket supervision task for `rde-daemon`
 //! - Application lifecycle management with daemon integration
 //!
 //! ## Architecture
-//! - **app**: Global application singleton, startup, and shutdown orchestration
-//! - **ipc**: Daemon communication with IPC socket handling and message routing
+//! - **app**: Application singleton ([`app::App`]), event loop, and supervision task
+//! - **handler**: Routing and handling of supervisor requests and responses
+//! - **constants**: Service name, D-Bus contract, storage layout, and retry policy
 //! - **dbus**: D-Bus interface definitions and service exposure
-//! - **domain**: Theme data models and configuration structures
-//! - **backend**: Theme computation and palette generation engines
+//! - **domain**: Toolkit-neutral theme models, color helpers, and semantic roles
+//! - **theme_store**: Registry and manifest persistence for installed themes
+//! - **paths**: XDG-compliant theme database locations
+//! - **backend**: The `ThemeBackend` trait, Material 3 palette generation, and
+//!   Qt/KDE and GTK output
+//! - **file_utils**: Atomic configuration file helpers
 //!
 //! ## Related
 //! - [Material Design 3 Specification](https://m3.material.io/)
@@ -37,6 +42,10 @@
 
 pub mod app;
 pub mod backend;
+pub mod constants;
 pub mod dbus;
 pub mod domain;
-pub mod ipc;
+mod file_utils;
+pub mod handler;
+pub mod paths;
+pub mod theme_store;

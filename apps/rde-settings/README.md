@@ -19,7 +19,11 @@ The project follows a feature-first Clean Architecture approach:
 ## Current Features
 
 - **Wi-Fi Configuration**: View and manage wireless connections (scaffold initialized).
-- *(Planned)*: Display, Sound, Power, Theme, and Keyboard settings.
+- **Theme & Styling**: Manage desktop themes through the `org.rde.Theme` D-Bus
+  service — activate, create and delete themes, re-seed the active palette,
+  switch light/dark, and preview the generated Material 3 palette. The active
+  palette is applied to the settings app itself at startup and on every change.
+- *(Planned)*: Display, Sound, Power, and Keyboard settings.
 
 ## Getting Started
 

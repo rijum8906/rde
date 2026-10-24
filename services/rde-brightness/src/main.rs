@@ -37,7 +37,7 @@ use rde_core::errors::RdeResult;
 /// # Execution
 /// 1. Acquires global App singleton
 /// 2. Enters event loop via App::run()
-/// 3. Handles graceful shutdown on Ctrl+C or error
+/// 3. Handles graceful shutdown on `SIGINT`, `SIGTERM`, or a supervisor request
 ///
 /// # Errors
 /// Returns `RdeError` if:
@@ -53,9 +53,9 @@ use rde_core::errors::RdeResult;
 async fn main() -> RdeResult<()> {
     println!("Starting RDE Brightness Service...");
 
-    // Acquire exclusive access to the global Application singleton instance
-    let app = App::global();
-    app.lock().await.run().await?;
+    // Acquire exclusive access to the global application singleton instance
+    let mut app = App::global()?.lock().await;
+    app.run().await?;
 
     println!("RDE Brightness Service exited successfully");
     Ok(())

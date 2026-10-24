@@ -47,7 +47,7 @@ rde-ipc           internal message types + Unix socket transport (daemon <-> ser
 rde-cli           thin client that calls services' public D-Bus methods
 rde-brightness    owns org.rde.Brightness; talks to sysfs directly
 rde-volume        owns org.rde.Volume; talks to ALSA via zbus
-rde-theme         owns org.rde.Theme; persists via rde-core's storage abstraction
+rde-theme         owns org.rde.Theme; persists its theme database under $XDG_DATA_HOME/rde/rde-theme
 rde-wifi          owns org.rde.wifi; talks to NetworkManager via system D-Bus
 rde-notification  owns org.freedesktop.Notifications (WIP)
 ```

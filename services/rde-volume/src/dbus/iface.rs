@@ -41,9 +41,12 @@ pub struct VolumeInterface {
 impl VolumeInterface {
     /// Creates a new `VolumeInterface` wrapping a freshly initialized `VolumeBackend`.
     ///
+    /// Opening the mixer performs no asynchronous work, so this constructor is
+    /// synchronous and can run during application initialisation.
+    ///
     /// # Errors
     /// Returns `RdeError` if backend initialization fails.
-    pub async fn new() -> RdeResult<Self> {
+    pub fn new() -> RdeResult<Self> {
         let backend = Arc::new(VolumeBackend::new()?);
         Ok(Self { backend })
     }

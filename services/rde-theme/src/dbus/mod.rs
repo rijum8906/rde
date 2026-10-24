@@ -6,14 +6,15 @@
 //!
 //! ## Features
 //! - D-Bus object server interface definition
-//! - Theme property management (active theme, color scheme, available themes)
-//! - Theme manipulation methods (set_theme, create_theme, delete_theme)
-//! - Dynamic color palette control (set_accent_color, toggle_color_scheme)
-//! - Signal emission for theme and palette changes
+//! - Theme properties (active theme, installed themes, color scheme, source color)
+//! - Theme manipulation methods (`SetTheme`, `CreateTheme`, `DeleteTheme`, `SetSourceColor`)
+//! - Palette queries as a role-name to `#RRGGBB` map (`GetPalette`)
+//! - Standard FDO error mapping and property/signal notifications
 //!
 //! ## Related
+//! - [`crate::theme_store::ThemeStore`][]: authoritative theme state
 //! - [`crate::domain::theme::Theme`]
-//! - [`crate::domain::material::MaterialColorPalette`]
+//! - [`crate::domain::palette::Palette`]
 //!
 //! ## Authors
 //! - Riju Mondal <rijum8906@gmail.com>

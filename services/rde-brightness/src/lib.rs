@@ -14,10 +14,11 @@
 //! - Fallback to privilege escalation (pkexec) for restricted sysfs access
 //!
 //! ## Architecture
-//! - **app**: Application lifecycle, D-Bus setup, daemon supervision
+//! - **app**: Application singleton ([`app::App`]), event loop, and supervision task
+//! - **handler**: Routing and handling of supervisor requests and responses
 //! - **backend**: Hardware interface abstraction and brightness control
 //! - **dbus**: D-Bus interface definitions (properties, methods, signals)
-//! - **constants**: Configuration constants for retry logic
+//! - **constants**: Service name, D-Bus contract, and retry policy
 //!
 //! ## D-Bus Interface: `org.rde.Brightness`
 //! Clients interact with brightness control via D-Bus at path `/org/rde/Brightness`:
@@ -43,3 +44,4 @@ pub mod app;
 pub mod backend;
 pub mod constants;
 pub mod dbus;
+pub mod handler;
