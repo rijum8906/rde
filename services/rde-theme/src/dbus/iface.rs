@@ -1,115 +1,50 @@
-//! # D-Bus Object Interface (`org.rde.Theme`)
+//! # D-Bus Presentation Adapter (`org.rde.Theme`)
 //!
-//! Public D-Bus surface of the service: a thin adapter over [`ThemeStore`] for
-//! types, FDO errors, and signals.
+//! Exposes the theme service over the session D-Bus bus at object path `/org/rde/Theme`.
+//!
+//! All data return values are serialized as JSON strings to guarantee backwards
+//! compatibility across toolkit consumers (C/GTK, Flutter, Qt, Shell scripts).
 
-use std::{collections::BTreeMap, sync::Arc};
-
-use rde_core::errors::RdeError;
-use tracing::{debug, info, warn};
-use zbus::{interface, object_server::SignalEmitter};
-
-use crate::{
-    backend::qt,
-    domain::theme::{ColorScheme, ThemeId},
-    theme_store::ThemeStore,
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use zbus::{
+    interface,
+    object_server::SignalEmitter,
+    zvariant::{OwnedValue, Value},
 };
 
-/// D-Bus object implementing the `org.rde.Theme` interface.
-///
-/// Holds a shared handle to the theme store; the store provides interior
-/// mutability, so D-Bus calls can take `&self` and emit signals after the lock
-/// has been released.
+use crate::{
+    domain::{
+        ResolvedTheme, ThemeManifest,
+        identity::ThemeId,
+        manifest::{ContrastLevel, ThemeMode},
+        settings::{DynamicThemeUpdate, SeedSource},
+    },
+    service::ThemeService,
+    theme_store::ThemeError,
+};
+
+/// Object path for the public theme interface.
+pub const THEME_OBJECT_PATH: &str = "/org/rde/Theme";
+
+/// D-Bus interface name for `org.rde.Theme`.
+pub const THEME_INTERFACE_NAME: &str = "org.rde.Theme";
+
+/// Object path for the Freedesktop XDG Desktop Portal settings.
+pub const PORTAL_OBJECT_PATH: &str = "/org/freedesktop/portal/desktop";
+
+/// Interface name for the Freedesktop XDG Desktop Portal settings.
+pub const PORTAL_INTERFACE_NAME: &str = "org.freedesktop.portal.Settings";
+
+/// Public D-Bus interface adapter for `org.rde.Theme`.
 pub struct ThemeInterface {
-    /// Theme database shared with the rest of the service.
-    store: Arc<ThemeStore>,
+    service: Arc<ThemeService>,
 }
 
 impl ThemeInterface {
-    /// Creates the interface around an initialized theme store.
-    ///
-    /// # Parameters
-    /// - `store`: database loaded by [`crate::app::App`]
-    pub fn new(store: Arc<ThemeStore>) -> Self {
-        Self { store }
-    }
-
-    /// Emits the standard property and custom signals for an active theme
-    /// change.
-    async fn emit_active_theme(&self, emitter: &SignalEmitter<'_>) {
-        let theme = self
-            .store
-            .current_theme()
-            .map(|theme| theme.to_string())
-            .unwrap_or_default();
-        let color_scheme = self.store.color_scheme().to_string();
-
-        if let Err(error) = self.current_theme_changed(emitter).await {
-            warn!(%error, "failed to emit the CurrentTheme property change");
-        }
-        if let Err(error) = self.source_color_changed(emitter).await {
-            warn!(%error, "failed to emit the SourceColor property change");
-        }
-        if let Err(error) = Self::theme_changed(emitter, theme, color_scheme).await {
-            warn!(%error, "failed to emit the ThemeChanged signal");
-        }
-    }
-
-    /// Emits the standard property and custom signals for a scheme change.
-    async fn emit_scheme(&self, emitter: &SignalEmitter<'_>, color_scheme: ColorScheme) {
-        if let Err(error) = self.color_scheme_changed(emitter).await {
-            warn!(%error, "failed to emit the ColorScheme property change");
-        }
-        if let Err(error) = Self::scheme_changed(emitter, color_scheme.to_string()).await {
-            warn!(%error, "failed to emit the ColorSchemeChanged signal");
-        }
-    }
-
-    /// Applies the active theme to the Qt and KDE configuration files.
-    ///
-    /// Qt integration is best effort: a failure is logged and the theme change
-    /// is still reported to D-Bus clients, because the theme database is the
-    /// source of truth and a missing Qt installation must not block it.
-    fn apply_qt(&self) {
-        let theme = match self.store.active_theme() {
-            Ok(theme) => theme,
-            Err(error) => {
-                warn!(%error, "Skipping Qt theme application: no resolvable active theme");
-                return;
-            }
-        };
-
-        match qt::apply(&theme) {
-            Ok(report) if report.is_complete() => debug!(
-                theme = %theme.manifest.name,
-                scheme = %theme.color_scheme,
-                written = report.written.len(),
-                "Qt color scheme applied"
-            ),
-            Ok(report) => warn!(
-                theme = %theme.manifest.name,
-                failures = report.failures.len(),
-                "Qt color scheme applied with warnings"
-            ),
-            Err(error) => warn!(%error, "Unable to apply the Qt color scheme"),
-        }
-    }
-
-    /// Emits the installed-theme property change and custom signal.
-    async fn emit_installed_themes(&self, emitter: &SignalEmitter<'_>) {
-        let themes: Vec<String> = self
-            .store
-            .installed_themes()
-            .into_iter()
-            .map(|theme| theme.to_string())
-            .collect();
-
-        if let Err(error) = self.installed_themes_changed(emitter).await {
-            warn!(%error, "failed to emit the InstalledThemes property change");
-        }
-        if let Err(error) = Self::themes_installed(emitter, themes).await {
-            warn!(%error, "failed to emit the InstalledThemesChanged signal");
-        }
+    /// Constructs a new [`ThemeInterface`] wrapping the application [`ThemeService`].
+    #[must_use]
+    pub fn new(service: Arc<ThemeService>) -> Self {
+        Self { service }
     }
 }
 
@@ -119,540 +54,412 @@ impl ThemeInterface {
     // PROPERTIES
     // =================================
 
-    /// Service version string.
-    ///
-    /// # Returns
-    /// The package version from `CARGO_PKG_VERSION` (e.g. `0.1.0`).
+    /// Interface contract version.
     #[zbus(property)]
-    pub fn version(&self) -> String {
-        env!("CARGO_PKG_VERSION").to_string()
+    pub fn version(&self) -> u32 {
+        1
     }
 
-    /// Identifier of the currently active theme.
-    ///
-    /// # Returns
-    /// The theme identifier, for example `default` or `ocean`.
+    /// Identifier of the active theme (empty string if dynamic built-in).
     #[zbus(property)]
-    pub fn current_theme(&self) -> String {
-        self.store
-            .current_theme()
-            .map(|theme| theme.to_string())
+    pub async fn active_theme(&self) -> String {
+        let state = self.service.current_state().await;
+        state.active.map(|id| id.to_string()).unwrap_or_default()
+    }
+
+    /// Current appearance mode (`"light"` or `"dark"`).
+    #[zbus(property)]
+    pub async fn mode(&self) -> String {
+        let state = self.service.current_state().await;
+        match state.mode {
+            ThemeMode::Light => "light".to_string(),
+            ThemeMode::Dark => "dark".to_string(),
+        }
+    }
+
+    /// Identifiers of all installed themes in the registry.
+    #[zbus(property)]
+    pub async fn available_themes(&self) -> Vec<String> {
+        let repo = self.service.repository();
+        repo.list()
+            .await
             .unwrap_or_default()
-    }
-
-    /// Identifiers of every installed theme, sorted.
-    ///
-    /// # Returns
-    /// The installed theme names.
-    #[zbus(property)]
-    pub fn installed_themes(&self) -> Vec<String> {
-        self.store
-            .installed_themes()
             .into_iter()
-            .map(|theme| theme.to_string())
+            .map(|id| id.to_string())
             .collect()
     }
 
-    /// Active light/dark appearance (`light` or `dark`).
-    ///
-    /// # Returns
-    /// The active color scheme.
+    /// Monotonically increasing generation number of the published theme.
     #[zbus(property)]
-    pub fn color_scheme(&self) -> String {
-        self.store.color_scheme().to_string()
+    pub async fn generation(&self) -> u32 {
+        self.service.current_state().await.generation
     }
 
-    /// Sets the light/dark appearance.
-    ///
-    /// # Arguments
-    /// - `scheme`: `light` or `dark` (case-insensitive)
-    ///
-    /// # Errors
-    /// Returns `org.freedesktop.DBus.Error.InvalidArgs` when the value is not a
-    /// valid scheme, and `org.freedesktop.DBus.Error.IOError` when the registry
-    /// cannot be persisted.
-    ///
-    /// # Signals
-    /// Emits `ColorSchemeChanged`, and the standard `PropertiesChanged` signal
-    /// after a successful update.
-    ///
-    /// # Side Effects
-    /// Applies the new scheme to the Qt and KDE color schemes.
+    /// Seed source of the built-in dynamic theme (`"wallpaper"` or `"fixed"`).
     #[zbus(property)]
-    pub async fn set_color_scheme(
-        &self,
-        scheme: String,
-        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
-    ) -> zbus::fdo::Result<()> {
-        debug!(scheme = %scheme, "SetColorScheme requested");
-
-        // Step 1: Validate the requested scheme before touching the store.
-        let color_scheme = parse_scheme(&scheme)?;
-
-        // Step 2: Persist the preference.
-        self.store
-            .set_color_scheme(color_scheme)
-            .map_err(to_fdo_error)?;
-
-        // Step 3: Mirror the scheme into the Qt/KDE configuration.
-        self.apply_qt();
-
-        info!(scheme = %color_scheme, "color scheme updated over D-Bus");
-
-        // Step 4: Notify subscribers of the semantic change.
-        self.emit_scheme(&emitter, color_scheme).await;
-        Ok(())
+    pub async fn dynamic_seed_source(&self) -> String {
+        match self.service.settings().await.dynamic.seed_source {
+            SeedSource::Wallpaper => "wallpaper".to_string(),
+            SeedSource::Fixed => "fixed".to_string(),
+        }
     }
 
-    /// Source color of the active theme in `#RRGGBB` form.
-    ///
-    /// # Returns
-    /// The seed color used to derive the active theme's palettes.
-    ///
-    /// # Errors
-    /// Returns an FDO error when no theme is active.
+    /// Explicit seed color of the built-in dynamic theme, empty when unset.
     #[zbus(property)]
-    pub fn source_color(&self) -> zbus::fdo::Result<String> {
-        self.store.source_color().map_err(to_fdo_error)
+    pub async fn dynamic_seed(&self) -> String {
+        self.service
+            .settings()
+            .await
+            .dynamic
+            .fixed_seed
+            .unwrap_or_default()
+    }
+
+    /// Wallpaper the built-in dynamic theme derives its seed color from, empty when unset.
+    #[zbus(property)]
+    pub async fn dynamic_wallpaper(&self) -> String {
+        self.service
+            .settings()
+            .await
+            .dynamic
+            .wallpaper
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_default()
     }
 
     // =================================
     // METHODS
     // =================================
 
-    /// Activates an installed theme.
-    ///
-    /// # Arguments
-    /// - `theme`: identifier of an installed theme
-    ///
-    /// # Errors
-    /// Returns `org.freedesktop.DBus.Error.FileNotFound` when the theme is not
-    /// installed and `org.freedesktop.DBus.Error.IOError` when the registry
-    /// cannot be persisted.
-    ///
-    /// # Signals
-    /// Emits `ThemeChanged`, the `CurrentTheme` and `SourceColor` property
-    /// changes, and `PropertiesChanged`.
-    ///
-    /// # Side Effects
-    /// Applies the new theme to the Qt and KDE color schemes.
-    #[zbus(name = "SetTheme")]
-    pub async fn set_theme(
-        &self,
-        theme: String,
-        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
-    ) -> zbus::fdo::Result<()> {
-        debug!(theme = %theme, "SetTheme requested");
-
-        // Step 1: Validate the identifier and activate it.
-        let theme = parse_theme(&theme)?;
-        self.store.set_theme(&theme).map_err(to_fdo_error)?;
-
-        // Step 2: Apply the palette to Qt and KDE.
-        self.apply_qt();
-
-        info!(theme = %theme, "active theme updated over D-Bus");
-
-        // Step 3: Signal the new active theme.
-        self.emit_active_theme(&emitter).await;
-        Ok(())
+    /// Returns the currently active [`crate::domain::resolved::ResolvedTheme`] as JSON.
+    pub async fn get_resolved_theme(&self) -> zbus::fdo::Result<ResolvedTheme> {
+        let state = self.service.current_state().await;
+        Ok(state.resolved)
     }
 
-    /// Creates a new theme from a source color.
-    ///
-    /// The theme is installed but not activated; call `SetTheme` afterwards to
-    /// apply it.
-    ///
-    /// # Arguments
-    /// - `name`: new theme identifier (letters, digits, `-`, `_`, `.`)
-    /// - `source_color`: seed color as `#RGB`, `RGB`, `#RRGGBB`, or `RRGGBB`
-    ///
-    /// # Errors
-    /// Returns `org.freedesktop.DBus.Error.InvalidArgs` for an invalid name or
-    /// color, `org.freedesktop.DBus.Error.FileExists` when the theme already
-    /// exists, and `org.freedesktop.DBus.Error.IOError` on write failures.
-    ///
-    /// # Signals
-    /// Emits `InstalledThemesChanged` and the `InstalledThemes` property change.
-    #[zbus(name = "CreateTheme")]
-    pub async fn create_theme(
-        &self,
-        name: String,
-        source_color: String,
-        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
-    ) -> zbus::fdo::Result<()> {
-        debug!(theme = %name, source_color = %source_color, "CreateTheme requested");
+    /// Returns the author [`crate::domain::manifest::ThemeManifest`] for the requested theme ID as JSON.
+    pub async fn get_theme_manifest(&self, id: &str) -> zbus::fdo::Result<ThemeManifest> {
+        let theme_id = if id == ThemeId::DYNAMIC {
+            ThemeId::builtin_dynamic()
+        } else {
+            ThemeId::new(id).map_err(|e| zbus::fdo::Error::InvalidArgs(e.to_string()))?
+        };
 
-        // Step 1: Validate the identifier, then let the store generate and
-        // persist the manifest from the seed color.
-        let theme = parse_theme(&name)?;
         let manifest = self
-            .store
-            .create_theme(theme, &source_color)
-            .map_err(to_fdo_error)?;
+            .service
+            .repository()
+            .manifest(&theme_id)
+            .await
+            .map_err(|e| {
+                zbus::fdo::Error::Failed(format!("failed to load manifest for '{id}': {e}"))
+            })?;
 
-        info!(
-            theme = %manifest.name,
-            source_color = %manifest.source_color,
-            "theme created over D-Bus"
-        );
-
-        // Step 2: Advertise the new theme.
-        self.emit_installed_themes(&emitter).await;
-        Ok(())
+        Ok(manifest)
     }
 
-    /// Deletes an installed theme.
+    /// Returns the JSON list of installed theme IDs.
+    pub async fn list_themes(&self) -> zbus::fdo::Result<Vec<ThemeId>> {
+        self.service
+            .repository()
+            .list()
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(format!("failed to list themes: {e}")))
+    }
+
+    /// Switches the active desktop theme.
     ///
-    /// # Arguments
-    /// - `theme`: identifier of an installed, non-active theme
+    /// If `id == "rde-dynamic"`, switches to the built-in dynamic theme.
+    pub async fn set_active_theme(&self, id: &str) -> zbus::fdo::Result<()> {
+        let theme_id = if id == ThemeId::DYNAMIC {
+            ThemeId::builtin_dynamic()
+        } else {
+            ThemeId::new(id).map_err(|e| zbus::fdo::Error::InvalidArgs(e.to_string()))?
+        };
+
+        self.service
+            .set_active(theme_id)
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+    }
+
+    /// Updates the built-in dynamic theme (`rde-dynamic`) inputs and republishes it.
+    ///
+    /// # Parameters
+    /// - `seed_source`: `"wallpaper"` to derive the seed color from the desktop
+    ///   wallpaper, or `"fixed"` to use an explicit color
+    /// - `seed`: `#RRGGBB` seed color, required when `seed_source` is `"fixed"`;
+    ///   an empty string keeps the currently stored color
+    /// - `wallpaper`: absolute wallpaper path used by the `"wallpaper"` seed source;
+    ///   an empty string keeps the currently stored path
+    ///
+    /// # Behavior
+    /// The inputs are validated and persisted to `settings.toml`. When the dynamic
+    /// theme is active, the palette is regenerated and `ThemeChanged` is emitted.
     ///
     /// # Errors
-    /// Returns `org.freedesktop.DBus.Error.FileNotFound` when the theme is not
-    /// installed, `org.freedesktop.DBus.Error.InvalidArgs` when it is the active
-    /// theme, and `org.freedesktop.DBus.Error.IOError` on write failures.
-    ///
-    /// # Signals
-    /// Emits `InstalledThemesChanged` and the `InstalledThemes` property change.
-    #[zbus(name = "DeleteTheme")]
-    pub async fn delete_theme(
+    /// Returns `org.freedesktop.DBus.Error.InvalidArgs` for malformed inputs and
+    /// `org.freedesktop.DBus.Error.Failed` when the new inputs cannot be persisted.
+    pub async fn update_dynamic_theme(
         &self,
-        theme: String,
-        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+        seed_source: &str,
+        seed: &str,
+        wallpaper: &str,
     ) -> zbus::fdo::Result<()> {
-        debug!(theme = %theme, "DeleteTheme requested");
+        // Step 1: Parse the requested seed source.
+        let source = match seed_source.trim().to_lowercase().as_str() {
+            "wallpaper" => SeedSource::Wallpaper,
+            "fixed" => SeedSource::Fixed,
+            other => {
+                return Err(zbus::fdo::Error::InvalidArgs(format!(
+                    "invalid seed source '{other}'"
+                )));
+            }
+        };
 
-        // Step 1: Validate and remove the theme.
-        let theme = parse_theme(&theme)?;
-        self.store.delete_theme(&theme).map_err(to_fdo_error)?;
+        // Step 2: Build the update, treating empty strings as "keep the current value".
+        let seed = seed.trim();
+        let wallpaper = wallpaper.trim();
+        let update = DynamicThemeUpdate {
+            seed_source: Some(source),
+            fixed_seed: Some(seed.to_string()).filter(|value| !value.is_empty()),
+            wallpaper: Some(PathBuf::from(wallpaper)).filter(|_| !wallpaper.is_empty()),
+        };
 
-        info!(theme = %theme, "theme deleted over D-Bus");
-
-        // Step 2: Advertise the updated list.
-        self.emit_installed_themes(&emitter).await;
-        Ok(())
+        // Step 3: Persist and, when active, republish the dynamic theme.
+        self.service
+            .update_dynamic_theme(update)
+            .await
+            .map(|_settings| ())
+            .map_err(|err| match err {
+                ThemeError::Settings(_) => zbus::fdo::Error::InvalidArgs(err.to_string()),
+                other => zbus::fdo::Error::Failed(other.to_string()),
+            })
     }
 
-    /// Re-seeds the active theme with a new source color.
-    ///
-    /// The manifest is updated and the palette is regenerated on the next
-    /// `GetPalette` call, so applications can preview both schemes.
-    ///
-    /// # Arguments
-    /// - `color`: new seed color in any supported hexadecimal form
-    ///
-    /// # Errors
-    /// Returns `org.freedesktop.DBus.Error.InvalidArgs` for an invalid color,
-    /// `org.freedesktop.DBus.Error.FileNotFound` when no theme is active, and
-    /// `org.freedesktop.DBus.Error.IOError` on write failures.
-    ///
-    /// # Signals
-    /// Emits `PaletteChanged`, the `SourceColor` property change, and
-    /// `PropertiesChanged`.
-    ///
-    /// # Side Effects
-    /// Regenerates the Qt and KDE color schemes from the new palette.
-    #[zbus(name = "SetSourceColor")]
-    pub async fn set_source_color(
-        &self,
-        color: String,
-        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
-    ) -> zbus::fdo::Result<()> {
-        debug!(color = %color, "SetSourceColor requested");
-
-        // Step 1: Update the active manifest.
-        let manifest = self.store.set_source_color(&color).map_err(to_fdo_error)?;
-
-        // Step 2: Regenerate the Qt/KDE color schemes from the new palette.
-        self.apply_qt();
-
-        info!(
-            theme = %manifest.name,
-            source_color = %manifest.source_color,
-            "active theme re-seeded over D-Bus"
-        );
-
-        // Step 3: Signal the regenerated palette.
-        if let Err(error) = self.source_color_changed(&emitter).await {
-            warn!(%error, "failed to emit the SourceColor property change");
-        }
-        if let Err(error) =
-            Self::palette_changed(&emitter, manifest.name.to_string(), manifest.source_color).await
-        {
-            warn!(%error, "failed to emit the PaletteChanged signal");
-        }
-        Ok(())
+    /// Forces a reload of the active theme manifest and variant files.
+    pub async fn reload(&self) -> zbus::fdo::Result<()> {
+        self.service
+            .reload()
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
     }
 
-    /// Switches the color scheme between light and dark.
-    ///
-    /// # Returns
-    /// The newly active scheme (`light` or `dark`).
-    ///
-    /// # Errors
-    /// Returns `org.freedesktop.DBus.Error.IOError` when the preference cannot
-    /// be persisted.
-    ///
-    /// # Signals
-    /// Emits `ColorSchemeChanged` and the `ColorScheme` property change.
-    ///
-    /// # Side Effects
-    /// Applies the new scheme to the Qt and KDE color schemes.
-    #[zbus(name = "ToggleColorScheme")]
-    pub async fn toggle_color_scheme(
-        &self,
-        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
-    ) -> zbus::fdo::Result<String> {
-        debug!("ToggleColorScheme requested");
+    /// Computes and returns a preview [`crate::domain::resolved::ResolvedTheme`] as JSON without committing.
+    pub async fn preview(&self, id: &str, mode: &str, contrast: &str) -> zbus::fdo::Result<String> {
+        let theme_id = if id == ThemeId::DYNAMIC {
+            ThemeId::builtin_dynamic()
+        } else {
+            ThemeId::new(id).map_err(|e| zbus::fdo::Error::InvalidArgs(e.to_string()))?
+        };
 
-        // Step 1: Flip and persist the scheme.
-        let color_scheme = self.store.toggle_color_scheme().map_err(to_fdo_error)?;
+        let mode_val = match mode.to_lowercase().as_str() {
+            "light" => ThemeMode::Light,
+            "dark" => ThemeMode::Dark,
+            other => {
+                return Err(zbus::fdo::Error::InvalidArgs(format!(
+                    "invalid mode '{other}'"
+                )));
+            }
+        };
 
-        // Step 2: Apply the new scheme to Qt and KDE.
-        self.apply_qt();
+        let contrast_val = match contrast.to_lowercase().as_str() {
+            "normal" => ContrastLevel::Normal,
+            "medium" => ContrastLevel::Medium,
+            "high" => ContrastLevel::High,
+            other => {
+                return Err(zbus::fdo::Error::InvalidArgs(format!(
+                    "invalid contrast '{other}'"
+                )));
+            }
+        };
 
-        info!(scheme = %color_scheme, "color scheme toggled over D-Bus");
+        let resolved = self
+            .service
+            .preview(&theme_id, mode_val, contrast_val)
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(format!("failed to preview theme: {e}")))?;
 
-        // Step 3: Notify subscribers.
-        self.emit_scheme(&emitter, color_scheme).await;
-        Ok(color_scheme.to_string())
-    }
-
-    /// Returns the palette of a theme for a specific scheme.
-    ///
-    /// This lets callers preview the inactive scheme without switching the
-    /// system preference.
-    ///
-    /// # Arguments
-    /// - `theme`: installed theme identifier
-    /// - `scheme`: `light` or `dark` (case-insensitive)
-    ///
-    /// # Returns
-    /// A map from Material 3 role name (e.g. `primary_container`) to
-    /// `#RRGGBB`.
-    ///
-    /// # Errors
-    /// Returns `org.freedesktop.DBus.Error.FileNotFound` when the theme is not
-    /// installed and `org.freedesktop.DBus.Error.InvalidArgs` for an invalid
-    /// scheme or a manifest with an invalid source color.
-    #[zbus(name = "GetPalette")]
-    pub fn get_palette(
-        &self,
-        theme: String,
-        scheme: String,
-    ) -> zbus::fdo::Result<BTreeMap<String, String>> {
-        debug!(theme = %theme, scheme = %scheme, "GetPalette requested");
-
-        let theme = parse_theme(&theme)?;
-        let color_scheme = parse_scheme(&scheme)?;
-
-        self.store
-            .palette(&theme, color_scheme)
-            .map(|palette| palette.role_map())
-            .map_err(to_fdo_error)
-    }
-
-    /// Returns the manifest metadata of an installed theme.
-    ///
-    /// Intended for theme pickers that need names, descriptions, and source
-    /// colors without reading the filesystem.
-    ///
-    /// # Arguments
-    /// - `theme`: installed theme identifier
-    ///
-    /// # Returns
-    /// A map with `name`, `display_name`, `description`, `author`, `license`,
-    /// `version`, `source_color`, and `manifest_path`.
-    ///
-    /// # Errors
-    /// Returns `org.freedesktop.DBus.Error.FileNotFound` when the theme is not
-    /// installed.
-    #[zbus(name = "GetThemeInfo")]
-    pub fn get_theme_info(&self, theme: String) -> zbus::fdo::Result<BTreeMap<String, String>> {
-        debug!(theme = %theme, "GetThemeInfo requested");
-
-        let theme = parse_theme(&theme)?;
-        let manifest = self.store.manifest(&theme).map_err(to_fdo_error)?;
-
-        let mut info = BTreeMap::new();
-        info.insert("name".to_string(), manifest.name.to_string());
-        info.insert("display_name".to_string(), manifest.display_name);
-        info.insert("description".to_string(), manifest.description);
-        info.insert("author".to_string(), manifest.author.unwrap_or_default());
-        info.insert("license".to_string(), manifest.license.unwrap_or_default());
-        info.insert("version".to_string(), manifest.version);
-        info.insert("source_color".to_string(), manifest.source_color);
-        info.insert(
-            "manifest_path".to_string(),
-            self.store
-                .paths()
-                .manifest_file(&manifest.name)
-                .display()
-                .to_string(),
-        );
-
-        Ok(info)
-    }
-
-    /// Reloads the theme database from disk.
-    ///
-    /// Use after editing `themes.toml` or copying a theme directory by hand.
-    ///
-    /// # Errors
-    /// Returns an FDO error when the database cannot be read or repaired.
-    ///
-    /// # Signals
-    /// Emits `ThemeChanged`, `ColorSchemeChanged`, `InstalledThemesChanged`, and
-    /// the corresponding property changes.
-    ///
-    /// # Side Effects
-    /// Re-applies the reloaded theme to the Qt and KDE color schemes.
-    #[zbus(name = "Reload")]
-    pub async fn reload(
-        &self,
-        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
-    ) -> zbus::fdo::Result<()> {
-        info!("Reload requested over D-Bus");
-
-        // Step 1: Re-read and reconcile the database.
-        self.store.reload().map_err(to_fdo_error)?;
-
-        // Step 2: Re-apply the reloaded theme to Qt and KDE.
-        self.apply_qt();
-
-        // Step 3: Re-publish every property that may have changed.
-        self.emit_installed_themes(&emitter).await;
-        self.emit_active_theme(&emitter).await;
-        self.emit_scheme(&emitter, self.store.color_scheme()).await;
-        Ok(())
+        serde_json::to_string_pretty(&resolved)
+            .map_err(|e| zbus::fdo::Error::Failed(format!("failed to serialize preview: {e}")))
     }
 
     // =================================
     // SIGNALS
     // =================================
 
-    /// Emitted when the active theme changes.
-    ///
-    /// # Arguments
-    /// - `theme`: identifier of the active theme
-    /// - `color_scheme`: active scheme (`light` or `dark`)
-    #[zbus(signal, name = "ThemeChanged")]
+    /// Emitted when the resolved theme has changed and is durable on disk.
+    #[zbus(signal)]
     pub async fn theme_changed(
-        signal_emitter: &SignalEmitter<'_>,
-        theme: String,
-        color_scheme: String,
+        signal_ctxt: &SignalEmitter<'_>,
+        resolved_json: &str,
+        generation: u32,
     ) -> zbus::Result<()>;
 
-    /// Emitted when the light/dark preference changes.
-    ///
-    /// # Arguments
-    /// - `color_scheme`: newly active scheme (`light` or `dark`)
-    #[zbus(signal, name = "ColorSchemeChanged")]
-    pub async fn scheme_changed(
-        signal_emitter: &SignalEmitter<'_>,
-        color_scheme: String,
+    /// Emitted when installed themes in the registry change.
+    #[zbus(signal)]
+    pub async fn theme_list_changed(
+        signal_ctxt: &SignalEmitter<'_>,
+        ids: &[&str],
     ) -> zbus::Result<()>;
 
-    /// Emitted when the active theme is re-seeded with a new source color.
-    ///
-    /// # Arguments
-    /// - `theme`: identifier of the active theme
-    /// - `source_color`: new source color in `#RRGGBB` form
-    #[zbus(signal, name = "PaletteChanged")]
-    pub async fn palette_changed(
-        signal_emitter: &SignalEmitter<'_>,
-        theme: String,
-        source_color: String,
-    ) -> zbus::Result<()>;
-
-    /// Emitted when a theme is installed or removed.
-    ///
-    /// # Arguments
-    /// - `themes`: identifiers of every installed theme, sorted
-    #[zbus(signal, name = "InstalledThemesChanged")]
-    pub async fn themes_installed(
-        signal_emitter: &SignalEmitter<'_>,
-        themes: Vec<String>,
-    ) -> zbus::Result<()>;
+    /// Emitted whenever a reload operation completes.
+    #[zbus(signal)]
+    pub async fn reloaded(signal_ctxt: &SignalEmitter<'_>) -> zbus::Result<()>;
 }
 
-/// Parses and validates a theme identifier received over D-Bus.
-///
-/// # Errors
-/// Returns `org.freedesktop.DBus.Error.InvalidArgs` when the identifier is not
-/// valid.
-fn parse_theme(value: &str) -> zbus::fdo::Result<ThemeId> {
-    ThemeId::new(value).map_err(to_fdo_error)
+/// Freedesktop XDG Desktop Portal `org.freedesktop.portal.Settings` interface adapter.
+pub struct PortalSettingsInterface {
+    service: Arc<ThemeService>,
 }
 
-/// Parses a `light`/`dark` scheme received over D-Bus.
-///
-/// # Errors
-/// Returns `org.freedesktop.DBus.Error.InvalidArgs` for any other value.
-fn parse_scheme(value: &str) -> zbus::fdo::Result<ColorScheme> {
-    value.parse::<ColorScheme>().map_err(to_fdo_error)
-}
-
-/// Maps a domain error onto the closest FDO D-Bus error.
-///
-/// # Parameters
-/// - `error`: error produced by the store or the domain layer
-fn to_fdo_error(error: RdeError) -> zbus::fdo::Error {
-    let message = error.to_string();
-
-    match error {
-        RdeError::NotFound(_) => zbus::fdo::Error::FileNotFound(message),
-        RdeError::AlreadyExists(_) => zbus::fdo::Error::FileExists(message),
-        RdeError::InvalidValue(_) | RdeError::InvalidConfig(_) => {
-            zbus::fdo::Error::InvalidArgs(message)
-        }
-        RdeError::Io(_) => zbus::fdo::Error::IOError(message),
-        RdeError::PermissionDenied(_) => zbus::fdo::Error::AccessDenied(message),
-        other => zbus::fdo::Error::Failed(other.to_string()),
+impl PortalSettingsInterface {
+    /// Constructs a new [`PortalSettingsInterface`].
+    #[must_use]
+    pub fn new(service: Arc<ThemeService>) -> Self {
+        Self { service }
     }
+}
+
+#[interface(name = "org.freedesktop.portal.Settings")]
+impl PortalSettingsInterface {
+    /// Returns the active color-scheme setting (1 = Dark, 2 = Light).
+    pub async fn read(&self, namespace: &str, key: &str) -> zbus::fdo::Result<OwnedValue> {
+        if namespace == "org.freedesktop.appearance" && key == "color-scheme" {
+            let state = self.service.current_state().await;
+            let code: u32 = match state.mode {
+                ThemeMode::Dark => 1,
+                ThemeMode::Light => 2,
+            };
+            Ok(OwnedValue::from(code))
+        } else {
+            Err(zbus::fdo::Error::Failed("Key not found".into()))
+        }
+    }
+
+    /// Reads all keys for requested namespaces.
+    pub async fn read_all(
+        &self,
+        namespaces: Vec<String>,
+    ) -> zbus::fdo::Result<HashMap<String, HashMap<String, OwnedValue>>> {
+        let mut result = HashMap::new();
+        if namespaces.contains(&"org.freedesktop.appearance".to_string()) || namespaces.is_empty() {
+            let state = self.service.current_state().await;
+            let code: u32 = match state.mode {
+                ThemeMode::Dark => 1,
+                ThemeMode::Light => 2,
+            };
+            let mut appearance_map = HashMap::new();
+            appearance_map.insert("color-scheme".to_string(), OwnedValue::from(code));
+            result.insert("org.freedesktop.appearance".to_string(), appearance_map);
+        }
+        Ok(result)
+    }
+
+    /// Emitted when a portal setting changes.
+    #[zbus(signal)]
+    pub async fn setting_changed(
+        signal_ctxt: &SignalEmitter<'_>,
+        namespace: &str,
+        key: &str,
+        value: Value<'_>,
+    ) -> zbus::Result<()>;
+}
+
+/// Connects service broadcast channels to D-Bus signal emission loops.
+pub fn spawn_dbus_signal_broadcaster(connection: zbus::Connection, service: Arc<ThemeService>) {
+    let mut theme_changed_rx = service.subscribe_theme_changed();
+    let mut reloaded_rx = service.subscribe_reloaded();
+    let mut theme_list_rx = service.subscribe_theme_list_changed();
+
+    let conn_clone1 = connection.clone();
+    let service_clone = service.clone();
+    tokio::spawn(async move {
+        while let Ok(resolved) = theme_changed_rx.recv().await {
+            let state = service_clone.current_state().await;
+            if let Ok(emitter) = SignalEmitter::new(&conn_clone1, THEME_OBJECT_PATH) {
+                if let Ok(json) = serde_json::to_string_pretty(&resolved) {
+                    let _ = ThemeInterface::theme_changed(&emitter, &json, state.generation).await;
+                }
+            }
+
+            // Also emit portal SettingChanged signal
+            if let Ok(portal_emitter) = SignalEmitter::new(&conn_clone1, PORTAL_OBJECT_PATH) {
+                let code: u32 = match state.mode {
+                    ThemeMode::Dark => 1,
+                    ThemeMode::Light => 2,
+                };
+                let _ = PortalSettingsInterface::setting_changed(
+                    &portal_emitter,
+                    "org.freedesktop.appearance",
+                    "color-scheme",
+                    Value::U32(code),
+                )
+                .await;
+            }
+        }
+    });
+
+    let conn_clone2 = connection.clone();
+    tokio::spawn(async move {
+        while reloaded_rx.recv().await.is_ok() {
+            if let Ok(emitter) = SignalEmitter::new(&conn_clone2, THEME_OBJECT_PATH) {
+                let _ = ThemeInterface::reloaded(&emitter).await;
+            }
+        }
+    });
+
+    let conn_clone3 = connection;
+    tokio::spawn(async move {
+        while let Ok(ids) = theme_list_rx.recv().await {
+            if let Ok(emitter) = SignalEmitter::new(&conn_clone3, THEME_OBJECT_PATH) {
+                let str_ids: Vec<&str> = ids.iter().map(|id| id.as_str()).collect();
+                let _ = ThemeInterface::theme_list_changed(&emitter, &str_ids).await;
+            }
+        }
+    });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{service::ThemeService, theme_store::DiskThemeRepository};
+    use zbus::object_server::Interface;
 
-    #[test]
-    fn invalid_identifiers_map_to_invalid_args() {
-        let error = parse_theme("../escape").expect_err("path traversal must be rejected");
-        assert!(matches!(error, zbus::fdo::Error::InvalidArgs(_)));
+    /// Builds a service backed by throwaway XDG directories.
+    async fn temp_service(root: &std::path::Path) -> Arc<ThemeService> {
+        let repo = Arc::new(DiskThemeRepository::new(
+            root.join("themes"),
+            root.join("config"),
+            root.join("cache"),
+        ));
+
+        let service = ThemeService::startup(
+            repo,
+            vec![],
+            root.join("cache").join("current.json"),
+            root.join("config").join("settings.toml"),
+            root.join("themes"),
+        )
+        .await
+        .expect("theme service must start with empty directories");
+
+        Arc::new(service)
     }
 
-    #[test]
-    fn invalid_schemes_map_to_invalid_args() {
-        let error = parse_scheme("sepia").expect_err("unknown scheme");
-        assert!(matches!(error, zbus::fdo::Error::InvalidArgs(_)));
-        assert_eq!(
-            parse_scheme("DARK").expect("scheme parsing is case-insensitive"),
-            ColorScheme::Dark
-        );
-    }
+    #[tokio::test]
+    async fn exposes_dynamic_theme_contract_in_introspection() {
+        let temp = tempfile::tempdir().unwrap();
+        let iface = ThemeInterface::new(temp_service(temp.path()).await);
 
-    #[test]
-    fn domain_errors_map_to_fdo_errors() {
-        assert!(matches!(
-            to_fdo_error(RdeError::NotFound("missing".to_string())),
-            zbus::fdo::Error::FileNotFound(_)
-        ));
-        assert!(matches!(
-            to_fdo_error(RdeError::AlreadyExists("duplicate".to_string())),
-            zbus::fdo::Error::FileExists(_)
-        ));
-        assert!(matches!(
-            to_fdo_error(RdeError::InvalidValue("bad".to_string())),
-            zbus::fdo::Error::InvalidArgs(_)
-        ));
-        assert!(matches!(
-            to_fdo_error(RdeError::PermissionDenied("denied".to_string())),
-            zbus::fdo::Error::AccessDenied(_)
-        ));
-        assert!(matches!(
-            to_fdo_error(RdeError::Internal("boom".to_string())),
-            zbus::fdo::Error::Failed(_)
-        ));
+        let mut xml = String::new();
+        iface.introspect_to_writer(&mut xml, 0);
+
+        // Mutating method for the built-in dynamic theme.
+        assert!(xml.contains("UpdateDynamicTheme"), "{xml}");
+
+        // Read-only views of the dynamic inputs for settings UIs.
+        assert!(xml.contains("DynamicSeedSource"), "{xml}");
+        assert!(xml.contains("DynamicSeed"), "{xml}");
+        assert!(xml.contains("DynamicWallpaper"), "{xml}");
     }
 }

@@ -1,267 +1,667 @@
-//! # Theme Database Disk Operations
+//! # Disk-Based Theme Repository
 //!
-//! Atomic TOML reads, writes, manifest scanning, and quarantine for the on-disk
-//! theme database.
+//! Implements [`ThemeRepository`] backed by standard filesystem structures and XDG directories.
 
-use std::{
-    collections::BTreeMap,
-    fs,
-    path::{Path, PathBuf},
-};
-
-use rde_core::errors::{RdeError, RdeResult};
-use serde::de::DeserializeOwned;
-use tracing::{info, warn};
+use async_trait::async_trait;
+use std::{collections::BTreeMap, path::PathBuf};
+use tracing::{debug, info, warn};
 
 use crate::{
-    constants::{MANIFEST_FILE_NAME, MANIFEST_SCHEMA_VERSION, REGISTRY_SCHEMA_VERSION},
+    backend::material::{compute_color_roles, extract_seed_from_wallpaper},
     domain::{
-        theme::{ThemeId, ThemeManifest},
-        theme_config::ThemeRegistry,
+        identity::{ThemeId, VariantId},
+        manifest::{BUILTIN_DYNAMIC_VARIANT_DIR, ThemeManifest, VariantDescriptor},
+        registry::{ThemeEntry, ThemeLocation, ThemeRegistry, ThemeSource},
+        resolved::{
+            AssetPaths, Color, Motion, ResolvedTheme, SUPPORTED_RESOLVED_SCHEMA_VERSION, Shape,
+            Typography, VariantKind,
+        },
+        settings::{SeedSource, ThemeSettings},
     },
-    file_utils::write_atomic,
-    paths::ThemePaths,
+    fs::write_atomic,
+    theme_store::{ThemeError, ThemeRepository},
 };
 
-/// Reads the theme registry, returning `None` when the file is absent.
-///
-/// # Errors
-/// Returns [`RdeError::Io`] when the file exists but cannot be read and
-/// [`RdeError::InvalidConfig`] when it cannot be parsed.
-pub(super) fn read_registry(path: &Path) -> RdeResult<Option<ThemeRegistry>> {
-    let registry = read_toml::<ThemeRegistry>(path)?;
+/// Default system themes directory.
+pub const DEFAULT_SYSTEM_THEMES_DIR: &str = "/usr/share/rde/themes";
 
-    if let Some(registry) = &registry
-        && registry.schema_version > REGISTRY_SCHEMA_VERSION
-    {
-        warn!(
-            schema_version = registry.schema_version,
-            supported = REGISTRY_SCHEMA_VERSION,
-            path = %path.display(),
-            "theme registry was written by a newer service version"
-        );
+/// Filesystem implementation of [`ThemeRepository`].
+#[derive(Debug, Clone)]
+pub struct DiskThemeRepository {
+    themes_dir: PathBuf,
+    config_dir: PathBuf,
+    cache_dir: PathBuf,
+    system_themes_dir: PathBuf,
+}
+
+impl DiskThemeRepository {
+    /// Creates a new [`DiskThemeRepository`] pointing at the given directories.
+    ///
+    /// # Parameters
+    /// - `themes_dir`: user themes directory containing `themes.toml` and theme subdirs
+    /// - `config_dir`: user configuration directory containing `settings.toml`
+    /// - `cache_dir`: cache directory where `current.json` and generated assets reside
+    #[must_use]
+    pub fn new(themes_dir: PathBuf, config_dir: PathBuf, cache_dir: PathBuf) -> Self {
+        Self {
+            themes_dir,
+            config_dir,
+            cache_dir,
+            system_themes_dir: PathBuf::from(DEFAULT_SYSTEM_THEMES_DIR),
+        }
     }
 
-    Ok(registry)
-}
-
-/// Writes the theme registry atomically.
-///
-/// # Errors
-/// Returns [`RdeError::Io`] when the file or its parent directory cannot be
-/// written.
-pub(super) fn write_registry(path: &Path, registry: &ThemeRegistry) -> RdeResult<()> {
-    let encoded = toml::to_string_pretty(registry).map_err(|error| {
-        RdeError::InvalidConfig(format!("theme registry could not be encoded: {error}"))
-    })?;
-
-    write_atomic(path, &encoded)
-}
-
-/// Reads a single theme manifest.
-///
-/// # Errors
-/// Returns [`RdeError::NotFound`] when the manifest is missing,
-/// [`RdeError::Io`] when it cannot be read, and [`RdeError::InvalidConfig`]
-/// when it cannot be parsed.
-pub(super) fn read_manifest(path: &Path) -> RdeResult<ThemeManifest> {
-    let manifest = read_toml::<ThemeManifest>(path)?.ok_or_else(|| {
-        RdeError::NotFound(format!("theme manifest {} is missing", path.display()))
-    })?;
-
-    if manifest.schema_version > MANIFEST_SCHEMA_VERSION {
-        warn!(
-            schema_version = manifest.schema_version,
-            supported = MANIFEST_SCHEMA_VERSION,
-            path = %path.display(),
-            "theme manifest was written by a newer service version"
-        );
+    /// Configures a custom system themes search directory.
+    #[must_use]
+    pub fn with_system_themes(mut self, system_themes_dir: PathBuf) -> Self {
+        self.system_themes_dir = system_themes_dir;
+        self
     }
 
-    Ok(manifest)
-}
+    /// Path to the factual `themes.toml` registry file.
+    #[must_use]
+    pub fn registry_path(&self) -> PathBuf {
+        self.themes_dir.join("themes.toml")
+    }
 
-/// Writes a theme manifest atomically, creating the theme directory.
-///
-/// # Errors
-/// Returns [`RdeError::Io`] when the directory or file cannot be written.
-pub(super) fn write_manifest(path: &Path, manifest: &ThemeManifest) -> RdeResult<()> {
-    let encoded = toml::to_string_pretty(manifest).map_err(|error| {
-        RdeError::InvalidConfig(format!("theme manifest could not be encoded: {error}"))
-    })?;
+    /// Path to the user preference `settings.toml` file.
+    #[must_use]
+    pub fn settings_path(&self) -> PathBuf {
+        self.config_dir.join("settings.toml")
+    }
 
-    write_atomic(path, &encoded)
-}
+    /// Path to the cached `current.json` resolved theme payload.
+    #[must_use]
+    pub fn current_cache_path(&self) -> PathBuf {
+        self.cache_dir.join("current.json")
+    }
 
-/// Scans the `themes/` directory and loads every valid manifest.
-///
-/// Invalid directories are skipped with a warning so one broken theme cannot
-/// prevent the service from starting or hide the remaining themes.
-///
-/// # Returns
-/// A map from theme identifier to manifest, ordered by identifier.
-///
-/// # Errors
-/// Returns [`RdeError::Io`] when the themes directory itself cannot be read.
-pub(super) fn scan_manifests(themes_dir: &Path) -> RdeResult<BTreeMap<ThemeId, ThemeManifest>> {
-    let entries = fs::read_dir(themes_dir).map_err(RdeError::Io)?;
-    let mut manifests = BTreeMap::new();
+    /// Atomically writes the resolved theme cache payload (`current.json`).
+    ///
+    /// # Errors
+    /// Returns [`ThemeError::Io`] if atomic write fails.
+    pub fn save_current_cache(&self, resolved: &ResolvedTheme) -> Result<(), ThemeError> {
+        let path = self.current_cache_path();
+        let json = serde_json::to_vec_pretty(resolved)
+            .map_err(|e| ThemeError::Serialization(e.to_string()))?;
+        write_atomic(&path, &json).map_err(|source| ThemeError::Io { path, source })?;
+        Ok(())
+    }
 
-    for entry in entries {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(error) => {
-                warn!(%error, "skipping unreadable theme directory entry");
-                continue;
+    /// Resolves the absolute directory path of a theme.
+    fn resolve_theme_dir(&self, id: &ThemeId, entry: &ThemeEntry) -> PathBuf {
+        match &entry.location {
+            ThemeLocation::User => self.themes_dir.join(id.as_str()),
+            ThemeLocation::System => self.system_themes_dir.join(id.as_str()),
+            ThemeLocation::External(path) => path.clone(),
+        }
+    }
+
+    /// Absolute path of the generated payload file backing a built-in variant.
+    ///
+    /// # Parameters
+    /// - `descriptor`: variant descriptor carrying the relative payload path
+    ///
+    /// # Returns
+    /// The payload path below the built-in theme root (the cache directory).
+    fn dynamic_variant_path(&self, descriptor: &VariantDescriptor) -> PathBuf {
+        self.cache_dir.join(descriptor.file_path.as_path())
+    }
+
+    /// Generates and materializes every variant payload of the built-in dynamic theme.
+    ///
+    /// One seed color derived from the persisted dynamic settings drives all
+    /// mode/contrast variants, so the generated set always stays internally
+    /// consistent. Payloads are written atomically, which keeps concurrent readers
+    /// from observing a partially written variant file.
+    ///
+    /// # Parameters
+    /// - `manifest`: built-in dynamic manifest whose variants are rendered
+    ///
+    /// # Errors
+    /// Returns [`ThemeError::Io`] when a payload cannot be written and
+    /// [`ThemeError::Serialization`] when a payload cannot be encoded.
+    async fn materialize_dynamic_variants(
+        &self,
+        manifest: &ThemeManifest,
+    ) -> Result<(), ThemeError> {
+        // Step 1: Load the dynamic inputs, recovering to defaults on failure.
+        let settings = match self.load_settings().await {
+            Ok(settings) => settings,
+            Err(err) => {
+                warn!(error = %err, "Failed to load settings for the dynamic theme; using defaults");
+                ThemeSettings::default()
             }
         };
 
-        // Step 1: Only directories can hold a theme.
-        match entry.file_type() {
-            Ok(file_type) if file_type.is_dir() => {}
-            Ok(_) => continue,
-            Err(error) => {
-                warn!(path = %entry.path().display(), %error, "skipping theme entry with unknown type");
+        // Step 2: Derive the single seed color shared by all variants.
+        let seed = derive_dynamic_seed(&settings);
+
+        // Step 3: Render and atomically persist every variant payload.
+        for (variant_id, descriptor) in &manifest.variants {
+            let payload = ResolvedTheme {
+                schema_version: SUPPORTED_RESOLVED_SCHEMA_VERSION,
+                theme_id: ThemeId::builtin_dynamic(),
+                variant: variant_id.clone(),
+                kind: VariantKind::Dynamic,
+                colors: compute_color_roles(&seed, descriptor.mode, descriptor.contrast),
+                typography: Typography::default(),
+                shape: Shape::default(),
+                motion: Motion::default(),
+                assets: AssetPaths {
+                    wallpaper: settings.dynamic.wallpaper.clone().into(),
+                },
+            };
+
+            let bytes = serde_json::to_vec_pretty(&payload)
+                .map_err(|err| ThemeError::Serialization(err.to_string()))?;
+            let path = self.dynamic_variant_path(descriptor);
+
+            // Skip payloads that are already up to date to avoid pointless rewrites
+            // when only one mode or contrast actually changed.
+            if std::fs::read(&path).ok().as_deref() == Some(bytes.as_slice()) {
                 continue;
+            }
+
+            write_atomic(&path, &bytes).map_err(|source| ThemeError::Io { path, source })?;
+        }
+
+        debug!(
+            variants = manifest.variants.len(),
+            seed = seed.as_str(),
+            dir = %self.cache_dir.join(BUILTIN_DYNAMIC_VARIANT_DIR).display(),
+            "Materialized built-in dynamic theme variants"
+        );
+
+        Ok(())
+    }
+}
+
+/// Derives the built-in dynamic theme seed color from user settings.
+///
+/// Resolution order:
+/// 1. The fixed seed color, when `SeedSource::Fixed` is selected and parseable.
+/// 2. The dominant color of the recorded wallpaper, when it is readable.
+/// 3. [`Color::fallback`], so the theme always resolves to a complete palette.
+fn derive_dynamic_seed(settings: &ThemeSettings) -> Color {
+    match settings.dynamic.seed_source {
+        SeedSource::Fixed => match settings.dynamic.fixed_seed.as_deref() {
+            Some(seed) => match Color::new(seed) {
+                Ok(color) => color,
+                Err(err) => {
+                    warn!(seed, error = %err, "Invalid fixed seed color; using the fallback seed");
+                    Color::fallback()
+                }
+            },
+            None => {
+                warn!(
+                    "Seed source is 'fixed' but no seed color is configured; using the fallback seed"
+                );
+                Color::fallback()
+            }
+        },
+        SeedSource::Wallpaper => match settings.dynamic.wallpaper.as_deref() {
+            Some(path) if path.is_file() => extract_seed_from_wallpaper(path),
+            Some(path) => {
+                warn!(path = %path.display(), "Recorded wallpaper is not readable; using the fallback seed");
+                Color::fallback()
+            }
+            None => {
+                debug!("No wallpaper is recorded yet; using the fallback seed");
+                Color::fallback()
+            }
+        },
+    }
+}
+
+#[async_trait]
+impl ThemeRepository for DiskThemeRepository {
+    async fn manifest(&self, id: &ThemeId) -> Result<ThemeManifest, ThemeError> {
+        // Step 1: The built-in dynamic manifest is constructed in memory and never
+        // validated against disk: its variant payloads are generated on resolution.
+        if id.is_builtin() {
+            return Ok(ThemeManifest::builtin_dynamic());
+        }
+
+        // Step 2: Look up theme in the registry.
+        let registry = self.load_registry().await?;
+        let entry = registry
+            .themes
+            .get(id)
+            .ok_or_else(|| ThemeError::NotFound(id.clone()))?;
+
+        // Step 3: Read theme.toml from theme directory.
+        let theme_dir = self.resolve_theme_dir(id, entry);
+        let manifest_path = theme_dir.join("theme.toml");
+
+        let content = std::fs::read_to_string(&manifest_path).map_err(|source| ThemeError::Io {
+            path: manifest_path.clone(),
+            source,
+        })?;
+
+        let manifest: ThemeManifest =
+            toml::from_str(&content).map_err(|e| ThemeError::Serialization(e.to_string()))?;
+
+        // Step 4: Validate manifest.
+        manifest.validate(&theme_dir)?;
+
+        Ok(manifest)
+    }
+
+    async fn entry(&self, id: &ThemeId) -> Result<Option<ThemeEntry>, ThemeError> {
+        if id.is_builtin() {
+            return Ok(None);
+        }
+        let registry = self.load_registry().await?;
+        Ok(registry.themes.get(id).cloned())
+    }
+
+    async fn list(&self) -> Result<Vec<ThemeId>, ThemeError> {
+        let registry = self.load_registry().await?;
+        Ok(registry.themes.keys().cloned().collect())
+    }
+
+    async fn load_registry(&self) -> Result<ThemeRegistry, ThemeError> {
+        let path = self.registry_path();
+
+        // Recovery Policy:
+        // 1. If themes.toml is missing: rebuild and save.
+        if !path.exists() {
+            info!(path = %path.display(), "themes.toml missing; rebuilding registry from disk");
+            return self.rebuild_registry().await;
+        }
+
+        // 2. Read and parse themes.toml.
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(source) => {
+                warn!(path = %path.display(), error = %source, "Cannot read themes.toml; rebuilding");
+                return self.rebuild_registry().await;
+            }
+        };
+
+        let mut registry: ThemeRegistry = match toml::from_str(&content) {
+            Ok(reg) => reg,
+            Err(err) => {
+                warn!(path = %path.display(), error = %err, "Corrupt themes.toml; rebuilding registry from disk");
+                return self.rebuild_registry().await;
+            }
+        };
+
+        // 3. Validate registry; rebuild if validation fails.
+        if let Err(err) = registry.validate(&self.themes_dir, &self.system_themes_dir) {
+            warn!(error = %err, "Registry validation failed; rebuilding from disk");
+            return self.rebuild_registry().await;
+        }
+
+        Ok(registry)
+    }
+
+    async fn save_registry(&self, reg: &ThemeRegistry) -> Result<(), ThemeError> {
+        let path = self.registry_path();
+        let content =
+            toml::to_string_pretty(reg).map_err(|e| ThemeError::Serialization(e.to_string()))?;
+        write_atomic(&path, content.as_bytes())
+            .map_err(|source| ThemeError::Io { path, source })?;
+        Ok(())
+    }
+
+    async fn load_settings(&self) -> Result<ThemeSettings, ThemeError> {
+        let path = self.settings_path();
+
+        // Step 1: A missing settings file simply means "use the defaults".
+        if !path.exists() {
+            warn!(path = %path.display(), "Settings file does not exist; using defaults");
+            return Ok(ThemeSettings::default());
+        }
+
+        // Step 2: Read the file, propagating real I/O failures to the caller.
+        let content = std::fs::read_to_string(&path).map_err(|source| ThemeError::Io {
+            path: path.clone(),
+            source,
+        })?;
+
+        // Step 3: Recover from corrupt files instead of failing the service.
+        match toml::from_str::<ThemeSettings>(&content) {
+            Ok(settings) => Ok(settings),
+            Err(err) => {
+                warn!(path = %path.display(), error = %err, "Failed to parse settings.toml; recovering to defaults");
+                Ok(ThemeSettings::default())
+            }
+        }
+    }
+
+    async fn save_settings(&self, settings: &ThemeSettings) -> Result<(), ThemeError> {
+        let path = self.settings_path();
+        let content = toml::to_string_pretty(settings)
+            .map_err(|err| ThemeError::Serialization(err.to_string()))?;
+        write_atomic(&path, content.as_bytes())
+            .map_err(|source| ThemeError::Io { path, source })?;
+        Ok(())
+    }
+
+    async fn resolve_variant(
+        &self,
+        id: &ThemeId,
+        variant: &VariantId,
+    ) -> Result<ResolvedTheme, ThemeError> {
+        // Step 1: Load the manifest together with the root its variant paths are relative to.
+        let (manifest, theme_root) = if id.is_builtin() {
+            (ThemeManifest::builtin_dynamic(), self.cache_dir.clone())
+        } else {
+            let registry = self.load_registry().await?;
+            let entry = registry
+                .themes
+                .get(id)
+                .ok_or_else(|| ThemeError::NotFound(id.clone()))?;
+            let dir = self.resolve_theme_dir(id, entry);
+            let manifest_path = dir.join("theme.toml");
+            let content =
+                std::fs::read_to_string(&manifest_path).map_err(|source| ThemeError::Io {
+                    path: manifest_path.clone(),
+                    source,
+                })?;
+            let manifest: ThemeManifest =
+                toml::from_str(&content).map_err(|e| ThemeError::Serialization(e.to_string()))?;
+            manifest.validate(&dir)?;
+            (manifest, dir)
+        };
+
+        // Step 2: Locate the requested variant descriptor.
+        let descriptor =
+            manifest
+                .variants
+                .get(variant)
+                .ok_or_else(|| ThemeError::NoSuchVariant {
+                    theme: id.clone(),
+                    variant: variant.clone(),
+                })?;
+
+        // Step 3: Regenerate the built-in dynamic payloads so its descriptors point at
+        // files that exist, mirroring how installed themes ship their payloads.
+        if id.is_builtin() {
+            self.materialize_dynamic_variants(&manifest).await?;
+        }
+
+        // Step 4: Read the payload through the single file-backed resolution path.
+        let file_path = theme_root.join(descriptor.file_path.as_path());
+        let content = std::fs::read_to_string(&file_path).map_err(|source| ThemeError::Io {
+            path: file_path.clone(),
+            source,
+        })?;
+
+        let resolved: ResolvedTheme = serde_json::from_str(&content).map_err(|err| {
+            ThemeError::Resolved(format!("failed to parse '{}': {err}", file_path.display()))
+        })?;
+
+        if resolved.schema_version != SUPPORTED_RESOLVED_SCHEMA_VERSION {
+            return Err(ThemeError::SchemaUnsupported {
+                found: resolved.schema_version,
+                supported: SUPPORTED_RESOLVED_SCHEMA_VERSION,
+            });
+        }
+
+        Ok(resolved)
+    }
+
+    async fn rebuild_registry(&self) -> Result<ThemeRegistry, ThemeError> {
+        let mut themes = BTreeMap::new();
+
+        // Scan user themes directory
+        if self.themes_dir.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&self.themes_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        let manifest_file = path.join("theme.toml");
+                        if manifest_file.is_file() {
+                            if let Ok(content) = std::fs::read_to_string(&manifest_file) {
+                                if let Ok(manifest) = toml::from_str::<ThemeManifest>(&content) {
+                                    if manifest.validate(&path).is_ok() {
+                                        themes.insert(
+                                            manifest.name.clone(),
+                                            ThemeEntry {
+                                                location: ThemeLocation::User,
+                                                source: ThemeSource::User,
+                                                installed_at: 0,
+                                            },
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        // Step 2: The directory name must be a valid theme identifier.
-        let directory_name = entry.file_name();
-        let Some(directory_name) = directory_name.to_str() else {
-            warn!(path = %entry.path().display(), "skipping theme directory with a non-UTF-8 name");
-            continue;
-        };
-        let theme = match ThemeId::new(directory_name) {
-            Ok(theme) => theme,
-            Err(error) => {
-                warn!(path = %entry.path().display(), %error, "skipping theme directory with an invalid name");
-                continue;
+        // Scan system themes directory
+        if self.system_themes_dir.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&self.system_themes_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        let manifest_file = path.join("theme.toml");
+                        if manifest_file.is_file() {
+                            if let Ok(content) = std::fs::read_to_string(&manifest_file) {
+                                if let Ok(manifest) = toml::from_str::<ThemeManifest>(&content) {
+                                    if manifest.validate(&path).is_ok() {
+                                        themes.entry(manifest.name.clone()).or_insert(ThemeEntry {
+                                            location: ThemeLocation::System,
+                                            source: ThemeSource::Package {
+                                                name: "system".into(),
+                                            },
+                                            installed_at: 0,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
-        };
-
-        // Step 3: Load and validate the manifest.
-        let manifest_path = entry.path().join(MANIFEST_FILE_NAME);
-        let manifest = match read_manifest(&manifest_path) {
-            Ok(manifest) => manifest,
-            Err(error) => {
-                warn!(path = %manifest_path.display(), %error, "skipping theme with an unreadable manifest");
-                continue;
-            }
-        };
-
-        if manifest.name != theme {
-            warn!(
-                directory = %theme,
-                manifest = %manifest.name,
-                "skipping theme whose manifest name does not match its directory"
-            );
-            continue;
         }
 
-        info!(theme = %theme, "loaded theme manifest");
-        manifests.insert(theme, manifest);
+        let registry = ThemeRegistry {
+            schema_version: crate::domain::registry::SUPPORTED_REGISTRY_SCHEMA_VERSION,
+            themes,
+        };
+
+        // Persist newly rebuilt registry
+        self.save_registry(&registry).await?;
+
+        Ok(registry)
     }
-
-    Ok(manifests)
-}
-
-/// Removes an installed theme's directory and its manifest.
-///
-/// # Errors
-/// Returns [`RdeError::Io`] when the directory cannot be removed.
-pub(super) fn remove_theme_dir(paths: &ThemePaths, theme: &ThemeId) -> RdeResult<()> {
-    let directory = paths.theme_dir(theme);
-
-    match fs::remove_dir_all(&directory) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(RdeError::Io(error)),
-    }
-}
-
-/// Moves an unparsable file aside so the service can rebuild it.
-///
-/// # Returns
-/// The path the file was moved to, ending in `.invalid`.
-///
-/// # Errors
-/// Returns [`RdeError::Io`] when the file cannot be renamed.
-pub(super) fn quarantine(path: &Path) -> RdeResult<PathBuf> {
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| RdeError::InvalidConfig(format!("invalid path {}", path.display())))?;
-    let destination = path.with_file_name(format!("{file_name}.invalid"));
-
-    fs::rename(path, &destination).map_err(RdeError::Io)?;
-
-    Ok(destination)
-}
-
-/// Reads and parses a TOML document, returning `None` when it does not exist.
-///
-/// # Errors
-/// Returns [`RdeError::Io`] for read failures and [`RdeError::InvalidConfig`]
-/// when the document cannot be parsed.
-fn read_toml<T: DeserializeOwned>(path: &Path) -> RdeResult<Option<T>> {
-    let contents = match fs::read_to_string(path) {
-        Ok(contents) => contents,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(RdeError::Io(error)),
-    };
-
-    toml::from_str(&contents).map(Some).map_err(|error| {
-        RdeError::InvalidConfig(format!("failed to parse {}: {error}", path.display()))
-    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::{
+        ContrastLevel, ThemeMode,
+        resolved::{Motion, Shape, Typography, VariantKind},
+    };
 
-    fn temp_dir(label: &str) -> PathBuf {
-        let process = std::process::id();
-        let path = std::env::temp_dir().join(format!("rde-theme-disk-{process}-{label}"));
-        let _ = fs::remove_dir_all(&path);
-        fs::create_dir_all(&path).expect("create temporary directory");
-        path
-    }
+    #[tokio::test]
+    async fn test_disk_repository_resolve_static_variant() {
+        let temp = tempfile::tempdir().unwrap();
+        let user_themes = temp.path().join("data").join("themes");
+        let config_dir = temp.path().join("config").join("themes");
+        let cache_dir = temp.path().join("cache").join("theme");
 
-    #[test]
-    fn missing_registry_reads_as_none() {
-        let path = temp_dir("missing").join("themes.toml");
-        assert!(
-            read_registry(&path)
-                .expect("missing file is not an error")
-                .is_none()
+        let repo = DiskThemeRepository::new(user_themes.clone(), config_dir, cache_dir);
+
+        // Write a theme: "ocean"
+        let ocean_dir = user_themes.join("ocean");
+        std::fs::create_dir_all(&ocean_dir).unwrap();
+
+        let dark_json_path = ocean_dir.join("dark.json");
+        let dark_roles = compute_color_roles(
+            &Color::new("#006a6a").unwrap(),
+            ThemeMode::Dark,
+            ContrastLevel::Normal,
         );
-    }
+        let resolved = ResolvedTheme {
+            schema_version: 1,
+            theme_id: ThemeId::new("ocean").unwrap(),
+            variant: VariantId::new("dark").unwrap(),
+            kind: VariantKind::Static,
+            colors: dark_roles,
+            typography: Typography::default(),
+            shape: Shape::default(),
+            motion: Motion::default(),
+            assets: AssetPaths::default(),
+        };
 
-    #[test]
-    fn corrupt_registry_is_reported_and_quarantinable() {
-        let path = temp_dir("corrupt").join("themes.toml");
-        fs::write(&path, "this is not toml = [").expect("write corrupt registry");
+        std::fs::write(
+            &dark_json_path,
+            serde_json::to_string_pretty(&resolved).unwrap(),
+        )
+        .unwrap();
 
-        assert!(read_registry(&path).is_err());
+        let manifest_content = r#"
+schema_version = 1
+name = "ocean"
+display_name = "Ocean"
+description = "Ocean theme"
+version = "1.0.0"
+default_variant = "dark"
 
-        let quarantined = quarantine(&path).expect("quarantine corrupt registry");
-        assert!(quarantined.ends_with("themes.toml.invalid"));
-        assert!(!path.exists(), "the corrupt registry must be moved aside");
-    }
+[variants.dark]
+mode = "dark"
+contrast = "normal"
+file_path = "dark.json"
+"#;
+        std::fs::write(ocean_dir.join("theme.toml"), manifest_content).unwrap();
 
-    #[test]
-    fn manifest_round_trips_atomically() {
-        let path = temp_dir("manifest").join("default").join("theme.toml");
-        let manifest = ThemeManifest::default_theme().expect("default manifest");
-
-        write_manifest(&path, &manifest).expect("write manifest");
-        let loaded = read_manifest(&path).expect("read manifest");
-
-        assert_eq!(loaded, manifest);
+        // Rebuild registry so it discovers ocean
+        let registry = repo.rebuild_registry().await.unwrap();
         assert!(
-            !path.with_file_name("theme.toml.tmp").exists(),
-            "temporary file must not survive a successful write"
+            registry
+                .themes
+                .contains_key(&ThemeId::new("ocean").unwrap())
+        );
+
+        // Resolve variant
+        let resolved_out = repo
+            .resolve_variant(
+                &ThemeId::new("ocean").unwrap(),
+                &VariantId::new("dark").unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resolved_out.theme_id.as_str(), "ocean");
+        assert_eq!(resolved_out.variant.as_str(), "dark");
+        assert_eq!(resolved_out.colors.primary, resolved.colors.primary);
+        assert_eq!(resolved_out.kind, VariantKind::Static);
+    }
+
+    #[tokio::test]
+    async fn test_builtin_dynamic_resolves_and_materializes_variants() {
+        let temp = tempfile::tempdir().unwrap();
+        let user_themes = temp.path().join("data").join("themes");
+        let config_dir = temp.path().join("config").join("themes");
+        let cache_dir = temp.path().join("cache").join("theme");
+
+        let repo = DiskThemeRepository::new(user_themes, config_dir.clone(), cache_dir.clone());
+
+        // Pin the dynamic seed so the expected palette is deterministic.
+        let settings = ThemeSettings {
+            dynamic: crate::domain::settings::DynamicSettings {
+                seed_source: SeedSource::Fixed,
+                fixed_seed: Some("#006a6a".to_string()),
+                wallpaper: None,
+            },
+            ..ThemeSettings::default()
+        };
+        repo.save_settings(&settings).await.unwrap();
+
+        let builtin = ThemeId::builtin_dynamic();
+        let resolved = repo
+            .resolve_variant(
+                &builtin,
+                &VariantId::new(VariantId::DARK_HIGH_CONTRAST).unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // Step 1: The published payload is the requested dynamic variant.
+        assert_eq!(resolved.theme_id, builtin);
+        assert_eq!(resolved.variant.as_str(), VariantId::DARK_HIGH_CONTRAST);
+        assert_eq!(resolved.kind, VariantKind::Dynamic);
+
+        // Step 2: Colors match the Material 3 derivation from the configured seed.
+        let expected = compute_color_roles(
+            &Color::new("#006a6a").unwrap(),
+            ThemeMode::Dark,
+            ContrastLevel::High,
+        );
+        assert_eq!(resolved.colors, expected);
+
+        // Step 3: Every variant descriptor now points at a materialized payload file.
+        for variant in [
+            VariantId::LIGHT,
+            VariantId::LIGHT_MEDIUM_CONTRAST,
+            VariantId::LIGHT_HIGH_CONTRAST,
+            VariantId::DARK,
+            VariantId::DARK_MEDIUM_CONTRAST,
+            VariantId::DARK_HIGH_CONTRAST,
+        ] {
+            let path = cache_dir
+                .join(BUILTIN_DYNAMIC_VARIANT_DIR)
+                .join(format!("{variant}.json"));
+            assert!(path.is_file(), "missing generated payload at {path:?}");
+        }
+
+        // Step 4: The generated set is readable through the static resolution path.
+        let manifest = repo.manifest(&builtin).await.unwrap();
+        manifest.validate(&cache_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_builtin_dynamic_falls_back_without_usable_seed() {
+        let temp = tempfile::tempdir().unwrap();
+        let repo = DiskThemeRepository::new(
+            temp.path().join("data"),
+            temp.path().join("config"),
+            temp.path().join("cache"),
+        );
+
+        // No settings at all: the wallpaper source cannot provide a seed.
+        let resolved = repo
+            .resolve_variant(
+                &ThemeId::builtin_dynamic(),
+                &VariantId::new("dark").unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let expected =
+            compute_color_roles(&Color::fallback(), ThemeMode::Dark, ContrastLevel::Normal);
+        assert_eq!(resolved.colors, expected);
+        assert_eq!(resolved.kind, VariantKind::Dynamic);
+    }
+
+    #[tokio::test]
+    async fn test_manifest_with_dot_dot_rejected() {
+        let manifest_content = r#"
+schema_version = 1
+name = "hacker"
+display_name = "Hacker"
+description = "Malicious theme"
+version = "1.0.0"
+default_variant = "dark"
+
+[variants.dark]
+mode = "dark"
+contrast = "normal"
+file_path = "../outside.json"
+"#;
+        let res = toml::from_str::<ThemeManifest>(manifest_content);
+        assert!(
+            res.is_err(),
+            "Manifest with '..' in relative path must fail deserialization"
         );
     }
 }

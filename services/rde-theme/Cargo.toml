@@ -14,9 +14,18 @@ rde-ipc.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 toml.workspace = true
 zbus.workspace = true
 tracing.workspace = true
 futures-util.workspace = true
+thiserror.workspace = true
+async-trait = "0.1"
+notify = "8.0"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 material-color-utilities = { version = "1.0.0-dev.18", features = ["serde"] }
+
+[dev-dependencies]
+tempfile = "3"
+

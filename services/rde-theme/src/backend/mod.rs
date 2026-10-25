@@ -1,53 +1,62 @@
-//! # Theme Backends
+//! # Backend Adapters and Color Schemes
 //!
-//! Resolves stored themes into palettes through the [`ThemeBackend`] trait and
-//! renders them for each desktop toolkit.
+//! Provides the [`Backend`] trait and toolkit emitters (GTK, Qt/KDE, Material 3).
+//!
+//! Backends are pure string/byte builders that return paths and payloads.
+//! File writes are performed exclusively by the application layer.
 
-use rde_core::errors::RdeResult;
+use std::path::PathBuf;
+use thiserror::Error;
 
-use crate::domain::{
-    palette::Palette,
-    theme::{ColorScheme, Theme, ThemeManifest},
-};
+use crate::domain::resolved::ResolvedTheme;
 
 pub mod gtk;
 pub mod material;
 pub mod qt;
 
-pub use material::MaterialBackend;
+pub use gtk::GtkEmitter;
+pub use material::{
+    FALLBACK_SEED_COLOR, MATERIAL_ALGORITHM_VERSION, SEED_EXTRACTOR_VERSION, compute_color_roles,
+    extract_seed_from_wallpaper,
+};
+pub use qt::QtEmitter;
 
-/// Color engine that derives palettes from theme definitions.
-///
-/// Backends perform no I/O; the store owns persistence and the D-Bus interface
-/// owns signalling, which keeps this layer pure and easy to test. The default
-/// implementation is [`MaterialBackend`].
-pub trait ThemeBackend {
-    /// Generates a palette for a hexadecimal source color.
+/// Errors produced during backend rendering.
+#[derive(Debug, Error)]
+pub enum BackendError {
+    /// Failed to render backend output.
+    #[error("failed to render backend '{backend}': {message}")]
+    Render {
+        backend: &'static str,
+        message: String,
+    },
+
+    /// I/O error occurred during asset processing.
+    #[error("I/O error during backend processing: {0}")]
+    Io(#[from] std::io::Error),
+}
+
+/// Output payload emitted by a [`Backend`].
+#[derive(Debug, Clone, Default)]
+pub struct BackendOutput {
+    /// Files to be atomically persisted: `(absolute_path, content_bytes)`.
+    pub files: Vec<(PathBuf, Vec<u8>)>,
+
+    /// Environment variables to set in the daemon and child processes.
+    pub env: Vec<(String, String)>,
+}
+
+/// A toolkit or environment emitter that renders a [`ResolvedTheme`].
+pub trait Backend: Send + Sync {
+    /// Unique name of the backend adapter (e.g. `"gtk"`, `"qt"`).
+    fn name(&self) -> &'static str;
+
+    /// Renders configuration files and environment definitions for the theme.
     ///
     /// # Parameters
-    /// - `source_color`: seed color in any supported hexadecimal form
-    /// - `color_scheme`: light or dark variant to generate
+    /// - `theme`: fully-resolved theme payload
     ///
     /// # Errors
-    /// Returns [`rde_core::errors::RdeError::InvalidValue`] when the source
-    /// color cannot be parsed.
-    fn palette(&self, source_color: &str, color_scheme: ColorScheme) -> RdeResult<Palette>;
-
-    /// Resolves a manifest into a theme with a generated palette.
-    ///
-    /// # Parameters
-    /// - `manifest`: stored theme definition
-    /// - `color_scheme`: scheme the palette should be generated for
-    ///
-    /// # Errors
-    /// Returns the error produced by [`ThemeBackend::palette`].
-    fn resolve(&self, manifest: &ThemeManifest, color_scheme: ColorScheme) -> RdeResult<Theme> {
-        let palette = self.palette(&manifest.source_color, color_scheme)?;
-
-        Ok(Theme {
-            manifest: manifest.clone(),
-            color_scheme,
-            palette,
-        })
-    }
+    /// Returns [`BackendError`] if rendering fails.
+    fn render(&self, theme: &ResolvedTheme) -> Result<BackendOutput, BackendError>;
 }
