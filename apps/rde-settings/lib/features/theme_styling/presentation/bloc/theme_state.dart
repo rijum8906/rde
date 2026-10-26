@@ -1,4 +1,5 @@
 import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
+import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
 import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
 import 'package:rde_settings/core/theme/domain/entities/theme_manifest.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
@@ -13,6 +14,7 @@ class ThemeState {
     this.catalog,
     this.previewMode = AppearanceMode.dark,
     this.previewResolved,
+    this.dynamicSeeds = DynamicSeeds.fallback,
     this.isBusy = false,
     this.errorMessage,
   });
@@ -32,6 +34,12 @@ class ThemeState {
 
   /// Payload the live preview renders, `null` until it is resolved.
   final ResolvedTheme? previewResolved;
+
+  /// Seeds the dynamic palettes are generated from.
+  ///
+  /// The service exposes no seed properties, so this mirrors the last seeds this
+  /// page wrote (or extracted) and starts at the service defaults.
+  final DynamicSeeds dynamicSeeds;
 
   /// True while a service mutation or catalog refresh is in flight.
   final bool isBusy;
@@ -59,6 +67,7 @@ class ThemeState {
     ThemeCatalog? catalog,
     AppearanceMode? previewMode,
     ResolvedTheme? previewResolved,
+    DynamicSeeds? dynamicSeeds,
     bool? isBusy,
     String? errorMessage,
     bool clearError = false,
@@ -68,6 +77,7 @@ class ThemeState {
       catalog: catalog ?? this.catalog,
       previewMode: previewMode ?? this.previewMode,
       previewResolved: previewResolved ?? this.previewResolved,
+      dynamicSeeds: dynamicSeeds ?? this.dynamicSeeds,
       isBusy: isBusy ?? this.isBusy,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );

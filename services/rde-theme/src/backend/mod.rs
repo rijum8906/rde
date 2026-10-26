@@ -15,11 +15,8 @@ pub mod material;
 pub mod qt;
 
 pub use gtk::GtkEmitter;
-pub use material::{
-    FALLBACK_SEED_COLOR, MATERIAL_ALGORITHM_VERSION, SEED_EXTRACTOR_VERSION, compute_color_roles,
-    extract_seed_from_wallpaper,
-};
-pub use qt::QtEmitter;
+pub use material::{FALLBACK_SEED_COLOR, MATERIAL_ALGORITHM_VERSION, compute_color_roles};
+pub use qt::{KDE_COLOR_SCHEME_NAME, QtEmitter};
 
 /// Errors produced during backend rendering.
 #[derive(Debug, Error)]

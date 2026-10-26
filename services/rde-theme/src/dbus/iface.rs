@@ -5,7 +5,7 @@
 //! All data return values are serialized as JSON strings to guarantee backwards
 //! compatibility across toolkit consumers (C/GTK, Flutter, Qt, Shell scripts).
 
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 use zbus::{
     interface,
     object_server::SignalEmitter,
@@ -17,7 +17,7 @@ use crate::{
         ResolvedTheme, ThemeManifest,
         identity::ThemeId,
         manifest::{ContrastLevel, ThemeMode},
-        settings::{DynamicThemeUpdate, SeedSource},
+        settings::DynamicThemeUpdate,
     },
     service::ThemeService,
     theme_store::ThemeError,
@@ -93,38 +93,6 @@ impl ThemeInterface {
     #[zbus(property)]
     pub async fn generation(&self) -> u32 {
         self.service.current_state().await.generation
-    }
-
-    /// Seed source of the built-in dynamic theme (`"wallpaper"` or `"fixed"`).
-    #[zbus(property)]
-    pub async fn dynamic_seed_source(&self) -> String {
-        match self.service.settings().await.dynamic.seed_source {
-            SeedSource::Wallpaper => "wallpaper".to_string(),
-            SeedSource::Fixed => "fixed".to_string(),
-        }
-    }
-
-    /// Explicit seed color of the built-in dynamic theme, empty when unset.
-    #[zbus(property)]
-    pub async fn dynamic_seed(&self) -> String {
-        self.service
-            .settings()
-            .await
-            .dynamic
-            .fixed_seed
-            .unwrap_or_default()
-    }
-
-    /// Wallpaper the built-in dynamic theme derives its seed color from, empty when unset.
-    #[zbus(property)]
-    pub async fn dynamic_wallpaper(&self) -> String {
-        self.service
-            .settings()
-            .await
-            .dynamic
-            .wallpaper
-            .map(|path| path.to_string_lossy().into_owned())
-            .unwrap_or_default()
     }
 
     // =================================
@@ -213,47 +181,46 @@ impl ThemeInterface {
             .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
     }
 
-    /// Updates the built-in dynamic theme (`rde-dynamic`) inputs and republishes it.
+    /// Updates the seed colors of the built-in dynamic theme (`rde-dynamic`).
     ///
     /// # Parameters
-    /// - `seed_source`: `"wallpaper"` to derive the seed color from the desktop
-    ///   wallpaper, or `"fixed"` to use an explicit color
-    /// - `seed`: `#RRGGBB` seed color, required when `seed_source` is `"fixed"`;
-    ///   an empty string keeps the currently stored color
-    /// - `wallpaper`: absolute wallpaper path used by the `"wallpaper"` seed source;
-    ///   an empty string keeps the currently stored path
+    /// - `primary`: required `#RRGGBB` seed of the primary family and neutral
+    ///   surfaces
+    /// - `secondary`, `tertiary`, `error`: optional `#RRGGBB` seeds of their
+    ///   families; an empty string keeps the currently stored color
     ///
     /// # Behavior
-    /// The inputs are validated and persisted to `settings.toml`. When the dynamic
-    /// theme is active, the palette is regenerated and `ThemeChanged` is emitted.
+    /// The seeds are validated and persisted to `settings.toml`. When the dynamic
+    /// theme is active, every palette is regenerated and `ThemeChanged` is emitted.
+    /// Extracting seeds from a wallpaper is the caller's responsibility.
     ///
     /// # Errors
-    /// Returns `org.freedesktop.DBus.Error.InvalidArgs` for malformed inputs and
-    /// `org.freedesktop.DBus.Error.Failed` when the new inputs cannot be persisted.
+    /// Returns `org.freedesktop.DBus.Error.InvalidArgs` when the primary seed is
+    /// empty or any seed is malformed, and `org.freedesktop.DBus.Error.Failed`
+    /// when the new seeds cannot be persisted.
     pub async fn update_dynamic_theme(
         &self,
-        seed_source: &str,
-        seed: &str,
-        wallpaper: &str,
+        primary: &str,
+        secondary: &str,
+        tertiary: &str,
+        error: &str,
     ) -> zbus::fdo::Result<()> {
-        // Step 1: Parse the requested seed source.
-        let source = match seed_source.trim().to_lowercase().as_str() {
-            "wallpaper" => SeedSource::Wallpaper,
-            "fixed" => SeedSource::Fixed,
-            other => {
-                return Err(zbus::fdo::Error::InvalidArgs(format!(
-                    "invalid seed source '{other}'"
-                )));
-            }
-        };
+        // Step 1: The primary seed is required; an empty value is a caller error.
+        let primary = primary.trim();
+        if primary.is_empty() {
+            return Err(zbus::fdo::Error::InvalidArgs(
+                "a primary seed color is required".to_string(),
+            ));
+        }
 
-        // Step 2: Build the update, treating empty strings as "keep the current value".
-        let seed = seed.trim();
-        let wallpaper = wallpaper.trim();
+        // Step 2: Treat an empty optional seed as "keep the current color".
+        let seed_arg =
+            |value: &str| Some(value.trim().to_string()).filter(|value| !value.is_empty());
         let update = DynamicThemeUpdate {
-            seed_source: Some(source),
-            fixed_seed: Some(seed.to_string()).filter(|value| !value.is_empty()),
-            wallpaper: Some(PathBuf::from(wallpaper)).filter(|_| !wallpaper.is_empty()),
+            primary: Some(primary.to_string()),
+            secondary: seed_arg(secondary),
+            tertiary: seed_arg(tertiary),
+            error: seed_arg(error),
         };
 
         // Step 3: Persist and, when active, republish the dynamic theme.
@@ -510,10 +477,16 @@ mod tests {
             assert!(xml.contains(name), "missing {name}: {xml}");
         }
 
-        // Read-only views of the dynamic inputs for settings UIs.
-        assert!(xml.contains("DynamicSeedSource"), "{xml}");
-        assert!(xml.contains("DynamicSeed"), "{xml}");
-        assert!(xml.contains("DynamicWallpaper"), "{xml}");
+        // The dynamic seeds are write-only through `UpdateDynamicTheme`; they are
+        // no longer mirrored as individual properties.
+        for name in [
+            "DynamicPrimary",
+            "DynamicSecondary",
+            "DynamicTertiary",
+            "DynamicError",
+        ] {
+            assert!(!xml.contains(name), "unexpected {name}: {xml}");
+        }
     }
 
     /// The Flutter client decodes these payloads by signature. Keeping the
@@ -526,7 +499,7 @@ mod tests {
         let colors = format!("({})", "s".repeat(34));
         assert_eq!(
             ResolvedTheme::SIGNATURE.to_string(),
-            format!("(ussu{colors}(ss)(ddddd)(uuuss)(s))"),
+            format!("(ussu{colors}(ss)(ddddd)(uuuss))"),
         );
         assert_eq!(
             ThemeManifest::SIGNATURE.to_string(),

@@ -52,6 +52,27 @@ by default). Applications read this file at startup so the first frame already r
 desktop theme; after a `ThemeChanged` signal they reload the authoritative payload with
 `GetResolvedTheme`.
 
+### Dynamic theme seeds
+
+The built-in `rde-dynamic` theme renders four role families, each from its own seed
+color. The seeds live in the user's settings file:
+
+```toml
+[dynamic]
+primary = "#6750a4"
+secondary = "#006a6a"
+tertiary = "#b52700"
+error = "#ba1a1a"
+```
+
+Primary also drives the neutral surfaces, outlines, and inverse roles; secondary,
+tertiary, and error each drive their own tonal palette. Changing one seed only repaints
+that family.
+
+The service never reads wallpapers or any other image. Desktop environments, shells, and
+settings apps are responsible for extracting seeds (for example from the current KDE
+wallpaper) and sending them with `UpdateDynamicTheme`.
+
 ### `themes.toml` — registry
 
 Session state only. It never stores palette values, so editing a theme's source color
@@ -102,65 +123,59 @@ Bus name `org.rde.Theme`, object path `/org/rde/Theme`, interface `org.rde.Theme
 
 | Property | Signature | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `Version` | `s` | read | Service version (`CARGO_PKG_VERSION`) |
-| `CurrentTheme` | `s` | read | Identifier of the active theme |
-| `InstalledThemes` | `as` | read | Installed theme identifiers, sorted |
-| `ColorScheme` | `s` | read/write | `light` or `dark` |
-| `SourceColor` | `s` | read | Source color of the active theme, `#RRGGBB` |
+| `Version` | `u` | read | Interface contract version |
+| `ActiveTheme` | `s` | read | Identifier of the active theme, empty for the built-in dynamic theme |
+| `Mode` | `s` | read | `light` or `dark` |
+| `AvailableThemes` | `as` | read | Installed theme identifiers |
+| `Generation` | `u` | read | Publication generation of the resolved payload |
 
-Writing `ColorScheme` persists the preference, emits `ColorSchemeChanged` and the
-standard `PropertiesChanged` signal.
+The dynamic seeds are write-only through `UpdateDynamicTheme`; they are not mirrored as
+properties.
 
 ### Methods
 
 | Method | Signature | Description |
 | :--- | :--- | :--- |
-| `SetTheme` | `s → ()` | Activate an installed theme |
-| `CreateTheme` | `ss → ()` | Create a theme from `(name, source_color)`; installed but not activated |
-| `DeleteTheme` | `s → ()` | Delete an installed, non-active theme |
-| `SetSourceColor` | `s → ()` | Re-seed the active theme and regenerate its palette |
-| `ToggleColorScheme` | `() → s` | Switch light/dark and return the new scheme |
-| `GetPalette` | `ss → a{ss}` | Palette role map for `(theme, scheme)` in `#RRGGBB` |
-| `GetThemeInfo` | `s → a{ss}` | Manifest metadata for theme pickers |
-| `Reload` | `() → ()` | Re-read the database after external changes |
+| `GetResolvedTheme` | `() → (ussu<roles>(ss)(ddddd)(uuuss))` | Payload the desktop currently renders |
+| `GetThemeManifest` | `s → (ussssssa{s(uusss)}s)` | Author manifest of one theme |
+| `ListThemes` | `() → as` | Installed theme identifiers |
+| `SetActiveTheme` | `s → ()` | Activate an installed theme (`rde-dynamic` for the built-in one) |
+| `SetMode` | `s → ()` | Persist `light` or `dark` and republish |
+| `UpdateDynamicTheme` | `ssss → ()` | Store `(primary, secondary, tertiary, error)` seeds and republish the dynamic theme; `primary` is required, an empty optional seed keeps the stored color |
+| `Reload` | `() → ()` | Re-read manifests, variant files, and settings |
+| `Preview` | `sss → s` | Resolve a theme for an appearance without committing it |
 
-Errors are mapped to standard FDO names: unknown themes report
-`org.freedesktop.DBus.Error.FileNotFound`, existing themes
-`org.freedesktop.DBus.Error.FileExists`, invalid names/colors/schemes
-`org.freedesktop.DBus.Error.InvalidArgs`, and write failures
-`org.freedesktop.DBus.Error.IOError`.
+Errors are mapped to standard FDO names: unknown themes and malformed payloads report
+`org.freedesktop.DBus.Error.InvalidArgs`, and persistence or resolution failures report
+`org.freedesktop.DBus.Error.Failed`.
 
-Every successful `SetTheme`, `SetSourceColor`, `ColorScheme` write,
-`ToggleColorScheme`, and `Reload` also rewrites the [Qt color schemes](#qt-integration)
-before its signals are emitted.
+Every successful mutation rewrites the [Qt color schemes](#qt-integration) before its
+signals are emitted.
 
 ### Signals
 
 | Signal | Signature | Emitted when |
 | :--- | :--- | :--- |
-| `ThemeChanged` | `ss` | The active theme changes (`theme`, `color_scheme`) |
-| `ColorSchemeChanged` | `s` | The light/dark preference changes |
-| `PaletteChanged` | `ss` | The active theme is re-seeded (`theme`, `source_color`) |
-| `InstalledThemesChanged` | `as` | A theme is installed, removed, or reloaded |
+| `ThemeChanged` | `su` | A new payload is durable on disk (`resolved_json`, `generation`) |
+| `ThemeListChanged` | `as` | An installed theme is added or removed |
+| `Reloaded` | `()` | A reload completed |
 
 ### Examples
 
 ```bash
-# List themes and the active one
+# Read the current state and seeds
 gdbus call --session --dest org.rde.Theme --object-path /org/rde/Theme \
   --method org.freedesktop.DBus.Properties.GetAll org.rde.Theme
 
-# Create a theme from a source color, then activate it
+# Re-seed the dynamic theme from four colors and activate it
 gdbus call --session --dest org.rde.Theme --object-path /org/rde/Theme \
-  --method org.rde.Theme.CreateTheme ocean '#006A6A'
+  --method org.rde.Theme.UpdateDynamicTheme '#6750A4' '#006A6A' '#B52700' '#BA1A1A'
 gdbus call --session --dest org.rde.Theme --object-path /org/rde/Theme \
-  --method org.rde.Theme.SetTheme ocean
+  --method org.rde.Theme.SetActiveTheme rde-dynamic
 
-# Re-seed the active theme and read its dark palette
+# Change only the primary seed
 gdbus call --session --dest org.rde.Theme --object-path /org/rde/Theme \
-  --method org.rde.Theme.SetSourceColor '#FF6200'
-gdbus call --session --dest org.rde.Theme --object-path /org/rde/Theme \
-  --method org.rde.Theme.GetPalette ocean dark
+  --method org.rde.Theme.UpdateDynamicTheme '#FF6200' '' '' ''
 ```
 
 ## Workflows
@@ -171,12 +186,13 @@ Qt and KDE applications are re-colored automatically. The service writes:
 
 | File | Purpose |
 | :--- | :--- |
-| `$XDG_DATA_HOME/color-schemes/RdeM3.colors` | Standard KDE color scheme, discoverable in System Settings |
-| `$XDG_CONFIG_HOME/kdeglobals` | Color groups used by KDE applications plus titlebar colors |
-| `$XDG_CONFIG_HOME/qt5ct/colors/RdeM3.conf` | qt5ct color scheme |
-| `$XDG_CONFIG_HOME/qt5ct/qt5ct.conf` | Activates the scheme (`custom_palette=true`, `color_scheme_path=…`) |
-| `$XDG_CONFIG_HOME/qt6ct/colors/RdeM3.conf` | qt6ct color scheme |
-| `$XDG_CONFIG_HOME/qt6ct/qt6ct.conf` | Activates the scheme for Qt 6 |
+| `$XDG_DATA_HOME/color-schemes/RdeM3.colors` | Standard KDE color scheme, applied with `plasma-apply-colorscheme RdeM3` |
+| `$XDG_CONFIG_HOME/kdeglobals` | Color groups read by KDE applications, `[General] AccentColor` for Plasma accents |
+
+`kdeglobals` is merged, not replaced: only the color keys the service owns are
+rewritten, so styles, fonts, icons, and unrelated keys survive every theme change.
+qt5ct/qt6ct files are not generated; Qt applications that do not use the KDE platform
+theme keep their own palette.
 
 Defaults are `~/.local/share` and `~/.config`; the XDG variables are honored.
 
@@ -190,8 +206,8 @@ Defaults are `~/.local/share` and `~/.config`; the XDG variables are honored.
 - **Three color groups**: active and inactive share colors; disabled widgets keep the
   surfaces but neutralize text and links to outline tones.
 - **Non-destructive merging**: only the appearance keys and color groups the service
-  owns are changed. Comments, styles, fonts, icons, and unrelated keys in `kdeglobals`,
-  `qt5ct.conf`, and `qt6ct.conf` are preserved.
+  owns are changed. Comments, styles, fonts, icons, and unrelated keys in `kdeglobals`
+  are preserved.
 - **Idempotent**: files are written atomically and only when their content changes, so
   Qt's configuration watcher is not woken up needlessly.
 - **Best effort**: an unwritable Qt directory is logged as a warning and reported in the
@@ -206,20 +222,21 @@ to their system palette.
 Verify the generated files after a theme change:
 
 ```bash
-cat ~/.config/qt5ct/colors/RdeM3.conf
 cat ~/.local/share/color-schemes/RdeM3.colors
 cat ~/.config/kdeglobals
 ```
 
 ## Workflows
 
-### Theme creation
+### Dynamic theme re-seeding
 
-1. `CreateTheme(name, source_color)` validates the identifier and normalizes the color.
-2. A manifest is written atomically to `themes/<name>/theme.toml`.
-3. The registry gains the identifier and is written atomically.
-4. `InstalledThemesChanged` and the `InstalledThemes` property change are emitted.
-5. Palettes are derived on demand from the manifest, so no colors are persisted.
+1. `UpdateDynamicTheme(primary, secondary, tertiary, error)` requires a primary seed and
+   validates every provided seed before anything is written.
+2. `settings.toml` is rewritten atomically; an empty secondary, tertiary, or error
+   argument keeps the stored seed.
+3. When `rde-dynamic` is active, all six mode/contrast variants are regenerated and the
+   published payload is replaced.
+4. `ThemeChanged` is emitted only after the new payload is durable on disk.
 
 ### Startup and recovery
 
@@ -245,7 +262,8 @@ cannot be deleted: switch to another theme first.
 
 - Service lifecycle, logging, and daemon supervision
 - Full theme database with self-healing registry and per-theme manifests
-- Theme creation from a source color, activation, deletion, and re-seeding
+- Theme activation and a dynamic theme seeded from primary, secondary, tertiary, and
+  error colors
 - Material 3 palettes in light and dark schemes, exposed role by role over D-Bus
 - Persistent light/dark preference
 - Qt 5/6 and KDE color schemes applied at startup and on every theme change

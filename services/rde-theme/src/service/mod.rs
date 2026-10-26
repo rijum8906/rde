@@ -17,16 +17,16 @@ use tokio::sync::{RwLock, broadcast};
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    backend::{Backend, compute_color_roles},
+    backend::{Backend, KDE_COLOR_SCHEME_NAME, compute_color_roles},
     domain::{
         identity::ThemeId,
         manifest::{ContrastLevel, ThemeManifest, ThemeMode},
         registry::ThemeRegistry,
         resolved::{
-            AssetPaths, Color, Motion, ResolvedTheme, SUPPORTED_RESOLVED_SCHEMA_VERSION, Shape,
+            ColorSeeds, Motion, ResolvedTheme, SUPPORTED_RESOLVED_SCHEMA_VERSION, Shape,
             Typography, VariantKind,
         },
-        settings::{DynamicThemeUpdate, SeedSource, ThemeSettings},
+        settings::{DynamicThemeUpdate, ThemeSettings},
     },
     fs::write_atomic,
     theme_store::{ThemeError, ThemeRepository},
@@ -233,11 +233,10 @@ impl ThemeService {
             theme_id: ThemeId::builtin_dynamic(),
             variant: variant.clone(),
             kind: VariantKind::Dynamic,
-            colors: compute_color_roles(&Color::fallback(), mode, contrast),
+            colors: compute_color_roles(&ColorSeeds::fallback(), mode, contrast),
             typography: Typography::default(),
             shape: Shape::default(),
             motion: Motion::default(),
-            assets: AssetPaths::default(),
         }
     }
 
@@ -285,7 +284,7 @@ impl ThemeService {
         if is_kde {
             debug!("Running on KDE; invoking plasma-apply-colorscheme");
             let _ = std::process::Command::new("plasma-apply-colorscheme")
-                .arg("RdeM3")
+                .arg(KDE_COLOR_SCHEME_NAME)
                 .status();
         }
     }
@@ -445,27 +444,27 @@ impl ThemeService {
         Ok(Self::resolve_with_fallback(self.repo.as_ref(), id, mode, contrast).await)
     }
 
-    /// Updates the inputs of the built-in dynamic theme (`rde-dynamic`).
+    /// Updates the seed colors of the built-in dynamic theme (`rde-dynamic`).
     ///
     /// # Parameters
-    /// - `update`: partial set of dynamic inputs; `None` fields keep current values
+    /// - `update`: partial set of seeds; `None` roles keep their current color
     ///
     /// # Behavior
-    /// Inputs are validated before anything is written, then `settings.toml` is
+    /// Seeds are validated before anything is written, then `settings.toml` is
     /// persisted atomically and the in-memory snapshot is refreshed. When the
-    /// dynamic theme is active it is re-resolved from the new seed and republished;
-    /// a static active theme keeps its shipped payloads and picks the new inputs up
+    /// dynamic theme is active every palette is regenerated and republished; a
+    /// static active theme keeps its shipped payloads and picks the new seeds up
     /// on the next activation.
     ///
     /// # Errors
-    /// Returns [`ThemeError::Settings`] when an input is rejected, or
+    /// Returns [`ThemeError::Settings`] when a seed is rejected, or
     /// [`ThemeError::Io`] when the settings file cannot be written. A rejected
     /// update leaves both the file and the in-memory state untouched.
     pub async fn update_dynamic_theme(
         &self,
         update: DynamicThemeUpdate,
     ) -> Result<ThemeSettings, ThemeError> {
-        info!("Updating built-in dynamic theme inputs");
+        info!("Updating built-in dynamic theme seeds");
 
         // Step 1: Apply and validate the update against the persisted settings.
         let mut next = self.settings.read().await.clone();
@@ -481,27 +480,6 @@ impl ThemeService {
         self.republish_if_dynamic().await?;
 
         Ok(next)
-    }
-
-    /// Notifies the service of an external wallpaper change to recompute dynamic themes.
-    ///
-    /// The path is persisted so wallpaper-derived colors survive a restart, and the
-    /// dynamic theme is republished when it is active.
-    ///
-    /// # Errors
-    /// Returns [`ThemeError::Settings`] when the path is not absolute, or
-    /// [`ThemeError::Io`] when the settings file cannot be written.
-    pub async fn notify_wallpaper_changed(&self, path: PathBuf) -> Result<(), ThemeError> {
-        info!(path = %path.display(), "Desktop wallpaper changed; updating dynamic theme inputs");
-
-        self.update_dynamic_theme(DynamicThemeUpdate {
-            seed_source: Some(SeedSource::Wallpaper),
-            fixed_seed: None,
-            wallpaper: Some(path),
-        })
-        .await?;
-
-        Ok(())
     }
 
     /// Re-resolves and republishes the built-in dynamic theme when it is active.
@@ -633,7 +611,7 @@ mod tests {
         identity::VariantId,
         manifest::{ContrastLevel, RelativePath, ThemeMode, VariantDescriptor},
         registry::{ThemeEntry, ThemeLocation, ThemeRegistry, ThemeSource},
-        resolved::{AssetPaths, Color, Motion, Shape, Typography, VariantKind},
+        resolved::{Color, ColorSeeds, Motion, Shape, Typography, VariantKind},
     };
     use async_trait::async_trait;
     use std::collections::BTreeMap;
@@ -719,17 +697,12 @@ mod tests {
                 return Ok(res.clone());
             }
 
-            // Return a dynamic fallback derived from the repository's current settings,
+            // Return a dynamic fallback derived from the repository's current seeds,
             // mirroring the disk repository's seed handling.
             let settings = self.settings.lock().unwrap().clone();
-            let seed = settings
-                .dynamic
-                .fixed_seed
-                .as_deref()
-                .and_then(|seed| Color::new(seed).ok())
-                .unwrap_or_else(Color::fallback);
+            let seeds = settings.dynamic.color_seeds();
             let colors = crate::backend::material::compute_color_roles(
-                &seed,
+                &seeds,
                 ThemeMode::Dark,
                 ContrastLevel::Normal,
             );
@@ -742,7 +715,6 @@ mod tests {
                 typography: Typography::default(),
                 shape: Shape::default(),
                 motion: Motion::default(),
-                assets: AssetPaths::default(),
             })
         }
 
@@ -757,7 +729,7 @@ mod tests {
 
     fn sample_resolved(theme_id: &ThemeId, variant_id: &VariantId) -> ResolvedTheme {
         let colors = crate::backend::material::compute_color_roles(
-            &Color::new("#123456").unwrap(),
+            &ColorSeeds::uniform(&Color::new("#123456").unwrap()),
             ThemeMode::Dark,
             ContrastLevel::Normal,
         );
@@ -770,7 +742,6 @@ mod tests {
             typography: Typography::default(),
             shape: Shape::default(),
             motion: Motion::default(),
-            assets: AssetPaths::default(),
         }
     }
 
@@ -874,22 +845,20 @@ mod tests {
         let generation_before = service.current_state().await.generation;
         let mut sub = service.subscribe_theme_changed();
 
-        // Step 1: Update the seed inputs and expect a republish.
+        // Step 1: Update every seed and expect a republish.
         let settings = service
             .update_dynamic_theme(DynamicThemeUpdate {
-                seed_source: Some(SeedSource::Fixed),
-                fixed_seed: Some("#006a6a".to_string()),
-                wallpaper: None,
+                primary: Some("#006a6a".to_string()),
+                secondary: Some("#6750a4".to_string()),
+                tertiary: Some("#b52700".to_string()),
+                error: Some("#b90063".to_string()),
             })
             .await
             .unwrap();
-        assert_eq!(settings.dynamic.seed_source, SeedSource::Fixed);
+        assert_eq!(settings.dynamic.primary, "#006a6a");
 
-        // The inputs are persisted through the repository, not only held in memory.
-        assert_eq!(
-            repo.settings.lock().unwrap().dynamic.fixed_seed.as_deref(),
-            Some("#006a6a")
-        );
+        // The seeds are persisted through the repository, not only held in memory.
+        assert_eq!(repo.settings.lock().unwrap().dynamic.secondary, "#6750a4");
 
         let state_after = service.current_state().await;
         assert_eq!(state_after.generation, generation_before + 1);
@@ -899,25 +868,26 @@ mod tests {
         assert_eq!(
             received.colors,
             crate::backend::material::compute_color_roles(
-                &Color::new("#006a6a").unwrap(),
+                &ColorSeeds {
+                    primary: Color::new("#006a6a").unwrap(),
+                    secondary: Color::new("#6750a4").unwrap(),
+                    tertiary: Color::new("#b52700").unwrap(),
+                    error: Color::new("#b90063").unwrap(),
+                },
                 ThemeMode::Dark,
                 ContrastLevel::Normal,
             )
         );
 
-        // Step 2: A rejected update must not touch the persisted inputs.
+        // Step 2: A rejected update must not touch the persisted seeds.
         let rejected = service
             .update_dynamic_theme(DynamicThemeUpdate {
-                seed_source: Some(SeedSource::Fixed),
-                fixed_seed: Some("teal".to_string()),
-                wallpaper: None,
+                primary: Some("teal".to_string()),
+                ..DynamicThemeUpdate::default()
             })
             .await;
         assert!(matches!(rejected, Err(ThemeError::Settings(_))));
-        assert_eq!(
-            service.settings().await.dynamic.fixed_seed.as_deref(),
-            Some("#006a6a")
-        );
+        assert_eq!(service.settings().await.dynamic.primary, "#006a6a");
     }
 
     #[tokio::test]

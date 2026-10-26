@@ -4,7 +4,6 @@ import 'package:rde_settings/core/dbus/dbus.dart';
 import 'package:rde_settings/core/errors/rde_error.dart';
 import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
 import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
-import 'package:rde_settings/core/theme/domain/entities/seed_source.dart';
 import 'package:rde_settings/core/theme/domain/entities/theme_manifest.dart';
 import 'package:rde_settings/core/theme/domain/entities/theme_snapshot.dart';
 
@@ -50,7 +49,7 @@ class RdeThemeProxy {
 
   /// Signature of the struct returned by `GetResolvedTheme`.
   static final DBusSignature _resolvedSignature = DBusSignature(
-    '(ussu(${'s' * ColorRoles.roleCount})(ss)(ddddd)(uuuss)(s))',
+    '(ussu(${'s' * ColorRoles.roleCount})(ss)(ddddd)(uuuss))',
   );
 
   /// Signature of the struct returned by `GetThemeManifest`.
@@ -67,7 +66,7 @@ class RdeThemeProxy {
   ///
   /// # Returns
   /// A [ThemeSnapshot] with the contract version, active theme, appearance,
-  /// registry list, generation, and dynamic-theme inputs.
+  /// registry list, and generation.
   ///
   /// # Errors
   /// Returns an [RdeError] when the service is not running or a property
@@ -89,11 +88,6 @@ class RdeThemeProxy {
             )?.asStringArray().toList() ??
             const <String>[],
         generation: _readUint32(properties, 'Generation'),
-        dynamicSeedSource: SeedSource.fromDbus(
-          _readString(properties, 'DynamicSeedSource'),
-        ),
-        dynamicSeed: _readString(properties, 'DynamicSeed'),
-        dynamicWallpaper: _readString(properties, 'DynamicWallpaper'),
       );
     });
   }
@@ -182,25 +176,28 @@ class RdeThemeProxy {
     ]);
   }
 
-  /// Updates the inputs of the built-in dynamic theme.
+  /// Updates the seed colors of the built-in dynamic theme.
   ///
   /// # Parameters
-  /// - [seedSource]: `wallpaper` or `fixed`, always required by the service
-  /// - [seed]: `#RRGGBB` seed color; an empty string keeps the stored color
-  /// - [wallpaper]: absolute wallpaper path; an empty string keeps the stored
-  ///   path
+  /// - [primary]: `#RRGGBB` seed of the primary family and neutral surfaces;
+  ///   an empty string keeps the stored seed
+  /// - [secondary]: `#RRGGBB` secondary seed; an empty string keeps the stored seed
+  /// - [tertiary]: `#RRGGBB` tertiary seed; an empty string keeps the stored seed
+  /// - [error]: `#RRGGBB` error seed; an empty string keeps the stored seed
   ///
   /// # Errors
-  /// Returns an [RdeError] when an input is rejected or cannot be persisted.
+  /// Returns an [RdeError] when a seed is rejected or cannot be persisted.
   Future<Either<RdeError, void>> updateDynamicTheme({
-    required SeedSource seedSource,
-    String seed = '',
-    String wallpaper = '',
+    String primary = '',
+    String secondary = '',
+    String tertiary = '',
+    String error = '',
   }) {
-    return _invoke('update the dynamic theme inputs', 'UpdateDynamicTheme', [
-      DBusString(seedSource.dbusValue),
-      DBusString(seed),
-      DBusString(wallpaper),
+    return _invoke('update the dynamic theme seeds', 'UpdateDynamicTheme', [
+      DBusString(primary),
+      DBusString(secondary),
+      DBusString(tertiary),
+      DBusString(error),
     ]);
   }
 

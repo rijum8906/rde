@@ -5,7 +5,6 @@ import 'package:rde_settings/core/errors/rde_error.dart';
 import 'package:rde_settings/core/theme/data/datasources/dbus/rde_theme_proxy.dart';
 import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
 import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
-import 'package:rde_settings/core/theme/domain/entities/seed_source.dart';
 import 'package:rde_settings/core/theme/domain/entities/theme_manifest.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 
@@ -52,11 +51,7 @@ class DbusThemeDatasource {
       final resolved = _unwrap(await _proxy.fetchResolvedTheme());
 
       return Right(
-        ThemeCatalog(
-          snapshot: snapshot,
-          themes: manifests,
-          resolved: resolved,
-        ),
+        ThemeCatalog(snapshot: snapshot, themes: manifests, resolved: resolved),
       );
     } on RdeError catch (error) {
       return Left(error);
@@ -69,11 +64,7 @@ class DbusThemeDatasource {
     AppearanceMode mode, [
     ContrastLevel contrast = ContrastLevel.normal,
   ]) {
-    return _proxy.preview(
-      themeId: theme,
-      mode: mode,
-      contrast: contrast,
-    );
+    return _proxy.preview(themeId: theme, mode: mode, contrast: contrast);
   }
 
   /// Activates an installed theme.
@@ -86,16 +77,18 @@ class DbusThemeDatasource {
     return _proxy.setMode(mode);
   }
 
-  /// Updates the inputs of the built-in dynamic theme.
+  /// Updates the seed colors of the built-in dynamic theme.
   Future<Either<RdeError, void>> updateDynamicTheme({
-    required SeedSource seedSource,
-    String seed = '',
-    String wallpaper = '',
+    String primary = '',
+    String secondary = '',
+    String tertiary = '',
+    String error = '',
   }) {
     return _proxy.updateDynamicTheme(
-      seedSource: seedSource,
-      seed: seed,
-      wallpaper: wallpaper,
+      primary: primary,
+      secondary: secondary,
+      tertiary: tertiary,
+      error: error,
     );
   }
 

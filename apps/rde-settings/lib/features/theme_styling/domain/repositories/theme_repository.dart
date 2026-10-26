@@ -1,8 +1,8 @@
 import 'package:fpdart/fpdart.dart';
 import 'package:rde_settings/core/errors/rde_error.dart';
 import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
+import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
 import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
-import 'package:rde_settings/core/theme/domain/entities/seed_source.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 
 /// Domain boundary for the `org.rde.Theme` service.
@@ -27,12 +27,19 @@ abstract interface class ThemeRepository {
   /// Switches the desktop light/dark appearance.
   Future<Either<Failure, void>> setMode(AppearanceMode mode);
 
-  /// Updates the inputs of the built-in dynamic theme.
+  /// Updates the seed colors of the built-in dynamic theme.
+  ///
+  /// Every argument defaults to an empty string, which keeps that role's stored
+  /// seed, so callers can re-seed a single family.
   Future<Either<Failure, void>> updateDynamicTheme({
-    required SeedSource seedSource,
-    String seed,
-    String wallpaper,
+    String primary,
+    String secondary,
+    String tertiary,
+    String error,
   });
+
+  /// Extracts the four seeds from the wallpaper the desktop currently shows.
+  Future<Either<Failure, DynamicSeeds>> seedsFromWallpaper();
 
   /// Re-reads manifests, variant files, and settings on the service.
   Future<Either<Failure, void>> reload();

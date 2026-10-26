@@ -284,7 +284,8 @@ impl ThemeManifest {
             schema_version: SUPPORTED_MANIFEST_SCHEMA_VERSION,
             name: ThemeId::builtin_dynamic(),
             display_name: "Dynamic".to_string(),
-            description: "Generated from the desktop wallpaper or a custom seed color".to_string(),
+            description: "Generated from primary, secondary, tertiary, and error seed colors"
+                .to_string(),
             author: Some("RDE Team".to_string()).into(),
             license: Some("MIT".to_string()).into(),
             version: "1.0.0".to_string(),

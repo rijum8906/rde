@@ -1,17 +1,25 @@
 import 'package:fpdart/fpdart.dart';
 import 'package:rde_settings/core/errors/rde_error.dart';
 import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
+import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
 import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
-import 'package:rde_settings/core/theme/domain/entities/seed_source.dart';
 import 'package:rde_settings/features/theme_styling/data/datasources/dbus_theme_datasource.dart';
+import 'package:rde_settings/features/theme_styling/data/datasources/wallpaper/kde_wallpaper_seed_source.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 import 'package:rde_settings/features/theme_styling/domain/repositories/theme_repository.dart';
+import 'package:rde_settings/features/theme_styling/domain/repositories/wallpaper_seed_source.dart';
 
 /// Connects the theme datasource to the domain repository contract.
 class ThemeRepositoryImpl implements ThemeRepository {
-  ThemeRepositoryImpl(this._datasource);
+  /// Creates the repository.
+  ///
+  /// [wallpaper] resolves seeds from the desktop wallpaper; it defaults to the
+  /// KDE implementation and is injectable for tests.
+  ThemeRepositoryImpl(this._datasource, {WallpaperSeedSource? wallpaper})
+    : _wallpaper = wallpaper ?? KdeWallpaperSeedSource();
 
   final DbusThemeDatasource _datasource;
+  final WallpaperSeedSource _wallpaper;
 
   @override
   Future<Either<Failure, ThemeCatalog>> loadCatalog() async {
@@ -43,16 +51,23 @@ class ThemeRepositoryImpl implements ThemeRepository {
 
   @override
   Future<Either<Failure, void>> updateDynamicTheme({
-    required SeedSource seedSource,
-    String seed = '',
-    String wallpaper = '',
+    String primary = '',
+    String secondary = '',
+    String tertiary = '',
+    String error = '',
   }) async {
     final result = await _datasource.updateDynamicTheme(
-      seedSource: seedSource,
-      seed: seed,
-      wallpaper: wallpaper,
+      primary: primary,
+      secondary: secondary,
+      tertiary: tertiary,
+      error: error,
     );
-    return result.mapLeft((error) => Failure(error.message));
+    return result.mapLeft((failure) => Failure(failure.message));
+  }
+
+  @override
+  Future<Either<Failure, DynamicSeeds>> seedsFromWallpaper() {
+    return _wallpaper.seeds();
   }
 
   @override

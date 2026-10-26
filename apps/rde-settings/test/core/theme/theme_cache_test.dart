@@ -74,7 +74,6 @@ String cachePayload() {
       'curve_standard': 'cubic-bezier(0.2, 0.0, 0.0, 1.0)',
       'curve_emphasized': 'cubic-bezier(0.2, 0.0, 0.0, 1.25)',
     },
-    'assets': {'wallpaper': '/home/user/wallpaper.png'},
   });
 }
 
@@ -109,7 +108,6 @@ void main() {
     expect(resolved?.typography.monoFamily, 'JetBrains Mono');
     expect(resolved?.shape.radiusExtraLarge, 28.0);
     expect(resolved?.motion.short, const Duration(milliseconds: 150));
-    expect(resolved?.assets.wallpaper, '/home/user/wallpaper.png');
   });
 
   test('returns null when the service has not published yet', () {

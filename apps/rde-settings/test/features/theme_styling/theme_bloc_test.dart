@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
-import 'package:rde_settings/core/theme/domain/entities/seed_source.dart';
+import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_state.dart';
 
@@ -104,7 +104,7 @@ void main() {
     },
   );
 
-  test('changing the dynamic seed source persists it', () async {
+  test('changing one seed only repaints that family', () async {
     final repository = FakeThemeRepository();
     final bloc = buildThemeBloc(repository);
 
@@ -112,41 +112,76 @@ void main() {
     await bloc.stream.firstWhere((state) => state.catalog != null);
 
     final updated = bloc.stream.firstWhere(
-      (state) => state.catalog?.dynamicSeedSource == SeedSource.fixed,
+      (state) => state.dynamicSeeds.tertiary == '#B90063',
     );
-    bloc.add(const SetDynamicSeedSourceEvent(SeedSource.fixed));
+    bloc.add(const SetDynamicSeedEvent(DynamicSeedRole.tertiary, '#B90063'));
     final state = await updated;
 
-    expect(repository.calls, contains('updateDynamicTheme:fixed::'));
-    expect(state.catalog?.dynamicSeedSource, SeedSource.fixed);
+    // Only the tertiary argument carries the new color; the service keeps the
+    // stored primary, secondary, and error seeds.
+    expect(repository.calls, contains('updateDynamicTheme:::#B90063:'));
+    expect(state.dynamicSeeds.primary, DynamicSeeds.fallback.primary);
+    expect(state.dynamicSeeds.tertiary, '#B90063');
 
     await bloc.close();
     await repository.dispose();
   });
 
-  test('re-seeding the dynamic theme keeps the stored wallpaper', () async {
-    final repository = FakeThemeRepository();
+  test('extracting wallpaper seeds sends all four colors', () async {
+    final repository = FakeThemeRepository()
+      ..wallpaperSeeds = const DynamicSeeds(
+        primary: '#123456',
+        secondary: '#234567',
+        tertiary: '#345678',
+        error: '#456789',
+      );
     final bloc = buildThemeBloc(repository);
 
     bloc.add(const ThemeInitEvent());
     await bloc.stream.firstWhere((state) => state.catalog != null);
 
     final updated = bloc.stream.firstWhere(
-      (state) => state.catalog?.dynamicSeed == '#006A6A',
+      (state) => state.dynamicSeeds.primary == '#123456',
     );
-    bloc.add(const SetDynamicSeedEvent('#006A6A'));
+    bloc.add(const ExtractWallpaperSeedsEvent());
     final state = await updated;
 
+    expect(repository.calls, contains('seedsFromWallpaper'));
     expect(
       repository.calls,
-      contains('updateDynamicTheme:fixed:#006A6A:/home/user/wallpaper.png'),
+      contains('updateDynamicTheme:#123456:#234567:#345678:#456789'),
     );
-    expect(state.catalog?.dynamicSeed, '#006A6A');
-    expect(state.catalog?.dynamicSeedSource, SeedSource.fixed);
+    expect(state.dynamicSeeds.error, '#456789');
 
     await bloc.close();
     await repository.dispose();
   });
+
+  test(
+    'an unreadable wallpaper is reported without touching the service',
+    () async {
+      final repository = FakeThemeRepository()..failWallpaper = true;
+      final bloc = buildThemeBloc(repository);
+
+      bloc.add(const ThemeInitEvent());
+      await bloc.stream.firstWhere((state) => state.catalog != null);
+
+      final failed = bloc.stream.firstWhere(
+        (state) => state.errorMessage != null,
+      );
+      bloc.add(const ExtractWallpaperSeedsEvent());
+      final state = await failed;
+
+      expect(state.errorMessage, 'The wallpaper could not be read.');
+      expect(
+        repository.calls.where((call) => call.startsWith('updateDynamicTheme')),
+        isEmpty,
+      );
+
+      await bloc.close();
+      await repository.dispose();
+    },
+  );
 
   test('a service change reloads the catalog', () async {
     final repository = FakeThemeRepository();

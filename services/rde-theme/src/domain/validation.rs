@@ -146,8 +146,8 @@ pub fn validate_registry_pure(registry: &ThemeRegistry) -> Result<(), RegistryEr
 /// safely defaulted to `None` without bricking daemon startup.
 ///
 /// # Errors
-/// Returns [`SettingsError`] if schema version is unsupported or fixed seed
-/// color cannot be parsed.
+/// Returns [`SettingsError`] if the schema version is unsupported or one of the
+/// dynamic seed colors cannot be parsed.
 pub fn validate_settings(
     settings: &ThemeSettings,
     registry: &ThemeRegistry,
@@ -159,9 +159,12 @@ pub fn validate_settings(
         });
     }
 
-    // Validate fixed seed color if provided.
-    if let Some(seed_str) = &settings.dynamic.fixed_seed {
-        Color::new(seed_str).map_err(|e| SettingsError::InvalidFixedSeed(e.to_string()))?;
+    // Validate every dynamic seed color.
+    for (role, value) in settings.dynamic.entries() {
+        Color::new(value).map_err(|_| SettingsError::InvalidSeedColor {
+            role,
+            value: value.to_string(),
+        })?;
     }
 
     let mut sanitized = settings.clone();

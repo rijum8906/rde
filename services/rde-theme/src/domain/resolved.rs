@@ -3,11 +3,11 @@
 //! Models [`ResolvedTheme`], the unified interop contract consumed across D-Bus,
 //! cache files, and desktop applications.
 //!
-//! Shipped static variant files and the wallpaper-computed dynamic theme both
-//! produce exactly this shape. Consumers must never branch on [`VariantKind`].
+//! Shipped static variant files and the dynamically seeded theme both produce
+//! exactly this shape. Consumers must never branch on [`VariantKind`].
 
 use serde::{Deserialize, Serialize};
-use std::{fmt, ops::Deref, path::PathBuf};
+use std::{fmt, ops::Deref};
 use thiserror::Error;
 use zbus::zvariant::{Optional, Type};
 
@@ -16,8 +16,11 @@ use crate::domain::identity::{ThemeId, VariantId};
 /// Supported schema version for resolved theme payloads.
 pub const SUPPORTED_RESOLVED_SCHEMA_VERSION: u32 = 1;
 
-/// Neutral fallback seed color (`#4285f4`) used when no wallpaper or custom seed is available.
+/// Neutral fallback seed color (`#4285f4`) used when no user seed is available.
 pub const FALLBACK_SEED_COLOR: &str = "#4285f4";
+
+/// Default error seed (Material red `#ba1a1a`) used until the user picks one.
+pub const DEFAULT_ERROR_SEED: &str = "#ba1a1a";
 
 /// Validation errors when parsing hexadecimal color strings.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -81,8 +84,8 @@ impl Color {
     /// Constructs the neutral fallback seed color.
     ///
     /// # Returns
-    /// A [`Color`] equal to [`FALLBACK_SEED_COLOR`], used when neither a wallpaper
-    /// nor a user-provided seed color is available.
+    /// A [`Color`] equal to [`FALLBACK_SEED_COLOR`], used when no user-provided
+    /// seed color is available.
     #[must_use]
     pub fn fallback() -> Self {
         // `FALLBACK_SEED_COLOR` is a compile-time valid `#RRGGBB` literal.
@@ -115,6 +118,54 @@ impl Deref for Color {
 impl AsRef<str> for Color {
     fn as_ref(&self) -> &str {
         &self.0
+    }
+}
+
+/// The four seed colors the built-in dynamic theme renders its palettes from.
+///
+/// Each role family owns one seed: primary drives the accent family and the
+/// neutral surfaces, while secondary, tertiary, and error each drive their own
+/// tonal palette. Clients that only want to change the accent can keep sending
+/// the other three seeds unchanged.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ColorSeeds {
+    /// Seed of the primary family and of every neutral surface role.
+    pub primary: Color,
+
+    /// Seed of the secondary family.
+    pub secondary: Color,
+
+    /// Seed of the tertiary family.
+    pub tertiary: Color,
+
+    /// Seed of the error family.
+    pub error: Color,
+}
+
+impl ColorSeeds {
+    /// Builds a seed set where every family uses the same color.
+    #[must_use]
+    pub fn uniform(seed: &Color) -> Self {
+        Self {
+            primary: seed.clone(),
+            secondary: seed.clone(),
+            tertiary: seed.clone(),
+            error: seed.clone(),
+        }
+    }
+
+    /// Builds the fallback seed set: neutral blue families and the default error red.
+    #[must_use]
+    pub fn fallback() -> Self {
+        // Both literals are compile-time valid `#RRGGBB` values.
+        let primary = Color::fallback();
+        let error = Color::new(DEFAULT_ERROR_SEED).unwrap_or_else(|_| Color::fallback());
+        Self {
+            primary: primary.clone(),
+            secondary: primary.clone(),
+            tertiary: primary,
+            error,
+        }
     }
 }
 
@@ -168,10 +219,6 @@ pub struct ResolvedTheme {
 
     /// Animation motion durations and curves.
     pub motion: Motion,
-
-    /// Absolute paths to runtime assets (wallpaper, preview image).
-    #[serde(default)]
-    pub assets: AssetPaths,
 }
 
 /// Classification of variant source generation.
@@ -181,7 +228,7 @@ pub enum VariantKind {
     /// Backed by a shipped, pre-computed `*.json` file.
     Static,
 
-    /// Computed dynamically at runtime from the user's wallpaper.
+    /// Computed dynamically at runtime from the user's seed colors.
     Dynamic,
 }
 
@@ -298,14 +345,6 @@ impl Default for Motion {
             curve_emphasized: "cubic-bezier(0.2, 0.0, 0.0, 1.25)".to_string(),
         }
     }
-}
-
-/// Absolute paths to resolved runtime assets.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
-pub struct AssetPaths {
-    /// Absolute path to the active desktop wallpaper image.
-    #[serde(default)]
-    pub wallpaper: Optional<PathBuf>,
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
 import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
-import 'package:rde_settings/core/theme/domain/entities/seed_source.dart';
+import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
 
 /// Base class for events handled by the theme bloc.
 abstract class ThemeEvent {
@@ -52,27 +52,18 @@ class SetPreviewModeEvent extends ThemeEvent {
   final AppearanceMode mode;
 }
 
-/// Selects whether the dynamic theme derives its seed from the wallpaper or a
-/// fixed color.
-class SetDynamicSeedSourceEvent extends ThemeEvent {
-  const SetDynamicSeedSourceEvent(this.source);
-
-  /// Seed source to persist.
-  final SeedSource source;
-}
-
-/// Re-seeds the built-in dynamic theme from an explicit color.
+/// Re-seeds one palette family of the built-in dynamic theme.
 class SetDynamicSeedEvent extends ThemeEvent {
-  const SetDynamicSeedEvent(this.seed);
+  const SetDynamicSeedEvent(this.role, this.seed);
+
+  /// Family whose palette is regenerated.
+  final DynamicSeedRole role;
 
   /// Seed color in any supported hexadecimal form.
   final String seed;
 }
 
-/// Points the built-in dynamic theme at an explicit wallpaper.
-class SetDynamicWallpaperEvent extends ThemeEvent {
-  const SetDynamicWallpaperEvent(this.wallpaper);
-
-  /// Absolute path of the wallpaper to derive the seed color from.
-  final String wallpaper;
+/// Extracts the four seeds from the wallpaper the desktop currently shows.
+class ExtractWallpaperSeedsEvent extends ThemeEvent {
+  const ExtractWallpaperSeedsEvent();
 }

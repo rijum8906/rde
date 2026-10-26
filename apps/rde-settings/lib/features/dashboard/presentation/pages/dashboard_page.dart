@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:rde_settings/core/theme/data/datasources/dbus/rde_theme_proxy.dart';
 import 'package:rde_settings/features/dashboard/data/repositories/dashboard_repository_impl.dart';
 import 'package:rde_settings/features/dashboard/domain/use_cases/get_dashboard_settings.dart';
 import 'package:rde_settings/features/dashboard/domain/use_cases/save_dashboard_settings.dart';
 import 'package:rde_settings/features/dashboard/presentation/bloc/dashboard_bloc.dart';
 import 'package:rde_settings/features/dashboard/presentation/bloc/dashboard_event.dart';
 import 'package:rde_settings/features/dashboard/presentation/bloc/dashboard_state.dart';
+import 'package:rde_settings/features/theme_styling/data/datasources/dbus_theme_datasource.dart';
+import 'package:rde_settings/features/theme_styling/domain/repositories/theme_repository_impl.dart';
+import 'package:rde_settings/features/theme_styling/domain/use_cases/set_theme.dart';
+import 'package:rde_settings/features/theme_styling/domain/use_cases/update_dynamic_theme.dart';
 
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
@@ -17,10 +22,18 @@ class DashboardPage extends StatelessWidget {
     final getUseCase = GetDashboardSettingsUseCase(repository);
     final saveUseCase = SaveDashboardSettingsUseCase(repository);
 
+    // The personalization shortcuts write to the theme service, so the seed
+    // color picked here also restyles the rest of the desktop.
+    final themeRepository = ThemeRepositoryImpl(
+      DbusThemeDatasource(RdeThemeProxy()),
+    );
+
     return BlocProvider(
       create: (context) => DashboardBloc(
         getSettingsUseCase: getUseCase,
         saveSettingsUseCase: saveUseCase,
+        updateDynamicTheme: UpdateDynamicThemeUseCase(themeRepository),
+        setTheme: SetThemeUseCase(themeRepository),
       )..add(const DashboardInitEvent()),
       child: const DashboardView(),
     );

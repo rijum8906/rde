@@ -7,16 +7,16 @@ use std::{collections::BTreeMap, path::PathBuf};
 use tracing::{debug, info, warn};
 
 use crate::{
-    backend::material::{compute_color_roles, extract_seed_from_wallpaper},
+    backend::material::compute_color_roles,
     domain::{
         identity::{ThemeId, VariantId},
         manifest::{BUILTIN_DYNAMIC_VARIANT_DIR, ThemeManifest, VariantDescriptor},
         registry::{ThemeEntry, ThemeLocation, ThemeRegistry, ThemeSource},
         resolved::{
-            AssetPaths, Color, Motion, ResolvedTheme, SUPPORTED_RESOLVED_SCHEMA_VERSION, Shape,
-            Typography, VariantKind,
+            Motion, ResolvedTheme, SUPPORTED_RESOLVED_SCHEMA_VERSION, Shape, Typography,
+            VariantKind,
         },
-        settings::{SeedSource, ThemeSettings},
+        settings::ThemeSettings,
     },
     fs::write_atomic,
     theme_store::{ThemeError, ThemeRepository},
@@ -110,10 +110,10 @@ impl DiskThemeRepository {
 
     /// Generates and materializes every variant payload of the built-in dynamic theme.
     ///
-    /// One seed color derived from the persisted dynamic settings drives all
-    /// mode/contrast variants, so the generated set always stays internally
-    /// consistent. Payloads are written atomically, which keeps concurrent readers
-    /// from observing a partially written variant file.
+    /// The four seeds persisted in the dynamic settings drive every mode/contrast
+    /// variant, so the generated set always stays internally consistent. Payloads
+    /// are written atomically, which keeps concurrent readers from observing a
+    /// partially written variant file.
     ///
     /// # Parameters
     /// - `manifest`: built-in dynamic manifest whose variants are rendered
@@ -134,8 +134,8 @@ impl DiskThemeRepository {
             }
         };
 
-        // Step 2: Derive the single seed color shared by all variants.
-        let seed = derive_dynamic_seed(&settings);
+        // Step 2: Read the four seeds shared by all variants.
+        let seeds = settings.dynamic.color_seeds();
 
         // Step 3: Render and atomically persist every variant payload.
         for (variant_id, descriptor) in &manifest.variants {
@@ -144,13 +144,10 @@ impl DiskThemeRepository {
                 theme_id: ThemeId::builtin_dynamic(),
                 variant: variant_id.clone(),
                 kind: VariantKind::Dynamic,
-                colors: compute_color_roles(&seed, descriptor.mode, descriptor.contrast),
+                colors: compute_color_roles(&seeds, descriptor.mode, descriptor.contrast),
                 typography: Typography::default(),
                 shape: Shape::default(),
                 motion: Motion::default(),
-                assets: AssetPaths {
-                    wallpaper: settings.dynamic.wallpaper.clone().into(),
-                },
             };
 
             let bytes = serde_json::to_vec_pretty(&payload)
@@ -168,49 +165,15 @@ impl DiskThemeRepository {
 
         debug!(
             variants = manifest.variants.len(),
-            seed = seed.as_str(),
+            primary = seeds.primary.as_str(),
+            secondary = seeds.secondary.as_str(),
+            tertiary = seeds.tertiary.as_str(),
+            error = seeds.error.as_str(),
             dir = %self.cache_dir.join(BUILTIN_DYNAMIC_VARIANT_DIR).display(),
             "Materialized built-in dynamic theme variants"
         );
 
         Ok(())
-    }
-}
-
-/// Derives the built-in dynamic theme seed color from user settings.
-///
-/// Resolution order:
-/// 1. The fixed seed color, when `SeedSource::Fixed` is selected and parseable.
-/// 2. The dominant color of the recorded wallpaper, when it is readable.
-/// 3. [`Color::fallback`], so the theme always resolves to a complete palette.
-fn derive_dynamic_seed(settings: &ThemeSettings) -> Color {
-    match settings.dynamic.seed_source {
-        SeedSource::Fixed => match settings.dynamic.fixed_seed.as_deref() {
-            Some(seed) => match Color::new(seed) {
-                Ok(color) => color,
-                Err(err) => {
-                    warn!(seed, error = %err, "Invalid fixed seed color; using the fallback seed");
-                    Color::fallback()
-                }
-            },
-            None => {
-                warn!(
-                    "Seed source is 'fixed' but no seed color is configured; using the fallback seed"
-                );
-                Color::fallback()
-            }
-        },
-        SeedSource::Wallpaper => match settings.dynamic.wallpaper.as_deref() {
-            Some(path) if path.is_file() => extract_seed_from_wallpaper(path),
-            Some(path) => {
-                warn!(path = %path.display(), "Recorded wallpaper is not readable; using the fallback seed");
-                Color::fallback()
-            }
-            None => {
-                debug!("No wallpaper is recorded yet; using the fallback seed");
-                Color::fallback()
-            }
-        },
     }
 }
 
@@ -479,7 +442,7 @@ mod tests {
     use super::*;
     use crate::domain::{
         ContrastLevel, ThemeMode,
-        resolved::{Motion, Shape, Typography, VariantKind},
+        resolved::{Color, ColorSeeds, Motion, Shape, Typography, VariantKind},
     };
 
     #[tokio::test]
@@ -497,7 +460,7 @@ mod tests {
 
         let dark_json_path = ocean_dir.join("dark.json");
         let dark_roles = compute_color_roles(
-            &Color::new("#006a6a").unwrap(),
+            &ColorSeeds::uniform(&Color::new("#006a6a").unwrap()),
             ThemeMode::Dark,
             ContrastLevel::Normal,
         );
@@ -510,7 +473,6 @@ mod tests {
             typography: Typography::default(),
             shape: Shape::default(),
             motion: Motion::default(),
-            assets: AssetPaths::default(),
         };
 
         std::fs::write(
@@ -566,12 +528,13 @@ file_path = "dark.json"
 
         let repo = DiskThemeRepository::new(user_themes, config_dir.clone(), cache_dir.clone());
 
-        // Pin the dynamic seed so the expected palette is deterministic.
+        // Pin the dynamic seeds so the expected palette is deterministic.
         let settings = ThemeSettings {
             dynamic: crate::domain::settings::DynamicSettings {
-                seed_source: SeedSource::Fixed,
-                fixed_seed: Some("#006a6a".to_string()),
-                wallpaper: None,
+                primary: "#006a6a".to_string(),
+                secondary: "#6750a4".to_string(),
+                tertiary: "#b52700".to_string(),
+                error: "#b90063".to_string(),
             },
             ..ThemeSettings::default()
         };
@@ -591,9 +554,14 @@ file_path = "dark.json"
         assert_eq!(resolved.variant.as_str(), VariantId::DARK_HIGH_CONTRAST);
         assert_eq!(resolved.kind, VariantKind::Dynamic);
 
-        // Step 2: Colors match the Material 3 derivation from the configured seed.
+        // Step 2: Colors match the Material 3 derivation from the configured seeds.
         let expected = compute_color_roles(
-            &Color::new("#006a6a").unwrap(),
+            &ColorSeeds {
+                primary: Color::new("#006a6a").unwrap(),
+                secondary: Color::new("#6750a4").unwrap(),
+                tertiary: Color::new("#b52700").unwrap(),
+                error: Color::new("#b90063").unwrap(),
+            },
             ThemeMode::Dark,
             ContrastLevel::High,
         );
@@ -628,7 +596,7 @@ file_path = "dark.json"
             temp.path().join("cache"),
         );
 
-        // No settings at all: the wallpaper source cannot provide a seed.
+        // No settings at all: the default seeds drive the palette.
         let resolved = repo
             .resolve_variant(
                 &ThemeId::builtin_dynamic(),
@@ -637,8 +605,11 @@ file_path = "dark.json"
             .await
             .unwrap();
 
-        let expected =
-            compute_color_roles(&Color::fallback(), ThemeMode::Dark, ContrastLevel::Normal);
+        let expected = compute_color_roles(
+            &ColorSeeds::fallback(),
+            ThemeMode::Dark,
+            ContrastLevel::Normal,
+        );
         assert_eq!(resolved.colors, expected);
         assert_eq!(resolved.kind, VariantKind::Dynamic);
     }

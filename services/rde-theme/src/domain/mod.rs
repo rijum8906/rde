@@ -23,12 +23,12 @@ pub use registry::{
     ThemeSource,
 };
 pub use resolved::{
-    AssetPaths, Color, ColorError, ColorRoles, FALLBACK_SEED_COLOR, Motion, ResolvedTheme,
-    SUPPORTED_RESOLVED_SCHEMA_VERSION, Shape, Typography, VariantKind,
+    Color, ColorError, ColorRoles, ColorSeeds, DEFAULT_ERROR_SEED, FALLBACK_SEED_COLOR, Motion,
+    ResolvedTheme, SUPPORTED_RESOLVED_SCHEMA_VERSION, Shape, Typography, VariantKind,
 };
 pub use settings::{
-    DynamicSettings, DynamicThemeUpdate, SUPPORTED_SETTINGS_SCHEMA_VERSION, SeedSource,
-    SettingsError, ThemeSettings,
+    DynamicSettings, DynamicThemeUpdate, SUPPORTED_SETTINGS_SCHEMA_VERSION, SettingsError,
+    ThemeSettings,
 };
 pub use validation::{
     FileInspector, validate_manifest_pure, validate_registry_pure, validate_settings,

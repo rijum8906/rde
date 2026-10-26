@@ -3,12 +3,13 @@ import 'dart:async';
 import 'package:fpdart/fpdart.dart';
 import 'package:rde_settings/core/errors/rde_error.dart';
 import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
+import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
 import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
-import 'package:rde_settings/core/theme/domain/entities/seed_source.dart';
 import 'package:rde_settings/core/theme/domain/entities/theme_manifest.dart';
 import 'package:rde_settings/core/theme/domain/entities/theme_snapshot.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 import 'package:rde_settings/features/theme_styling/domain/repositories/theme_repository.dart';
+import 'package:rde_settings/features/theme_styling/domain/use_cases/extract_wallpaper_seeds.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/load_theme_catalog.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/preview_theme.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/reload_themes.dart';
@@ -26,6 +27,7 @@ ThemeBloc buildThemeBloc(ThemeRepository repository) {
     setTheme: SetThemeUseCase(repository),
     setMode: SetModeUseCase(repository),
     updateDynamicTheme: UpdateDynamicThemeUseCase(repository),
+    extractWallpaperSeeds: ExtractWallpaperSeedsUseCase(repository),
     reloadThemes: ReloadThemesUseCase(repository),
     watchThemeChanges: WatchThemeChangesUseCase(repository),
   );
@@ -144,9 +146,14 @@ class FakeThemeRepository implements ThemeRepository {
 
   String currentTheme = 'default';
   AppearanceMode mode = AppearanceMode.dark;
-  SeedSource dynamicSeedSource = SeedSource.wallpaper;
-  String dynamicSeed = '#6DD6DA';
-  String dynamicWallpaper = '/home/user/wallpaper.png';
+  DynamicSeeds dynamicSeeds = const DynamicSeeds(
+    primary: '#6DD6DA',
+    secondary: '#6750A4',
+    tertiary: '#B52700',
+    error: '#BA1A1A',
+  );
+  DynamicSeeds? wallpaperSeeds;
+  bool failWallpaper = false;
   bool failLoad = false;
   int loadCalls = 0;
 
@@ -177,9 +184,6 @@ class FakeThemeRepository implements ThemeRepository {
             .where((name) => name != ThemeManifest.dynamicId)
             .toList(),
         generation: loadCalls,
-        dynamicSeedSource: dynamicSeedSource,
-        dynamicSeed: dynamicSeed,
-        dynamicWallpaper: dynamicWallpaper,
       ),
       themes: manifests.values.toList(),
       resolved: resolvedFor(currentTheme, mode),
@@ -224,19 +228,28 @@ class FakeThemeRepository implements ThemeRepository {
 
   @override
   Future<Either<Failure, void>> updateDynamicTheme({
-    required SeedSource seedSource,
-    String seed = '',
-    String wallpaper = '',
+    String primary = '',
+    String secondary = '',
+    String tertiary = '',
+    String error = '',
   }) async {
-    calls.add('updateDynamicTheme:${seedSource.dbusValue}:$seed:$wallpaper');
-    dynamicSeedSource = seedSource;
-    if (seed.isNotEmpty) {
-      dynamicSeed = seed;
-    }
-    if (wallpaper.isNotEmpty) {
-      dynamicWallpaper = wallpaper;
-    }
+    calls.add('updateDynamicTheme:$primary:$secondary:$tertiary:$error');
+    dynamicSeeds = DynamicSeeds(
+      primary: primary.isEmpty ? dynamicSeeds.primary : primary,
+      secondary: secondary.isEmpty ? dynamicSeeds.secondary : secondary,
+      tertiary: tertiary.isEmpty ? dynamicSeeds.tertiary : tertiary,
+      error: error.isEmpty ? dynamicSeeds.error : error,
+    );
     return const Right(null);
+  }
+
+  @override
+  Future<Either<Failure, DynamicSeeds>> seedsFromWallpaper() async {
+    calls.add('seedsFromWallpaper');
+    if (failWallpaper) {
+      return Left(Failure('The wallpaper could not be read.'));
+    }
+    return Right(wallpaperSeeds ?? dynamicSeeds);
   }
 
   @override

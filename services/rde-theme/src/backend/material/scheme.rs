@@ -1,52 +1,61 @@
 //! # Material 3 Scheme and Palette Generation
 //!
-//! Implements deterministic Material 3 color generation from seed colors and wallpapers.
+//! Implements deterministic Material 3 color generation from the four dynamic
+//! seed colors.
 //!
-//! Changing [`MATERIAL_ALGORITHM_VERSION`] or [`SEED_EXTRACTOR_VERSION`] alters the
-//! generated theme colors, requiring either suppressing `ThemeChanged` or accepting
-//! a single repaint on daemon upgrade.
+//! Changing [`MATERIAL_ALGORITHM_VERSION`] alters the generated theme colors,
+//! requiring either suppressing `ThemeChanged` or accepting a single repaint on
+//! daemon upgrade.
 
 use material_color_utilities::{
     dynamiccolor::{DynamicScheme, DynamicSchemeBuilder, SpecVersion, Variant},
     hct::Hct,
-    palettes::TonalPalette,
-    score::score_with,
 };
-use std::{collections::HashMap, path::Path};
-use tracing::warn;
 
 use crate::domain::{
     manifest::{ContrastLevel, ThemeMode},
-    resolved::{Color, ColorRoles},
+    resolved::{Color, ColorRoles, ColorSeeds},
 };
 
 /// Deterministic algorithm version for the Material 3 scheme derivation.
 ///
-/// Bumped to 2 when the container pairs were corrected to the standard
-/// Material tones; consumers may see one repaint on upgrade.
-pub const MATERIAL_ALGORITHM_VERSION: u32 = 2;
+/// Bumped to 3 when each role family started deriving its palette from its own
+/// seed color; consumers may see one repaint on upgrade.
+pub const MATERIAL_ALGORITHM_VERSION: u32 = 3;
 
-/// Deterministic algorithm version for extracting seed colors from wallpapers.
-pub const SEED_EXTRACTOR_VERSION: u32 = 1;
-
-/// Fallback seed color (Google Blue `#4285f4`) when no wallpaper or custom seed is provided.
+/// Fallback seed color (Google Blue `#4285f4`) used when no user seed is available.
 pub use crate::domain::resolved::FALLBACK_SEED_COLOR;
+
+/// The four roles one seed produces, using the standard Material tones.
+struct SeedFamily {
+    /// Base role (`40` in light, `80` in dark).
+    base: u32,
+
+    /// Content role placed on top of [`Self::base`] (`100` light, `20` dark).
+    on_base: u32,
+
+    /// Container role (`90` light, `30` dark).
+    container: u32,
+
+    /// Content role placed inside [`Self::container`] (`10` light, `90` dark).
+    on_container: u32,
+}
 
 /// Builds one Material 3 dynamic scheme for a seed, appearance, and contrast.
 ///
 /// # Parameters
-/// - `source`: seed color in HCT space
+/// - `seed`: `#RRGGBB` color the scheme derives its palettes from
 /// - `is_dark`: whether the scheme renders the dark appearance
 /// - `contrast_level`: Material contrast level (`0.0`, `0.5`, or `1.0`)
 /// - `spec`: Material color specification used for the role calculation
 fn build_scheme(
-    source: Hct,
+    seed: &Color,
     is_dark: bool,
     contrast_level: f64,
     spec: SpecVersion,
 ) -> DynamicScheme {
     DynamicSchemeBuilder::default()
-        .source_color_hct(source)
+        .source_color_hct(Hct::from_int(parse_hex_to_argb(seed.as_str())))
         .variant(Variant::TonalSpot)
         .is_dark(is_dark)
         .contrast_level(contrast_level)
@@ -54,19 +63,69 @@ fn build_scheme(
         .build()
 }
 
-/// Computes a complete [`ColorRoles`] struct from a seed [`Color`], mode, and contrast.
+/// Resolves one seed into its base, content, container, and container-content roles.
+///
+/// The four Material role families share the same tone structure, so one helper
+/// serves primary, secondary, tertiary, and error. The scheme is built per seed,
+/// which means a family takes both the hue and the chroma of its own seed.
 ///
 /// # Parameters
-/// - `seed`: base seed color
+/// - `seed`: color the family's palette is generated from
+/// - `is_dark`: whether the dark appearance is rendered
+/// - `contrast_level`: Material contrast level
+/// - `normal_contrast`: whether the canonical container tones are used
+fn seed_family(
+    seed: &Color,
+    is_dark: bool,
+    contrast_level: f64,
+    normal_contrast: bool,
+) -> SeedFamily {
+    let scheme = build_scheme(seed, is_dark, contrast_level, SpecVersion::Spec2021);
+
+    // Material's 2021 tone-delta rules are implemented on the wrong side of the
+    // container pair by this crate, which makes dark schemes carry light
+    // containers (and light schemes dark ones). At normal contrast use the
+    // canonical container tones directly; for the accessibility levels use the
+    // 2025 calculation, which keeps containers on the correct side and honors
+    // the extra contrast.
+    let (container, on_container) = if normal_contrast {
+        let (tone, on_tone) = if is_dark { (30u8, 90u8) } else { (90u8, 30u8) };
+        let palette = scheme.primary_palette();
+        (palette.tone(tone), palette.tone(on_tone))
+    } else {
+        let accessibility = build_scheme(seed, is_dark, contrast_level, SpecVersion::Spec2025);
+        (
+            accessibility.primary_container(),
+            accessibility.on_primary_container(),
+        )
+    };
+
+    SeedFamily {
+        base: scheme.primary(),
+        on_base: scheme.on_primary(),
+        container,
+        on_container,
+    }
+}
+
+/// Computes a complete [`ColorRoles`] struct from the four seed colors, mode, and contrast.
+///
+/// Each role family is generated from its own seed; the neutral surfaces,
+/// outlines, and inverse roles follow the primary seed so the desktop keeps one
+/// coherent background.
+///
+/// # Parameters
+/// - `seeds`: primary, secondary, tertiary, and error seeds
 /// - `mode`: Light or Dark appearance
 /// - `contrast`: Normal, Medium, or High contrast
 ///
 /// # Returns
 /// A populated [`ColorRoles`] containing all 34 M3 semantic color roles.
-pub fn compute_color_roles(seed: &Color, mode: ThemeMode, contrast: ContrastLevel) -> ColorRoles {
-    let argb = parse_hex_to_argb(seed.as_str());
-    let hct = Hct::from_int(argb);
-
+pub fn compute_color_roles(
+    seeds: &ColorSeeds,
+    mode: ThemeMode,
+    contrast: ContrastLevel,
+) -> ColorRoles {
     let is_dark = match mode {
         ThemeMode::Light => false,
         ThemeMode::Dark => true,
@@ -78,71 +137,40 @@ pub fn compute_color_roles(seed: &Color, mode: ThemeMode, contrast: ContrastLeve
         ContrastLevel::High => 1.0,
     };
 
-    // Step 1: Base roles use the 2021 spec, which is what Flutter's
-    // `ColorScheme.fromSeed` and the other RDE toolkits render.
-    let scheme = build_scheme(hct.clone(), is_dark, contrast_level, SpecVersion::Spec2021);
-
-    // Step 2: Resolve the container pairs. Material's 2021 tone-delta rules are
-    // implemented on the wrong side of the pair by this crate, which makes dark
-    // schemes carry light containers (and light schemes dark ones). At normal
-    // contrast, use the canonical container tones directly; for the
-    // accessibility levels use the 2025 calculation, which keeps containers on
-    // the correct side and honors the extra contrast.
-    let accessibility_scheme = build_scheme(hct, is_dark, contrast_level, SpecVersion::Spec2025);
     let normal_contrast = contrast == ContrastLevel::Normal;
 
-    let pair = |palette: &TonalPalette,
-                container: fn(&DynamicScheme) -> u32,
-                on_container: fn(&DynamicScheme) -> u32| {
-        if normal_contrast {
-            let (tone, on_tone) = if is_dark { (30u8, 90u8) } else { (90u8, 30u8) };
-            (palette.tone(tone), palette.tone(on_tone))
-        } else {
-            (
-                container(&accessibility_scheme),
-                on_container(&accessibility_scheme),
-            )
-        }
-    };
+    // Step 1: Resolve the four role families, one per seed.
+    let primary = seed_family(&seeds.primary, is_dark, contrast_level, normal_contrast);
+    let secondary = seed_family(&seeds.secondary, is_dark, contrast_level, normal_contrast);
+    let tertiary = seed_family(&seeds.tertiary, is_dark, contrast_level, normal_contrast);
+    let error = seed_family(&seeds.error, is_dark, contrast_level, normal_contrast);
 
-    let (primary_container, on_primary_container) = pair(
-        scheme.primary_palette(),
-        DynamicScheme::primary_container,
-        DynamicScheme::on_primary_container,
-    );
-    let (secondary_container, on_secondary_container) = pair(
-        scheme.secondary_palette(),
-        DynamicScheme::secondary_container,
-        DynamicScheme::on_secondary_container,
-    );
-    let (tertiary_container, on_tertiary_container) = pair(
-        scheme.tertiary_palette(),
-        DynamicScheme::tertiary_container,
-        DynamicScheme::on_tertiary_container,
-    );
-    let (error_container, on_error_container) = pair(
-        scheme.error_palette(),
-        DynamicScheme::error_container,
-        DynamicScheme::on_error_container,
+    // Step 2: Resolve the neutral roles from the primary scheme so surfaces,
+    // outlines, and scrims stay tied to the accent color.
+    let scheme = build_scheme(
+        &seeds.primary,
+        is_dark,
+        contrast_level,
+        SpecVersion::Spec2021,
     );
 
     ColorRoles {
-        primary: Color::from_argb_u32(scheme.primary()),
-        on_primary: Color::from_argb_u32(scheme.on_primary()),
-        primary_container: Color::from_argb_u32(primary_container),
-        on_primary_container: Color::from_argb_u32(on_primary_container),
-        secondary: Color::from_argb_u32(scheme.secondary()),
-        on_secondary: Color::from_argb_u32(scheme.on_secondary()),
-        secondary_container: Color::from_argb_u32(secondary_container),
-        on_secondary_container: Color::from_argb_u32(on_secondary_container),
-        tertiary: Color::from_argb_u32(scheme.tertiary()),
-        on_tertiary: Color::from_argb_u32(scheme.on_tertiary()),
-        tertiary_container: Color::from_argb_u32(tertiary_container),
-        on_tertiary_container: Color::from_argb_u32(on_tertiary_container),
-        error: Color::from_argb_u32(scheme.error()),
-        on_error: Color::from_argb_u32(scheme.on_error()),
-        error_container: Color::from_argb_u32(error_container),
-        on_error_container: Color::from_argb_u32(on_error_container),
+        primary: Color::from_argb_u32(primary.base),
+        on_primary: Color::from_argb_u32(primary.on_base),
+        primary_container: Color::from_argb_u32(primary.container),
+        on_primary_container: Color::from_argb_u32(primary.on_container),
+        secondary: Color::from_argb_u32(secondary.base),
+        on_secondary: Color::from_argb_u32(secondary.on_base),
+        secondary_container: Color::from_argb_u32(secondary.container),
+        on_secondary_container: Color::from_argb_u32(secondary.on_container),
+        tertiary: Color::from_argb_u32(tertiary.base),
+        on_tertiary: Color::from_argb_u32(tertiary.on_base),
+        tertiary_container: Color::from_argb_u32(tertiary.container),
+        on_tertiary_container: Color::from_argb_u32(tertiary.on_container),
+        error: Color::from_argb_u32(error.base),
+        on_error: Color::from_argb_u32(error.on_base),
+        error_container: Color::from_argb_u32(error.container),
+        on_error_container: Color::from_argb_u32(error.on_container),
         background: Color::from_argb_u32(scheme.background()),
         on_background: Color::from_argb_u32(scheme.on_background()),
         surface: Color::from_argb_u32(scheme.surface()),
@@ -164,50 +192,6 @@ pub fn compute_color_roles(seed: &Color, mode: ThemeMode, contrast: ContrastLeve
     }
 }
 
-/// Extracts a representative dominant seed color from a wallpaper image.
-///
-/// # Algorithm (Pinned under [`SEED_EXTRACTOR_VERSION`])
-/// 1. Reads image from `path`.
-/// 2. Downsamples to 128x128 pixels using nearest-neighbor sampling.
-/// 3. Builds a color population histogram of opaque ARGB values.
-/// 4. Scores candidate colors using Material Design 3 color suitability heuristics.
-/// 5. Returns the top-ranked color, falling back to [`FALLBACK_SEED_COLOR`] on error.
-#[must_use]
-pub fn extract_seed_from_wallpaper(image_path: &Path) -> Color {
-    // Step 1: Open image file.
-    let img = match image::open(image_path) {
-        Ok(img) => img,
-        Err(err) => {
-            warn!(path = %image_path.display(), error = %err, "Failed to open wallpaper image; using fallback seed");
-            return Color::fallback();
-        }
-    };
-
-    // Step 2: Downsample to 128x128 for deterministic, fast quantification.
-    let small = img.resize_exact(128, 128, image::imageops::FilterType::Nearest);
-    let rgb_img = small.to_rgb8();
-
-    // Step 3: Populate histogram of ARGB colors.
-    let mut population: HashMap<u32, u16> = HashMap::new();
-    for pixel in rgb_img.pixels() {
-        let r = pixel[0] as u32;
-        let g = pixel[1] as u32;
-        let b = pixel[2] as u32;
-        let argb = 0xFF00_0000 | (r << 16) | (g << 8) | b;
-        let count = population.entry(argb).or_insert(0);
-        *count = count.saturating_add(1);
-    }
-
-    // Step 4: Score colors via M3 scoring algorithm.
-    let ranked = score_with(population, Some(1), None, Some(true));
-
-    if let Some(&top_argb) = ranked.first() {
-        Color::from_argb_u32(top_argb)
-    } else {
-        Color::fallback()
-    }
-}
-
 /// Helper parsing `#RRGGBB` into opaque 32-bit ARGB.
 fn parse_hex_to_argb(hex: &str) -> u32 {
     let clean = hex.trim_start_matches('#');
@@ -222,45 +206,90 @@ fn parse_hex_to_argb(hex: &str) -> u32 {
 mod tests {
     use super::*;
 
+    /// Builds a seed set from four `#RRGGBB` literals.
+    fn seeds(primary: &str, secondary: &str, tertiary: &str, error: &str) -> ColorSeeds {
+        ColorSeeds {
+            primary: Color::new(primary).unwrap(),
+            secondary: Color::new(secondary).unwrap(),
+            tertiary: Color::new(tertiary).unwrap(),
+            error: Color::new(error).unwrap(),
+        }
+    }
+
+    /// Builds a seed set where every family uses the same color.
+    fn uniform(seed: &str) -> ColorSeeds {
+        ColorSeeds::uniform(&Color::new(seed).unwrap())
+    }
+
     #[test]
     fn test_compute_color_roles_determinism() {
-        let seed = Color::new("#006a6a").unwrap();
-        let roles1 = compute_color_roles(&seed, ThemeMode::Dark, ContrastLevel::Normal);
-        let roles2 = compute_color_roles(&seed, ThemeMode::Dark, ContrastLevel::Normal);
+        let seeds = uniform("#006a6a");
+        let roles1 = compute_color_roles(&seeds, ThemeMode::Dark, ContrastLevel::Normal);
+        let roles2 = compute_color_roles(&seeds, ThemeMode::Dark, ContrastLevel::Normal);
         assert_eq!(roles1, roles2);
 
-        let light = compute_color_roles(&seed, ThemeMode::Light, ContrastLevel::Normal);
+        let light = compute_color_roles(&seeds, ThemeMode::Light, ContrastLevel::Normal);
         assert_ne!(roles1.surface, light.surface);
     }
 
     #[test]
-    fn normal_contrast_matches_the_flutter_color_scheme() {
-        let seed = Color::new("#6750A4").unwrap();
+    fn primary_family_matches_the_flutter_color_scheme() {
+        let seeds = uniform("#6750A4");
 
         // Values produced by Flutter's `ColorScheme.fromSeed` for the same seed.
-        let dark = compute_color_roles(&seed, ThemeMode::Dark, ContrastLevel::Normal);
+        let dark = compute_color_roles(&seeds, ThemeMode::Dark, ContrastLevel::Normal);
         assert_eq!(dark.primary.as_str(), "#cfbdfe");
         assert_eq!(dark.on_primary.as_str(), "#36275d");
         assert_eq!(dark.primary_container.as_str(), "#4d3d75");
         assert_eq!(dark.on_primary_container.as_str(), "#e9ddff");
-        assert_eq!(dark.tertiary_container.as_str(), "#633b48");
-        assert_eq!(dark.on_tertiary_container.as_str(), "#ffd9e3");
-        assert_eq!(dark.error_container.as_str(), "#93000a");
         assert_eq!(dark.surface.as_str(), "#141218");
 
-        let light = compute_color_roles(&seed, ThemeMode::Light, ContrastLevel::Normal);
+        let light = compute_color_roles(&seeds, ThemeMode::Light, ContrastLevel::Normal);
         assert_eq!(light.primary.as_str(), "#65558f");
         assert_eq!(light.primary_container.as_str(), "#e9ddff");
         assert_eq!(light.on_primary_container.as_str(), "#4d3d75");
-        assert_eq!(light.tertiary_container.as_str(), "#ffd9e3");
-        assert_eq!(light.on_tertiary_container.as_str(), "#633b48");
         assert_eq!(light.surface.as_str(), "#fdf7ff");
     }
 
     #[test]
-    fn test_extract_seed_fallback_on_missing_file() {
-        let nonexistent = Path::new("/nonexistent/wallpaper.png");
-        let seed = extract_seed_from_wallpaper(nonexistent);
-        assert_eq!(seed.as_str(), FALLBACK_SEED_COLOR);
+    fn each_family_is_generated_from_its_own_seed() {
+        let base = seeds("#6750A4", "#006A6A", "#B52700", "#BA1A1A");
+        let roles = compute_color_roles(&base, ThemeMode::Dark, ContrastLevel::Normal);
+
+        // Changing one seed must only repaint that family.
+        let other_secondary = compute_color_roles(
+            &seeds("#6750A4", "#006E3C", "#B52700", "#BA1A1A"),
+            ThemeMode::Dark,
+            ContrastLevel::Normal,
+        );
+        assert_eq!(roles.primary, other_secondary.primary);
+        assert_eq!(roles.tertiary, other_secondary.tertiary);
+        assert_eq!(roles.error, other_secondary.error);
+        assert_ne!(roles.secondary, other_secondary.secondary);
+        assert_ne!(
+            roles.secondary_container,
+            other_secondary.secondary_container
+        );
+
+        // The error family follows its seed instead of the fixed Material red.
+        let other_error = compute_color_roles(
+            &seeds("#6750A4", "#006A6A", "#B52700", "#B90063"),
+            ThemeMode::Dark,
+            ContrastLevel::Normal,
+        );
+        assert_ne!(roles.error, other_error.error);
+        assert_eq!(roles.secondary, other_error.secondary);
+    }
+
+    #[test]
+    fn high_contrast_keeps_every_family_on_its_seed() {
+        let base = seeds("#6750A4", "#006A6A", "#B52700", "#BA1A1A");
+        let normal = compute_color_roles(&base, ThemeMode::Dark, ContrastLevel::Normal);
+        let high = compute_color_roles(&base, ThemeMode::Dark, ContrastLevel::High);
+
+        assert_ne!(normal.primary, high.primary);
+        assert_ne!(normal.secondary, high.secondary);
+        assert_ne!(normal.tertiary, high.tertiary);
+        assert_ne!(normal.error, high.error);
     }
 }

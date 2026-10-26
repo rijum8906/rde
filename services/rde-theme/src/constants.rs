@@ -25,5 +25,5 @@ pub const SOCKET_CONN_RETRY_DELAY_MS: u64 = 2_000;
 /// Maximum time spent waiting for the supervision task to stop on shutdown.
 pub const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 
-/// Default fallback source color used when dynamic wallpaper extraction is unavailable.
+/// Default fallback seed color used when no user seed is available.
 pub const DEFAULT_FALLBACK_COLOR: &str = crate::domain::resolved::FALLBACK_SEED_COLOR;

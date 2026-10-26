@@ -1,11 +1,11 @@
 import 'appearance_mode.dart';
-import 'seed_source.dart';
 import 'theme_manifest.dart';
 
 /// Read-only state of the `org.rde.Theme` service.
 ///
 /// Mirrors the properties exposed on `/org/rde/Theme` so the data layer can
-/// read them in a single `Properties.GetAll` round trip.
+/// read them in a single `Properties.GetAll` round trip. The dynamic seeds are
+/// write-only through `UpdateDynamicTheme`, so they are not part of the snapshot.
 class ThemeSnapshot {
   const ThemeSnapshot({
     required this.version,
@@ -13,9 +13,6 @@ class ThemeSnapshot {
     required this.mode,
     required this.availableThemes,
     required this.generation,
-    required this.dynamicSeedSource,
-    required this.dynamicSeed,
-    required this.dynamicWallpaper,
   });
 
   /// Interface contract version.
@@ -33,15 +30,6 @@ class ThemeSnapshot {
 
   /// Monotonically increasing generation of the published payload.
   final int generation;
-
-  /// Input the dynamic theme derives its seed color from.
-  final SeedSource dynamicSeedSource;
-
-  /// Explicit seed color of the dynamic theme, empty when unset.
-  final String dynamicSeed;
-
-  /// Wallpaper the dynamic theme derives its seed color from, empty when unset.
-  final String dynamicWallpaper;
 
   /// Identifier of the active theme, resolving the empty string to the
   /// built-in dynamic theme.

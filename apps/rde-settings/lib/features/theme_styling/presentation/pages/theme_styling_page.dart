@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:rde_settings/core/theme/data/datasources/dbus/rde_theme_proxy.dart';
 import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
-import 'package:rde_settings/core/theme/domain/entities/seed_source.dart';
+import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
 import 'package:rde_settings/core/theme/domain/entities/theme_color.dart';
 import 'package:rde_settings/core/theme/domain/entities/theme_manifest.dart';
 import 'package:rde_settings/core/theme/theme_data_factory.dart';
 import 'package:rde_settings/features/theme_styling/data/datasources/dbus_theme_datasource.dart';
 import 'package:rde_settings/features/theme_styling/domain/repositories/theme_repository_impl.dart';
+import 'package:rde_settings/features/theme_styling/domain/use_cases/extract_wallpaper_seeds.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/load_theme_catalog.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/preview_theme.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/reload_themes.dart';
@@ -51,6 +52,34 @@ Color _displayColor(String hex) {
   return Color(ThemeColor.parseArgb(hex) ?? 0xFF6750A4);
 }
 
+/// How the dynamic theme's four seeds are chosen.
+enum _SeedMode {
+  /// Extract the four dominant colors from the desktop wallpaper.
+  dynamic(
+    'Dynamic',
+    'Colours are extracted from the current wallpaper.',
+    Icons.wallpaper,
+  ),
+
+  /// Pick a color for each palette family by hand.
+  custom(
+    'Custom',
+    'Choose your own color for each palette family.',
+    Icons.palette_outlined,
+  );
+
+  const _SeedMode(this.label, this.description, this.icon);
+
+  /// Name shown on the mode selector.
+  final String label;
+
+  /// One-line explanation shown under the selector.
+  final String description;
+
+  /// Icon shown on the mode selector.
+  final IconData icon;
+}
+
 /// Theme & Styling settings backed by the `org.rde.Theme` service.
 ///
 /// The page lists the installed themes, activates them, edits the inputs of
@@ -76,6 +105,7 @@ class ThemeStylingPage extends StatelessWidget {
         setTheme: SetThemeUseCase(repository),
         setMode: SetModeUseCase(repository),
         updateDynamicTheme: UpdateDynamicThemeUseCase(repository),
+        extractWallpaperSeeds: ExtractWallpaperSeedsUseCase(repository),
         reloadThemes: ReloadThemesUseCase(repository),
         watchThemeChanges: WatchThemeChangesUseCase(repository),
       )..add(const ThemeInitEvent()),
@@ -96,6 +126,12 @@ class ThemeStylingView extends StatefulWidget {
 }
 
 class _ThemeStylingViewState extends State<ThemeStylingView> {
+  /// Seed mode chosen on this page; the service holds no such preference.
+  _SeedMode _seedMode = _SeedMode.dynamic;
+
+  /// Palette family the custom picker currently edits.
+  DynamicSeedRole _seedRole = DynamicSeedRole.primary;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -314,6 +350,14 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(
+              'Active Theme',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+
             // Active theme identity.
             Row(
               children: [
@@ -406,31 +450,31 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
                 ),
               ],
             ),
-            if (info != null && (info.author != null || info.license != null))
-              ...[
-                const Divider(height: 32),
-                Row(
-                  children: [
-                    if (info.author != null)
-                      Expanded(
-                        child: Text(
-                          'Author • ${info.author}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    if (info.license != null)
-                      Text(
-                        'License • ${info.license}',
+            if (info != null &&
+                (info.author != null || info.license != null)) ...[
+              const Divider(height: 32),
+              Row(
+                children: [
+                  if (info.author != null)
+                    Expanded(
+                      child: Text(
+                        'Author • ${info.author}',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                  ],
-                ),
-              ],
+                    ),
+                  if (info.license != null)
+                    Text(
+                      'License • ${info.license}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -505,6 +549,7 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
 
   Widget _buildSeedSwatch({
     required BuildContext context,
+    required DynamicSeedRole role,
     required String hex,
     required bool selected,
     required bool enabled,
@@ -518,7 +563,9 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
         cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
         child: GestureDetector(
           onTap: enabled && !selected
-              ? () => context.read<ThemeBloc>().add(SetDynamicSeedEvent(hex))
+              ? () => context.read<ThemeBloc>().add(
+                  SetDynamicSeedEvent(role, hex),
+                )
               : null,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
@@ -581,8 +628,7 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
                 const SizedBox(height: 2),
                 Text(
                   '${catalog.themes.length} theme'
-                  '${catalog.themes.length == 1 ? '' : 's'} available to '
-                  'org.rde.Theme, including the built-in dynamic theme',
+                  '${catalog.themes.length == 1 ? '' : 's'} available',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -636,7 +682,7 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
     final colorScheme = theme.colorScheme;
     final isDynamic = info.name == ThemeManifest.dynamicId;
     final subtitle = isDynamic
-        ? 'Wallpaper-derived colors'
+        ? 'Generated from the seed colors'
         : (info.description.isNotEmpty ? info.description : info.name);
 
     return InkWell(
@@ -680,7 +726,9 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    info.author == null ? subtitle : '$subtitle • ${info.author}',
+                    info.author == null
+                        ? subtitle
+                        : '$subtitle • ${info.author}',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
@@ -1029,17 +1077,16 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
     );
   }
 
-  /// Renders the inputs of the built-in `rde-dynamic` theme.
+  /// Renders the color source of the built-in `rde-dynamic` theme.
   ///
-  /// The service stores inputs only and recomputes the palette from them, so
-  /// this card edits the seed source, the fixed seed color, and the wallpaper
-  /// path instead of any resolved color.
+  /// The card offers two ways to seed the palettes: `Dynamic`, which extracts
+  /// four dominant colors from the current wallpaper, and `Custom`, which lets
+  /// the user pick one color per palette family.
   Widget _buildDynamicThemeCard(BuildContext context, ThemeState state) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final catalog = state.catalog!;
-    final seedSource = catalog.dynamicSeedSource;
-    final selectedSeed = ThemeColor.tryParse(catalog.dynamicSeed);
+    final seeds = state.dynamicSeeds;
 
     return Card(
       child: Padding(
@@ -1048,146 +1095,240 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Dynamic Theme',
+              'Theme Colors',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 4),
             Text(
-              'org.rde.Theme regenerates the built-in rde-dynamic palette from '
-              'the desktop wallpaper or a fixed seed color.',
+              'Every palette of rde-dynamic is generated from four seed colors.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
             ),
+            const SizedBox(height: 16),
+            SegmentedButton<_SeedMode>(
+              segments: [
+                for (final mode in _SeedMode.values)
+                  ButtonSegment(
+                    value: mode,
+                    icon: Icon(mode.icon, size: 16),
+                    label: Text(mode.label),
+                  ),
+              ],
+              selected: {_seedMode},
+              onSelectionChanged: (selection) =>
+                  setState(() => _seedMode = selection.first),
+              showSelectedIcon: false,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _seedMode.description,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (_seedMode == _SeedMode.dynamic)
+              _buildWallpaperControls(context, state)
+            else
+              _buildCustomSeedControls(context, state),
+            const SizedBox(height: 16),
+            _buildSeedSummary(context, seeds),
             if (!catalog.isDynamicActive) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               Text(
-                'Activate rde-dynamic to apply these inputs to the desktop.',
+                'Activate rde-dynamic to apply these colors to the desktop.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: colorScheme.primary,
                 ),
               ),
             ],
-            const SizedBox(height: 16),
-            SegmentedButton<SeedSource>(
-              segments: const [
-                ButtonSegment(
-                  value: SeedSource.wallpaper,
-                  icon: Icon(Icons.wallpaper, size: 16),
-                  label: Text('Wallpaper'),
-                ),
-                ButtonSegment(
-                  value: SeedSource.fixed,
-                  icon: Icon(Icons.colorize, size: 16),
-                  label: Text('Fixed color'),
-                ),
-              ],
-              selected: {seedSource},
-              onSelectionChanged: state.isBusy
-                  ? null
-                  : (selection) => context.read<ThemeBloc>().add(
-                      SetDynamicSeedSourceEvent(selection.first),
-                    ),
-              showSelectedIcon: false,
-              style: const ButtonStyle(visualDensity: VisualDensity.compact),
-            ),
-            const SizedBox(height: 18),
-
-            // Wallpaper the seed color is derived from.
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    catalog.dynamicWallpaper.isEmpty
-                        ? 'No wallpaper recorded yet'
-                        : catalog.dynamicWallpaper,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                TextButton.icon(
-                  onPressed: state.isBusy
-                      ? null
-                      : () => _editWallpaper(context, catalog.dynamicWallpaper),
-                  icon: const Icon(Icons.folder_open, size: 18),
-                  label: const Text('Wallpaper'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Explicit seed color used by the fixed source.
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Seed Color',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: state.isBusy
-                      ? null
-                      : () => _editSeedColor(context, catalog.dynamicSeed),
-                  icon: const Icon(Icons.colorize, size: 18),
-                  label: const Text('Custom'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 14,
-              runSpacing: 12,
-              children: _seedColors.map((hex) {
-                final selected =
-                    ThemeColor.tryParse(hex)?.argb == selectedSeed?.argb;
-                return _buildSeedSwatch(
-                  context: context,
-                  hex: hex,
-                  selected: selected,
-                  enabled: !state.isBusy,
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Container(
-                  width: 14,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    color: catalog.dynamicSeed.isEmpty
-                        ? colorScheme.surfaceContainerHighest
-                        : _displayColor(catalog.dynamicSeed),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  catalog.dynamicSeed.isEmpty
-                      ? 'No fixed seed color'
-                      : catalog.dynamicSeed.toUpperCase(),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
           ],
         ),
       ),
     );
   }
 
-  Future<void> _editSeedColor(BuildContext context, String current) async {
+  /// Wallpaper extraction controls for the `Dynamic` seed mode.
+  Widget _buildWallpaperControls(BuildContext context, ThemeState state) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Reads the wallpaper reported by the desktop shell, then keeps its '
+          'four most dominant colors.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.tonalIcon(
+          onPressed: state.isBusy
+              ? null
+              : () => context.read<ThemeBloc>().add(
+                  const ExtractWallpaperSeedsEvent(),
+                ),
+          icon: state.isBusy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.wallpaper, size: 18),
+          label: const Text('Use wallpaper colors'),
+        ),
+      ],
+    );
+  }
+
+  /// Per-family seed editor for the `Custom` seed mode.
+  Widget _buildCustomSeedControls(BuildContext context, ThemeState state) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final current = state.dynamicSeeds.seedFor(_seedRole);
+    final selectedSeed = ThemeColor.tryParse(current);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Step 1: Pick which palette family to edit.
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final role in DynamicSeedRole.values)
+              ChoiceChip(
+                label: Text(role.label),
+                selected: _seedRole == role,
+                showCheckmark: false,
+                onSelected: state.isBusy
+                    ? null
+                    : (_) => setState(() => _seedRole = role),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Step 2: Show and edit the seed of the selected family.
+        Row(
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: _displayColor(current),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '${_seedRole.label} seed',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            Text(
+              current.toUpperCase(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: state.isBusy
+                  ? null
+                  : () => _editSeedColor(context, _seedRole, current),
+              icon: const Icon(Icons.colorize, size: 16),
+              label: const Text('Custom'),
+              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // Step 3: Offer presets for the selected family.
+        Wrap(
+          spacing: 12,
+          runSpacing: 10,
+          children: _seedColors.map((hex) {
+            final selected =
+                ThemeColor.tryParse(hex)?.argb == selectedSeed?.argb;
+            return _buildSeedSwatch(
+              context: context,
+              role: _seedRole,
+              hex: hex,
+              selected: selected,
+              enabled: !state.isBusy,
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  /// Compact strip showing the four seeds the palettes are built from.
+  Widget _buildSeedSummary(BuildContext context, DynamicSeeds seeds) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final role in DynamicSeedRole.values)
+          Tooltip(
+            message: seeds.seedFor(role).toUpperCase(),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHigh.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: _displayColor(seeds.seedFor(role)),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    role.label,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _editSeedColor(
+    BuildContext context,
+    DynamicSeedRole role,
+    String current,
+  ) async {
     final color = await showDialog<String>(
       context: context,
       builder: (dialogContext) => _ColorInputDialog(initialColor: current),
@@ -1196,110 +1337,7 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
     if (color == null || !context.mounted) {
       return;
     }
-    context.read<ThemeBloc>().add(SetDynamicSeedEvent(color));
-  }
-
-  Future<void> _editWallpaper(BuildContext context, String current) async {
-    final wallpaper = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => _WallpaperInputDialog(initialPath: current),
-    );
-
-    if (wallpaper == null || !context.mounted) {
-      return;
-    }
-    context.read<ThemeBloc>().add(SetDynamicWallpaperEvent(wallpaper));
-  }
-}
-
-/// Dialog that points the built-in dynamic theme at an explicit wallpaper.
-class _WallpaperInputDialog extends StatefulWidget {
-  const _WallpaperInputDialog({required this.initialPath});
-
-  final String initialPath;
-
-  @override
-  State<_WallpaperInputDialog> createState() => _WallpaperInputDialogState();
-}
-
-class _WallpaperInputDialogState extends State<_WallpaperInputDialog> {
-  late final TextEditingController _controller;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialPath);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final path = _controller.text.trim();
-    if (!path.startsWith('/')) {
-      setState(
-        () => _error = 'Enter an absolute path, such as /home/you/wall.png.',
-      );
-      return;
-    }
-
-    Navigator.of(context).pop(path);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return AlertDialog(
-      title: const Text('Wallpaper'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'org.rde.Theme derives the dynamic palette from this image.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _controller,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Wallpaper path',
-                hintText: '/home/you/Pictures/wallpaper.png',
-              ),
-              onChanged: (_) => setState(() => _error = null),
-              onSubmitted: (_) => _submit(),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.error,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(onPressed: _submit, child: const Text('Apply')),
-      ],
-    );
+    context.read<ThemeBloc>().add(SetDynamicSeedEvent(role, color));
   }
 }
 
@@ -1357,8 +1395,8 @@ class _ColorInputDialogState extends State<_ColorInputDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Every palette role of the active theme is regenerated from this '
-              'color, in both light and dark appearances.',
+              'This family is regenerated from the color, in both light and dark '
+              'appearances. The other three families keep their seeds.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),

@@ -30,7 +30,7 @@ use crate::{
         PORTAL_OBJECT_PATH, PortalSettingsInterface, THEME_OBJECT_PATH, ThemeInterface,
         spawn_dbus_signal_broadcaster,
     },
-    paths::ThemePaths,
+    paths::{ThemePaths, xdg_config_home, xdg_data_home},
     service::ThemeService,
     theme_store::DiskThemeRepository,
 };
@@ -73,7 +73,10 @@ impl App {
 
         // Step 4: Initialize backends
         let gtk_emitter = Arc::new(GtkEmitter::new(paths.cache_theme_dir().to_path_buf()));
-        let qt_emitter = Arc::new(QtEmitter::new(paths.config_themes_dir().to_path_buf()));
+        // KDE reads `kdeglobals` from the XDG config root and looks color schemes
+        // up under `color-schemes/` in the XDG data home, so the emitter targets
+        // those directories instead of the rde theme subdirectories.
+        let qt_emitter = Arc::new(QtEmitter::new(xdg_config_home(), xdg_data_home()));
 
         // Step 5: Startup theme service
         let service = ThemeService::startup(

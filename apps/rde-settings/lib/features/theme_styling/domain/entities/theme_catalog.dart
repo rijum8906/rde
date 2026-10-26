@@ -1,6 +1,5 @@
 import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
 import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
-import 'package:rde_settings/core/theme/domain/entities/seed_source.dart';
 import 'package:rde_settings/core/theme/domain/entities/theme_manifest.dart';
 import 'package:rde_settings/core/theme/domain/entities/theme_snapshot.dart';
 
@@ -33,15 +32,6 @@ class ThemeCatalog {
 
   /// Appearance the desktop currently renders.
   AppearanceMode get mode => snapshot.mode;
-
-  /// Input the dynamic theme derives its seed color from.
-  SeedSource get dynamicSeedSource => snapshot.dynamicSeedSource;
-
-  /// Explicit seed color of the dynamic theme, empty when unset.
-  String get dynamicSeed => snapshot.dynamicSeed;
-
-  /// Wallpaper the dynamic theme derives its seed color from, empty when unset.
-  String get dynamicWallpaper => snapshot.dynamicWallpaper;
 
   /// Whether the built-in dynamic theme is active.
   bool get isDynamicActive => currentTheme == ThemeManifest.dynamicId;

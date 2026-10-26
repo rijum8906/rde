@@ -47,7 +47,6 @@ class ResolvedTheme {
     required this.typography,
     required this.shape,
     required this.motion,
-    this.assets = const ThemeAssets(),
   });
 
   /// Payload schema version written by the service.
@@ -74,17 +73,14 @@ class ResolvedTheme {
   /// Animation durations and curves of the desktop theme.
   final ThemeMotion motion;
 
-  /// Absolute paths of runtime assets such as the wallpaper.
-  final ThemeAssets assets;
-
   /// Decodes the struct returned by `GetResolvedTheme`.
   ///
-  /// Signature: `(ussu(<colors>)(ss)(ddddd)(uuuss)(s))`.
+  /// Signature: `(ussu(<colors>)(ss)(ddddd)(uuuss))`.
   ///
   /// # Errors
   /// Throws a [FormatException] when the reply has an unexpected shape.
   factory ResolvedTheme.fromDbus(DBusValue value) {
-    if (value is! DBusStruct || value.children.length < 9) {
+    if (value is! DBusStruct || value.children.length < 8) {
       throw const FormatException('GetResolvedTheme returned an unknown shape');
     }
 
@@ -100,7 +96,6 @@ class ResolvedTheme {
       typography: ThemeTypography.fromDbus(fields[5]),
       shape: ThemeShape.fromDbus(fields[6]),
       motion: ThemeMotion.fromDbus(fields[7]),
-      assets: ThemeAssets.fromDbus(fields[8]),
     );
   }
 
@@ -118,7 +113,6 @@ class ResolvedTheme {
       typography: ThemeTypography.fromJson(_readMap(json['typography'])),
       shape: ThemeShape.fromJson(_readMap(json['shape'])),
       motion: ThemeMotion.fromJson(_readMap(json['motion'])),
-      assets: ThemeAssets.fromJson(_readMap(json['assets'])),
     );
   }
 
@@ -532,27 +526,6 @@ class ThemeMotion {
       curveStandard: _readString(json['curve_standard']),
       curveEmphasized: _readString(json['curve_emphasized']),
     );
-  }
-}
-
-/// Absolute paths to the runtime assets of the resolved theme.
-class ThemeAssets {
-  const ThemeAssets({this.wallpaper});
-
-  /// Absolute wallpaper path, or `null` when the theme does not set one.
-  final String? wallpaper;
-
-  /// Decodes the `(s)` assets struct, where an empty string means "unset".
-  factory ThemeAssets.fromDbus(DBusValue value) {
-    if (value is! DBusStruct || value.children.length != 1) {
-      throw const FormatException('assets must expose a wallpaper path');
-    }
-    return ThemeAssets(wallpaper: _optional(value.children[0].asString()));
-  }
-
-  /// Decodes the `assets` object of a JSON payload.
-  factory ThemeAssets.fromJson(Map<String, dynamic> json) {
-    return ThemeAssets(wallpaper: _optional(json['wallpaper']?.toString()));
   }
 }
 

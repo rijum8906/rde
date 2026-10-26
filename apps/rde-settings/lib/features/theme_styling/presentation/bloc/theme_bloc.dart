@@ -4,8 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:rde_settings/core/errors/rde_error.dart';
-import 'package:rde_settings/core/theme/domain/entities/seed_source.dart';
+import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
+import 'package:rde_settings/core/theme/domain/entities/theme_color.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
+import 'package:rde_settings/features/theme_styling/domain/use_cases/extract_wallpaper_seeds.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/load_theme_catalog.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/preview_theme.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/reload_themes.dart';
@@ -31,6 +33,7 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     required this.setTheme,
     required this.setMode,
     required this.updateDynamicTheme,
+    required this.extractWallpaperSeeds,
     required this.reloadThemes,
     required this.watchThemeChanges,
   }) : super(ThemeState.initial()) {
@@ -41,9 +44,8 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     on<SelectThemeEvent>(_onSelectTheme);
     on<SetAppearanceEvent>(_onSetAppearance);
     on<SetPreviewModeEvent>(_onSetPreviewMode);
-    on<SetDynamicSeedSourceEvent>(_onSetDynamicSeedSource);
     on<SetDynamicSeedEvent>(_onSetDynamicSeed);
-    on<SetDynamicWallpaperEvent>(_onSetDynamicWallpaper);
+    on<ExtractWallpaperSeedsEvent>(_onExtractWallpaperSeeds);
 
     // Live sync is best effort: when the session bus cannot deliver the
     // signals, explicit actions and the refresh button still work.
@@ -60,6 +62,7 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
   final SetThemeUseCase setTheme;
   final SetModeUseCase setMode;
   final UpdateDynamicThemeUseCase updateDynamicTheme;
+  final ExtractWallpaperSeedsUseCase extractWallpaperSeeds;
   final ReloadThemesUseCase reloadThemes;
   final WatchThemeChangesUseCase watchThemeChanges;
 
@@ -129,11 +132,7 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     }
 
     emit(
-      state.copyWith(
-        isBusy: true,
-        clearError: true,
-        previewMode: event.mode,
-      ),
+      state.copyWith(isBusy: true, clearError: true, previewMode: event.mode),
     );
     final failure = _failureOf(await setMode(event.mode));
     if (failure != null) {
@@ -156,26 +155,6 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     await _loadPreview(emit);
   }
 
-  Future<void> _onSetDynamicSeedSource(
-    SetDynamicSeedSourceEvent event,
-    Emitter<ThemeState> emit,
-  ) async {
-    if (state.isBusy || state.catalog?.dynamicSeedSource == event.source) {
-      return;
-    }
-
-    emit(state.copyWith(isBusy: true, clearError: true));
-    final failure = _failureOf(
-      await updateDynamicTheme(seedSource: event.source),
-    );
-    if (failure != null) {
-      emit(state.copyWith(isBusy: false, errorMessage: failure.message));
-      return;
-    }
-
-    await _load(emit);
-  }
-
   Future<void> _onSetDynamicSeed(
     SetDynamicSeedEvent event,
     Emitter<ThemeState> emit,
@@ -184,14 +163,15 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
       return;
     }
 
-    final catalog = state.catalog;
+    // Step 1: Send only the role that changed; the service keeps the rest.
     emit(state.copyWith(isBusy: true, clearError: true));
+    final seed = ThemeColor.tryParse(event.seed)?.value ?? event.seed.trim();
     final failure = _failureOf(
       await updateDynamicTheme(
-        // An explicit color only takes effect when the fixed source is active.
-        seedSource: SeedSource.fixed,
-        seed: event.seed,
-        wallpaper: catalog?.dynamicWallpaper ?? '',
+        primary: event.role == DynamicSeedRole.primary ? seed : '',
+        secondary: event.role == DynamicSeedRole.secondary ? seed : '',
+        tertiary: event.role == DynamicSeedRole.tertiary ? seed : '',
+        error: event.role == DynamicSeedRole.error ? seed : '',
       ),
     );
     if (failure != null) {
@@ -199,11 +179,18 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
       return;
     }
 
+    // Step 2: Mirror the accepted seed and re-read the catalog, so the controls
+    // and the published payload agree.
+    emit(
+      state.copyWith(
+        dynamicSeeds: state.dynamicSeeds.withSeed(event.role, seed),
+      ),
+    );
     await _load(emit);
   }
 
-  Future<void> _onSetDynamicWallpaper(
-    SetDynamicWallpaperEvent event,
+  Future<void> _onExtractWallpaperSeeds(
+    ExtractWallpaperSeedsEvent event,
     Emitter<ThemeState> emit,
   ) async {
     if (state.isBusy) {
@@ -211,19 +198,33 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     }
 
     emit(state.copyWith(isBusy: true, clearError: true));
-    final failure = _failureOf(
-      await updateDynamicTheme(
-        seedSource: SeedSource.wallpaper,
-        seed: state.catalog?.dynamicSeed ?? '',
-        wallpaper: event.wallpaper,
-      ),
-    );
-    if (failure != null) {
-      emit(state.copyWith(isBusy: false, errorMessage: failure.message));
-      return;
-    }
 
-    await _load(emit);
+    // Step 1: The app owns wallpaper decoding; ask it for the four seeds.
+    final extracted = await extractWallpaperSeeds();
+
+    // Step 2: Hand the seeds to the service, which regenerates every family.
+    return extracted.fold(
+      (failure) async =>
+          emit(state.copyWith(isBusy: false, errorMessage: failure.message)),
+      (seeds) async {
+        final failure = _failureOf(
+          await updateDynamicTheme(
+            primary: seeds.primary,
+            secondary: seeds.secondary,
+            tertiary: seeds.tertiary,
+            error: seeds.error,
+          ),
+        );
+        if (failure != null) {
+          emit(state.copyWith(isBusy: false, errorMessage: failure.message));
+          return;
+        }
+
+        // Step 3: Mirror the extracted seeds and refresh the catalog.
+        emit(state.copyWith(dynamicSeeds: seeds));
+        await _load(emit);
+      },
+    );
   }
 
   /// Loads the catalog and publishes it as the new state.
