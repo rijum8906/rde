@@ -10,16 +10,22 @@
 
 use std::{
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    },
     time::Duration,
 };
 use tokio::sync::{RwLock, broadcast};
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    backend::{Backend, KDE_COLOR_SCHEME_NAME, compute_color_roles},
+    backend::{
+        AdapterRegistry, KDE_COLOR_SCHEME_NAME, compute_color_roles, detect::SessionEnv,
+        resolvers::ResolverRegistry,
+    },
     domain::{
-        identity::ThemeId,
+        identity::{ThemeId, VariantId},
         manifest::{ContrastLevel, ThemeManifest, ThemeMode},
         registry::ThemeRegistry,
         resolved::{
@@ -29,7 +35,8 @@ use crate::{
         settings::{DynamicThemeUpdate, ThemeSettings},
     },
     fs::write_atomic,
-    theme_store::{ThemeError, ThemeRepository},
+    paths::ThemePaths,
+    theme_store::{DiskThemeRepository, ThemeError, ThemeRepository},
 };
 
 /// Authoritative in-memory state of the published theme.
@@ -50,15 +57,34 @@ pub struct PublishedState {
 
 /// The central theme service coordinating the desktop appearance lifecycle.
 pub struct ThemeService {
-    repo: Arc<dyn ThemeRepository>,
-    state: Arc<RwLock<PublishedState>>,
-    backends: Vec<Arc<dyn Backend>>,
+    /// Persistence backend for themes, settings, and the installed-theme registry.
+    pub repo: Arc<dyn ThemeRepository>,
+
+    /// Installed-theme registry snapshot, refreshed by [`ThemeService::reload`].
+    pub theme_registry: RwLock<ThemeRegistry>,
+
+    /// Persisted user preferences, including the built-in dynamic theme inputs.
+    pub theme_settings: RwLock<ThemeSettings>,
+
+    /// Manifest of the published theme, refreshed on every switch.
+    pub theme_manifest: RwLock<ThemeManifest>,
+
+    /// Currently published palette.
+    pub resolved_theme: RwLock<ResolvedTheme>,
+
+    /// Toolkit adapters rendered on every publication.
+    pub adapter_registry: AdapterRegistry,
+
+    /// Palette resolvers known to this build.
+    pub resolver_registry: ResolverRegistry,
+
+    /// Desktop session detected once at startup.
+    pub session_env: SessionEnv,
+
     cache_path: PathBuf,
     settings_path: PathBuf,
     themes_dir: PathBuf,
-
-    /// Persisted user preferences, including the built-in dynamic theme inputs.
-    settings: Arc<RwLock<ThemeSettings>>,
+    generation: AtomicU32,
 
     theme_changed_tx: broadcast::Sender<ResolvedTheme>,
     reloaded_tx: broadcast::Sender<()>,
@@ -68,22 +94,33 @@ pub struct ThemeService {
 impl ThemeService {
     /// Performs the startup sequence and completes the initial publication transaction.
     ///
+    /// # Parameters
+    /// - `repo`: persistence backend for themes, settings, and the registry
+    /// - `adapter_registry`: toolkit adapters rendered on every publication
+    /// - `cache_path`: published palette cache read by consumers
+    /// - `settings_path`: user settings file watched for changes
+    /// - `themes_dir`: theme root watched for installs and edits
+    ///
     /// # Execution Steps
     /// 1. Load user settings (recovering to default if missing or corrupt).
     /// 2. Load theme registry (rebuilding from disk if missing or corrupt).
     /// 3. Resolve active variant (falling back to built-in dynamic theme on error).
     /// 4. Atomically persist the published theme cache.
-    /// 5. Bump publication generation counter.
-    /// 6. Render and atomically write all backend configuration files.
-    /// 7. Apply backend environment variables to process environment.
-    /// 8. Shell out to KDE color scheme application if running KDE.
-    /// 9. Emit initial `ThemeChanged` notification.
+    /// 5. Establish the in-memory publication state.
+    /// 6. Render every adapter and atomically write its configuration files.
+    /// 7. Shell out to KDE color scheme application if running KDE.
+    /// 8. Emit initial `ThemeChanged` notification.
+    ///
+    /// # Errors
+    /// Returns [`ThemeError`] for repository failures that prevent the initial
+    /// publication; missing or corrupt settings, registries, and manifests
+    /// degrade to defaults instead.
     ///
     /// # Hard Invariant
     /// **Write the file first, then bump the generation, then emit the signal.**
     pub async fn startup(
         repo: Arc<dyn ThemeRepository>,
-        backends: Vec<Arc<dyn Backend>>,
+        adapter_registry: AdapterRegistry,
         cache_path: PathBuf,
         settings_path: PathBuf,
         themes_dir: PathBuf,
@@ -120,24 +157,27 @@ impl ThemeService {
         )
         .await;
 
+        // Step 3b: Snapshot the manifest so `theme_manifest` can answer before
+        // the next switch without touching the repository again.
+        let manifest = match repo.manifest(&target_theme_id).await {
+            Ok(manifest) => manifest,
+            Err(err) => {
+                warn!(theme = %target_theme_id, error = %err, "Failed to load manifest during startup; using the built-in manifest");
+                ThemeManifest::builtin_dynamic()
+            }
+        };
+
         // Step 4: Invariant Step A: Write the published theme cache atomically first.
-        let initial_generation = 1;
         if let Err(err) = Self::write_current_json(&cache_path, &resolved) {
             warn!(error = %err, "Failed to write initial published theme cache; in-memory state remains authoritative");
         }
 
-        // Step 5: Invariant Step B: Increment generation & establish published state.
-        let state = Arc::new(RwLock::new(PublishedState {
-            resolved: resolved.clone(),
-            generation: initial_generation,
-            active: active_theme,
-            mode: settings.mode,
-        }));
+        // Step 5: Establish the in-memory publication state.
+        let mut theme_settings = settings;
+        theme_settings.active_theme = active_theme;
 
-        let settings = Arc::new(RwLock::new(settings));
-
-        // Step 6: Render and write backend files atomically.
-        Self::apply_backends(&backends, &resolved);
+        // Step 6: Render and atomically write every adapter output.
+        Self::apply_adapters(&adapter_registry, &resolved);
 
         // Step 7: Shell out to KDE if applicable.
         Self::maybe_apply_kde();
@@ -148,22 +188,55 @@ impl ThemeService {
         let (theme_list_changed_tx, _) = broadcast::channel(32);
 
         // Step 8: Invariant Step C: Emit signal after files are durable.
-        let _ = theme_changed_tx.send(resolved);
+        let _ = theme_changed_tx.send(resolved.clone());
 
         info!("ThemeService startup transaction completed successfully");
 
         Ok(Self {
             repo,
-            state,
-            backends,
+            theme_registry: RwLock::new(registry),
+            theme_settings: RwLock::new(theme_settings),
+            theme_manifest: RwLock::new(manifest),
+            resolved_theme: RwLock::new(resolved),
+            adapter_registry,
+            resolver_registry: ResolverRegistry::build(),
+            session_env: SessionEnv::detect(),
             cache_path,
             settings_path,
             themes_dir,
-            settings,
+            generation: AtomicU32::new(1),
             theme_changed_tx,
             reloaded_tx,
             theme_list_changed_tx,
         })
+    }
+
+    /// Constructs the service from the standard XDG locations.
+    ///
+    /// # Errors
+    /// Returns [`ThemeError`] when the initial publication fails; the theme,
+    /// config, and cache directories are resolved or created by the repository.
+    pub async fn new() -> Result<Self, ThemeError> {
+        let paths = ThemePaths::resolve();
+
+        // Step 1: Build the disk repository from the standard XDG roots.
+        let repo = DiskThemeRepository::new(
+            paths.data_themes_dir().to_path_buf(),
+            paths.config_themes_dir().to_path_buf(),
+            paths.cache_theme_dir().to_path_buf(),
+        )
+        .with_system_themes(paths.system_themes_dir().to_path_buf());
+
+        // Step 2: Delegate to the explicit startup sequence with the adapters
+        // discovered by this build.
+        Self::startup(
+            Arc::new(repo),
+            AdapterRegistry::build(),
+            paths.published_theme_file(),
+            paths.settings_file(),
+            paths.data_themes_dir().to_path_buf(),
+        )
+        .await
     }
 
     /// Resolves a theme variant with guaranteed fallback to the built-in dynamic theme.
@@ -244,24 +317,34 @@ impl ThemeService {
     fn write_current_json(path: &Path, resolved: &ResolvedTheme) -> Result<(), ThemeError> {
         let bytes = serde_json::to_vec_pretty(resolved)
             .map_err(|e| ThemeError::Serialization(e.to_string()))?;
-        write_atomic(path, &bytes).map_err(|source| ThemeError::Io {
-            path: path.to_path_buf(),
-            source,
-        })
+        write_atomic(path, &bytes)?;
+
+        Ok(())
     }
 
-    /// Internal helper rendering and writing backend outputs.
-    fn apply_backends(backends: &[Arc<dyn Backend>], resolved: &ResolvedTheme) {
-        for backend in backends {
-            match backend.render(resolved) {
+    /// Renders every registered adapter and writes its files atomically.
+    ///
+    /// # Parameters
+    /// - `adapter_registry`: adapters to render, keyed by identifier
+    /// - `resolved`: palette handed to every adapter
+    ///
+    /// # Error Handling
+    /// Failures are logged per adapter: one unavailable toolkit must never stop
+    /// the remaining surfaces from being themed.
+    fn apply_adapters(adapter_registry: &AdapterRegistry, resolved: &ResolvedTheme) {
+        for adapter in adapter_registry.adapters.values() {
+            match adapter.render(resolved) {
                 Ok(output) => {
-                    // Write files atomically
+                    // Step 1: Write every rendered file atomically so consumers
+                    // never observe a partially themed file.
                     for (file_path, bytes) in output.files {
                         if let Err(err) = write_atomic(&file_path, &bytes) {
-                            warn!(backend = %backend.name(), path = %file_path.display(), error = %err, "Failed to write backend file");
+                            warn!(adapter = %adapter.name(), path = %file_path.display(), error = %err, "Failed to write adapter file");
                         }
                     }
-                    // Apply environment variables
+
+                    // Step 2: Export the environment the adapter needs in child
+                    // processes (for example `QT_QPA_PLATFORMTHEME`).
                     for (key, value) in output.env {
                         unsafe {
                             std::env::set_var(&key, &value);
@@ -269,7 +352,7 @@ impl ThemeService {
                     }
                 }
                 Err(err) => {
-                    warn!(backend = %backend.name(), error = %err, "Backend render failure");
+                    warn!(adapter = %adapter.name(), error = %err, "Adapter render failure");
                 }
             }
         }
@@ -306,17 +389,46 @@ impl ThemeService {
 
     /// Returns a snapshot of the current publication state.
     pub async fn current_state(&self) -> PublishedState {
-        self.state.read().await.clone()
+        let settings = self.theme_settings.read().await;
+        PublishedState {
+            resolved: self.resolved_theme.read().await.clone(),
+            generation: self.generation.load(Ordering::SeqCst),
+            active: settings.active_theme.clone(),
+            mode: settings.mode,
+        }
     }
 
     /// Returns a snapshot of the persisted user settings.
     pub async fn settings(&self) -> ThemeSettings {
-        self.settings.read().await.clone()
+        self.theme_settings.read().await.clone()
     }
 
     /// Returns the underlying repository reference.
     pub fn repository(&self) -> Arc<dyn ThemeRepository> {
         self.repo.clone()
+    }
+
+    /// Returns the currently published [`ResolvedTheme`].
+    pub async fn resolved_theme(&self) -> ResolvedTheme {
+        self.resolved_theme.read().await.clone()
+    }
+
+    /// Returns the manifest describing the published theme.
+    ///
+    /// The snapshot is refreshed by [`Self::set_active`], [`Self::activate_theme`],
+    /// and [`Self::reload`], so it never needs a repository round-trip.
+    pub async fn theme_manifest(&self) -> ThemeManifest {
+        self.theme_manifest.read().await.clone()
+    }
+
+    /// Returns the persisted appearance mode.
+    pub async fn theme_mode(&self) -> ThemeMode {
+        self.theme_settings.read().await.mode
+    }
+
+    /// Returns a snapshot of the installed-theme registry.
+    pub async fn theme_registry(&self) -> ThemeRegistry {
+        self.theme_registry.read().await.clone()
     }
 
     /// Single mutation entry point to switch the active theme.
@@ -338,13 +450,22 @@ impl ThemeService {
             }
         }
 
-        let current = self.state.read().await.clone();
-        let mut settings = self.settings.read().await.clone();
+        let current = self.current_state().await;
+        let mut settings = self.theme_settings.read().await.clone();
 
         // Step 2: Resolve the target theme payload for the persisted appearance.
         let resolved =
             Self::resolve_with_fallback(self.repo.as_ref(), &id, current.mode, settings.contrast)
                 .await;
+
+        // Step 2b: Load the manifest so the snapshot describes the new theme.
+        let manifest = match self.repo.manifest(&id).await {
+            Ok(manifest) => manifest,
+            Err(err) => {
+                warn!(theme = %id, error = %err, "Failed to load manifest while switching themes; using the built-in manifest");
+                ThemeManifest::builtin_dynamic()
+            }
+        };
 
         // Step 3: Idempotency check.
         if resolved == current.resolved && Some(&id) == current.active.as_ref() {
@@ -356,11 +477,75 @@ impl ThemeService {
         // the same theme into the published cache.
         settings.active_theme = Some(id.clone());
         self.repo.save_settings(&settings).await?;
-        *self.settings.write().await = settings;
+        *self.theme_settings.write().await = settings;
+
+        // Step 4b: Refresh the manifest snapshot before publishing.
+        *self.theme_manifest.write().await = manifest;
 
         // Step 5: Perform publication transaction.
-        self.publish_transaction(resolved, Some(id), current.mode)
-            .await
+        self.publish_transaction(resolved).await
+    }
+
+    /// Switches to an exact variant of a theme, bypassing mode/contrast selection.
+    ///
+    /// # Parameters
+    /// - `theme_id`: theme to activate; the built-in dynamic theme is allowed
+    /// - `variant_id`: variant file to resolve inside that theme
+    ///
+    /// # Idempotency
+    /// When the requested variant is already published for the same theme and
+    /// appearance mode, nothing is written and no signal is emitted.
+    ///
+    /// # Hard Invariant
+    /// The preference is persisted before the resolved payload is written, the
+    /// generation is bumped, and `ThemeChanged` is emitted.
+    ///
+    /// # Errors
+    /// Returns [`ThemeError::NotFound`] when the theme or variant does not exist,
+    /// and propagates persistence or resolution failures unchanged.
+    pub async fn activate_theme(
+        &self,
+        theme_id: ThemeId,
+        variant_id: VariantId,
+    ) -> Result<(), ThemeError> {
+        info!(theme = %theme_id, variant = %variant_id, "Activating theme variant");
+
+        // Step 1: Load the manifest; the repository supplies the built-in manifest.
+        let manifest = self.repo.manifest(&theme_id).await?;
+
+        // Step 2: Resolve the exact requested variant.
+        let resolved = self.repo.resolve_variant(&theme_id, &variant_id).await?;
+
+        let current = self.current_state().await;
+        let mut settings = self.theme_settings.read().await.clone();
+
+        // Step 3: Derive the appearance mode and contrast from the variant
+        // descriptor, keeping the published values when it is unknown.
+        if let Some(descriptor) = manifest.variants.get(&variant_id) {
+            settings.mode = descriptor.mode;
+            settings.contrast = descriptor.contrast;
+        }
+        let mode = settings.mode;
+
+        // Step 4: Idempotency check.
+        if resolved == current.resolved
+            && current.active.as_ref() == Some(&theme_id)
+            && current.mode == mode
+        {
+            debug!("Requested variant is already published; skipping publication");
+            return Ok(());
+        }
+
+        // Step 5: Persist the selection before publishing, so a restart restores
+        // the same theme and variant.
+        settings.active_theme = Some(theme_id.clone());
+        self.repo.save_settings(&settings).await?;
+        *self.theme_settings.write().await = settings;
+
+        // Step 6: Refresh the manifest snapshot and publish.
+        *self.theme_manifest.write().await = manifest;
+
+        self.publish_transaction(resolved).await
     }
 
     /// Switches the desktop appearance mode and republishes the active theme.
@@ -375,8 +560,8 @@ impl ThemeService {
         info!(mode = ?mode, "Setting appearance mode");
 
         // Step 1: Read the persisted settings and stop early when nothing changes.
-        let mut next = self.settings.read().await.clone();
-        let current = self.state.read().await.clone();
+        let mut next = self.theme_settings.read().await.clone();
+        let current = self.current_state().await;
         if next.mode == mode && current.mode == mode {
             debug!("Appearance mode is unchanged; skipping publication");
             return Ok(());
@@ -385,7 +570,7 @@ impl ThemeService {
         // Step 2: Persist the new preference before touching the published state.
         next.mode = mode;
         self.repo.save_settings(&next).await?;
-        *self.settings.write().await = next.clone();
+        *self.theme_settings.write().await = next.clone();
 
         // Step 3: Resolve the active theme's variant for the new mode.
         let target_theme_id = current
@@ -397,23 +582,37 @@ impl ThemeService {
                 .await;
 
         // Step 4: Publish; the generation bump notifies every themed application.
-        self.publish_transaction(resolved, current.active, mode)
-            .await
+        self.publish_transaction(resolved).await
     }
 
-    /// Re-reads the active theme manifest and re-resolves the variant.
+    /// Re-reads the installed-theme registry, the active manifest, and the variant.
     ///
     /// Emits `ThemeChanged` only if the payload changed, and always emits `Reloaded`.
     pub async fn reload(&self) -> Result<(), ThemeError> {
         info!("Reloading theme service...");
 
-        let current = self.state.read().await.clone();
-        let settings = self.settings.read().await.clone();
+        let current = self.current_state().await;
+        let settings = self.theme_settings.read().await.clone();
         let target_theme_id = current
             .active
             .clone()
             .unwrap_or_else(ThemeId::builtin_dynamic);
 
+        // Step 1: Refresh the registry snapshot so new or removed themes are visible.
+        match self.repo.load_registry().await {
+            Ok(registry) => *self.theme_registry.write().await = registry,
+            Err(err) => warn!(error = %err, "Failed to reload the theme registry snapshot"),
+        }
+
+        // Step 2: Refresh the manifest snapshot of the active theme.
+        match self.repo.manifest(&target_theme_id).await {
+            Ok(manifest) => *self.theme_manifest.write().await = manifest,
+            Err(err) => {
+                warn!(theme = %target_theme_id, error = %err, "Failed to reload the active theme manifest")
+            }
+        }
+
+        // Step 3: Re-resolve the published variant from the on-disk payload.
         let resolved = Self::resolve_with_fallback(
             self.repo.as_ref(),
             &target_theme_id,
@@ -423,8 +622,7 @@ impl ThemeService {
         .await;
 
         if resolved != current.resolved {
-            self.publish_transaction(resolved, current.active, current.mode)
-                .await?;
+            self.publish_transaction(resolved).await?;
         }
 
         // Always emit Reloaded signal
@@ -467,14 +665,14 @@ impl ThemeService {
         info!("Updating built-in dynamic theme seeds");
 
         // Step 1: Apply and validate the update against the persisted settings.
-        let mut next = self.settings.read().await.clone();
+        let mut next = self.theme_settings.read().await.clone();
         update.apply(&mut next)?;
 
         // Step 2: Persist first; the settings file is the source of truth.
         self.repo.save_settings(&next).await?;
 
         // Step 3: Refresh the in-memory snapshot.
-        *self.settings.write().await = next.clone();
+        *self.theme_settings.write().await = next.clone();
 
         // Step 4: Republish the dynamic theme when it is the active theme.
         self.republish_if_dynamic().await?;
@@ -487,7 +685,7 @@ impl ThemeService {
     /// # Errors
     /// Propagates publication failures from the cache write path.
     async fn republish_if_dynamic(&self) -> Result<(), ThemeError> {
-        let current = self.state.read().await.clone();
+        let current = self.current_state().await;
         let is_dynamic = current
             .active
             .as_ref()
@@ -501,7 +699,7 @@ impl ThemeService {
             return Ok(());
         }
 
-        let settings = self.settings.read().await.clone();
+        let settings = self.theme_settings.read().await.clone();
         let resolved = Self::resolve_with_fallback(
             self.repo.as_ref(),
             &ThemeId::builtin_dynamic(),
@@ -511,8 +709,7 @@ impl ThemeService {
         .await;
 
         if resolved != current.resolved {
-            self.publish_transaction(resolved, current.active, current.mode)
-                .await?;
+            self.publish_transaction(resolved).await?;
         } else {
             debug!("Dynamic theme payload is unchanged; skipping publication");
         }
@@ -522,30 +719,25 @@ impl ThemeService {
 
     /// Performs the atomic publication transaction honoring the hard ordering invariant:
     /// **Write file first, then bump generation, then emit signal.**
-    async fn publish_transaction(
-        &self,
-        resolved: ResolvedTheme,
-        active: Option<ThemeId>,
-        mode: ThemeMode,
-    ) -> Result<(), ThemeError> {
+    ///
+    /// # Parameters
+    /// - `resolved`: new palette to publish
+    ///
+    /// # Errors
+    /// Returns [`ThemeError::Serialization`] only when the cache payload cannot
+    /// be encoded; adapter failures are logged and do not abort publication.
+    async fn publish_transaction(&self, resolved: ResolvedTheme) -> Result<(), ThemeError> {
         // Step 1: Invariant Step A: Write the published theme cache atomically first.
         if let Err(err) = Self::write_current_json(&self.cache_path, &resolved) {
             warn!(error = %err, "Failed to write published theme cache; proceeding with in-memory state");
         }
 
-        // Step 2: Invariant Step B: Increment generation counter.
-        let mut state_lock = self.state.write().await;
-        let new_generation = state_lock.generation.saturating_add(1);
-        *state_lock = PublishedState {
-            resolved: resolved.clone(),
-            generation: new_generation,
-            active,
-            mode,
-        };
-        drop(state_lock);
+        // Step 2: Invariant Step B: Publish the palette and bump the generation.
+        *self.resolved_theme.write().await = resolved.clone();
+        self.generation.fetch_add(1, Ordering::SeqCst);
 
-        // Step 3: Render and atomically write backend outputs.
-        Self::apply_backends(&self.backends, &resolved);
+        // Step 3: Render and atomically write adapter outputs.
+        Self::apply_adapters(&self.adapter_registry, &resolved);
 
         // Step 4: Shell out to KDE if applicable.
         Self::maybe_apply_kde();
@@ -799,7 +991,7 @@ mod tests {
 
         let service = ThemeService::startup(
             repo.clone(),
-            vec![],
+            AdapterRegistry::default(),
             cache_file.clone(),
             settings_file,
             themes_dir,
@@ -828,6 +1020,93 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_activate_theme_switches_to_an_explicit_variant() {
+        let temp = tempfile::tempdir().unwrap();
+        let repo = Arc::new(FakeRepo::new());
+        let theme_a = ThemeId::new("theme-a").unwrap();
+        let dark_var = VariantId::new("dark").unwrap();
+        let light_var = VariantId::new("light").unwrap();
+
+        // Step 1: Register theme-a with a dark and a light variant.
+        repo.registry
+            .lock()
+            .unwrap()
+            .themes
+            .insert(theme_a.clone(), ThemeEntry::default());
+        let mut variants = BTreeMap::new();
+        for (variant, mode) in [(&dark_var, ThemeMode::Dark), (&light_var, ThemeMode::Light)] {
+            variants.insert(
+                variant.clone(),
+                VariantDescriptor {
+                    mode,
+                    contrast: ContrastLevel::Normal,
+                    display_name: None.into(),
+                    file_path: RelativePath::new("variant.json").unwrap(),
+                    preview: None.into(),
+                },
+            );
+        }
+        repo.manifests.lock().unwrap().insert(
+            theme_a.clone(),
+            ThemeManifest {
+                schema_version: 1,
+                name: theme_a.clone(),
+                display_name: "Theme A".into(),
+                description: "A".into(),
+                author: None.into(),
+                license: None.into(),
+                version: "1.0.0".into(),
+                variants,
+                default_variant: dark_var.clone(),
+            },
+        );
+        repo.resolved_map.lock().unwrap().insert(
+            (theme_a.clone(), light_var.clone()),
+            sample_resolved(&theme_a, &light_var),
+        );
+
+        let service = ThemeService::startup(
+            repo.clone(),
+            AdapterRegistry::default(),
+            temp.path().join("current.json"),
+            temp.path().join("settings.toml"),
+            temp.path().join("themes"),
+        )
+        .await
+        .unwrap();
+
+        // Step 2: Activating the light variant persists the theme and derives the
+        // appearance mode from the variant descriptor.
+        let generation_before = service.current_state().await.generation;
+        service
+            .activate_theme(theme_a.clone(), light_var.clone())
+            .await
+            .unwrap();
+
+        let state = service.current_state().await;
+        assert_eq!(state.active.as_ref(), Some(&theme_a));
+        assert_eq!(state.mode, ThemeMode::Light);
+        assert_eq!(state.resolved.variant, light_var);
+        assert_eq!(state.generation, generation_before + 1);
+        assert_eq!(service.theme_mode().await, ThemeMode::Light);
+        assert_eq!(service.theme_manifest().await.name, theme_a);
+        assert_eq!(repo.settings.lock().unwrap().active_theme, Some(theme_a));
+
+        // Step 3: Re-activating the same variant is idempotent.
+        service
+            .activate_theme(
+                ThemeId::new("theme-a").unwrap(),
+                VariantId::new("light").unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            service.current_state().await.generation,
+            generation_before + 1
+        );
+    }
+
+    #[tokio::test]
     async fn test_update_dynamic_theme_persists_and_republishes() {
         let temp = tempfile::tempdir().unwrap();
         let cache_file = temp.path().join("current.json");
@@ -836,9 +1115,15 @@ mod tests {
 
         let repo = Arc::new(FakeRepo::new());
         let service = Arc::new(
-            ThemeService::startup(repo.clone(), vec![], cache_file, settings_file, themes_dir)
-                .await
-                .unwrap(),
+            ThemeService::startup(
+                repo.clone(),
+                AdapterRegistry::default(),
+                cache_file,
+                settings_file,
+                themes_dir,
+            )
+            .await
+            .unwrap(),
         );
 
         // The built-in dynamic theme is active right after startup.
@@ -897,7 +1182,7 @@ mod tests {
         let service = Arc::new(
             ThemeService::startup(
                 repo.clone(),
-                vec![],
+                AdapterRegistry::default(),
                 temp.path().join("current.json"),
                 temp.path().join("settings.toml"),
                 temp.path().join("themes"),
@@ -981,7 +1266,7 @@ mod tests {
         let service = Arc::new(
             ThemeService::startup(
                 repo.clone(),
-                vec![],
+                AdapterRegistry::default(),
                 cache_file.clone(),
                 settings_file,
                 themes_dir,

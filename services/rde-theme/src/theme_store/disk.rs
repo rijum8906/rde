@@ -84,7 +84,7 @@ impl DiskThemeRepository {
         let path = self.current_cache_path();
         let json = serde_json::to_vec_pretty(resolved)
             .map_err(|e| ThemeError::Serialization(e.to_string()))?;
-        write_atomic(&path, &json).map_err(|source| ThemeError::Io { path, source })?;
+        write_atomic(&path, &json)?;
         Ok(())
     }
 
@@ -160,7 +160,7 @@ impl DiskThemeRepository {
                 continue;
             }
 
-            write_atomic(&path, &bytes).map_err(|source| ThemeError::Io { path, source })?;
+            write_atomic(&path, &bytes).unwrap();
         }
 
         debug!(
@@ -197,10 +197,7 @@ impl ThemeRepository for DiskThemeRepository {
         let theme_dir = self.resolve_theme_dir(id, entry);
         let manifest_path = theme_dir.join("theme.toml");
 
-        let content = std::fs::read_to_string(&manifest_path).map_err(|source| ThemeError::Io {
-            path: manifest_path.clone(),
-            source,
-        })?;
+        let content = std::fs::read_to_string(&manifest_path)?;
 
         let manifest: ThemeManifest =
             toml::from_str(&content).map_err(|e| ThemeError::Serialization(e.to_string()))?;
@@ -264,8 +261,7 @@ impl ThemeRepository for DiskThemeRepository {
         let path = self.registry_path();
         let content =
             toml::to_string_pretty(reg).map_err(|e| ThemeError::Serialization(e.to_string()))?;
-        write_atomic(&path, content.as_bytes())
-            .map_err(|source| ThemeError::Io { path, source })?;
+        write_atomic(&path, content.as_bytes())?;
         Ok(())
     }
 
@@ -279,10 +275,7 @@ impl ThemeRepository for DiskThemeRepository {
         }
 
         // Step 2: Read the file, propagating real I/O failures to the caller.
-        let content = std::fs::read_to_string(&path).map_err(|source| ThemeError::Io {
-            path: path.clone(),
-            source,
-        })?;
+        let content = std::fs::read_to_string(&path)?;
 
         // Step 3: Recover from corrupt files instead of failing the service.
         match toml::from_str::<ThemeSettings>(&content) {
@@ -298,8 +291,7 @@ impl ThemeRepository for DiskThemeRepository {
         let path = self.settings_path();
         let content = toml::to_string_pretty(settings)
             .map_err(|err| ThemeError::Serialization(err.to_string()))?;
-        write_atomic(&path, content.as_bytes())
-            .map_err(|source| ThemeError::Io { path, source })?;
+        write_atomic(&path, content.as_bytes())?;
         Ok(())
     }
 
@@ -319,11 +311,7 @@ impl ThemeRepository for DiskThemeRepository {
                 .ok_or_else(|| ThemeError::NotFound(id.clone()))?;
             let dir = self.resolve_theme_dir(id, entry);
             let manifest_path = dir.join("theme.toml");
-            let content =
-                std::fs::read_to_string(&manifest_path).map_err(|source| ThemeError::Io {
-                    path: manifest_path.clone(),
-                    source,
-                })?;
+            let content = std::fs::read_to_string(&manifest_path)?;
             let manifest: ThemeManifest =
                 toml::from_str(&content).map_err(|e| ThemeError::Serialization(e.to_string()))?;
             manifest.validate(&dir)?;
@@ -348,10 +336,7 @@ impl ThemeRepository for DiskThemeRepository {
 
         // Step 4: Read the payload through the single file-backed resolution path.
         let file_path = theme_root.join(descriptor.file_path.as_path());
-        let content = std::fs::read_to_string(&file_path).map_err(|source| ThemeError::Io {
-            path: file_path.clone(),
-            source,
-        })?;
+        let content = std::fs::read_to_string(&file_path)?;
 
         let resolved: ResolvedTheme = serde_json::from_str(&content).map_err(|err| {
             ThemeError::Resolved(format!("failed to parse '{}': {err}", file_path.display()))

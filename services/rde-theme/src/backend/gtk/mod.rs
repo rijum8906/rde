@@ -5,11 +5,13 @@
 pub mod css;
 
 use crate::{
-    backend::{Backend, BackendError, BackendOutput},
+    backend::{Adapter, BackendError, BackendOutput},
     domain::resolved::ResolvedTheme,
 };
 pub use css::render_gtk_css;
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
+
+pub const GTK_ADAPTER_NAME: &str = "gtk";
 
 /// Backend adapter that writes GTK CSS color definitions.
 #[derive(Debug, Clone)]
@@ -25,7 +27,7 @@ impl GtkEmitter {
     }
 }
 
-impl Backend for GtkEmitter {
+impl Adapter for GtkEmitter {
     fn name(&self) -> &'static str {
         "gtk"
     }
@@ -41,5 +43,10 @@ impl Backend for GtkEmitter {
             files: vec![(target_file, css.into_bytes())],
             env,
         })
+    }
+
+    fn config_paths(&self) -> HashMap<String, PathBuf> {
+        // TODO: add required paths
+        HashMap::new()
     }
 }

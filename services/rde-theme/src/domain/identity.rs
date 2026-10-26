@@ -257,6 +257,96 @@ impl From<VariantId> for String {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Type)]
+#[serde(try_from = "String", into = "String")]
+pub struct ResolverId(String);
+
+impl ResolverId {
+    pub fn new(s: impl AsRef<str>) -> Result<Self, IdError> {
+        let text = s.as_ref();
+        validate_id_grammar(text)?;
+        Ok(Self(text.to_string()))
+    }
+}
+
+impl Deref for ResolverId {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<str> for ResolverId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for ResolverId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl TryFrom<String> for ResolverId {
+    type Error = IdError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl From<ResolverId> for String {
+    fn from(id: ResolverId) -> Self {
+        id.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Type)]
+#[serde(try_from = "String", into = "String")]
+pub struct AdapterId(String);
+
+impl AdapterId {
+    pub fn new(s: impl AsRef<str>) -> Result<Self, IdError> {
+        let text = s.as_ref();
+        validate_id_grammar(text)?;
+        Ok(Self(text.to_string()))
+    }
+}
+
+impl Deref for AdapterId {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<str> for AdapterId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for AdapterId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl TryFrom<String> for AdapterId {
+    type Error = IdError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl From<AdapterId> for String {
+    fn from(id: AdapterId) -> Self {
+        id.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

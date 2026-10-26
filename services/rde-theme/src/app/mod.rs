@@ -24,7 +24,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use crate::{
-    backend::{GtkEmitter, QtEmitter},
+    backend::{AdapterRegistry, GtkEmitter, QtEmitter},
     constants::{DBUS_SERVICE_NAME, SERVICE_NAME, SHUTDOWN_TIMEOUT},
     dbus::{
         PORTAL_OBJECT_PATH, PortalSettingsInterface, THEME_OBJECT_PATH, ThemeInterface,
@@ -71,17 +71,27 @@ impl App {
         )
         .with_system_themes(paths.system_themes_dir().to_path_buf());
 
-        // Step 4: Initialize backends
-        let gtk_emitter = Arc::new(GtkEmitter::new(paths.cache_theme_dir().to_path_buf()));
+        // Step 4: Register the toolkit adapters
+        let gtk_emitter = GtkEmitter::new(paths.cache_theme_dir().to_path_buf());
         // KDE reads `kdeglobals` from the XDG config root and looks color schemes
         // up under `color-schemes/` in the XDG data home, so the emitter targets
         // those directories instead of the rde theme subdirectories.
-        let qt_emitter = Arc::new(QtEmitter::new(xdg_config_home(), xdg_data_home()));
+        let qt_emitter = QtEmitter::new(xdg_config_home(), xdg_data_home());
+
+        let mut adapter_registry = AdapterRegistry::default();
+        for adapter in [
+            Box::new(gtk_emitter) as Box<dyn crate::backend::Adapter>,
+            Box::new(qt_emitter),
+        ] {
+            let id = crate::domain::identity::AdapterId::new(adapter.name())
+                .map_err(|e| RdeError::Internal(e.to_string()))?;
+            adapter_registry.adapters.insert(id, adapter);
+        }
 
         // Step 5: Startup theme service
         let service = ThemeService::startup(
             Arc::new(disk_repo),
-            vec![gtk_emitter, qt_emitter],
+            adapter_registry,
             paths.published_theme_file(),
             paths.settings_file(),
             paths.data_themes_dir().to_path_buf(),

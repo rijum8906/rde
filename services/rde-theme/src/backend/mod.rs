@@ -5,18 +5,28 @@
 //! Backends are pure string/byte builders that return paths and payloads.
 //! File writes are performed exclusively by the application layer.
 
-use std::path::PathBuf;
+use rde_core::fs::rde_service_data_dir;
+use std::{collections::HashMap, path::PathBuf};
 use thiserror::Error;
 
-use crate::domain::resolved::ResolvedTheme;
-
+pub mod adapter;
+pub mod detect;
 pub mod gtk;
 pub mod material;
 pub mod qt;
+pub mod registry;
+pub mod resolver;
+pub mod resolvers;
 
 pub use gtk::GtkEmitter;
 pub use material::{FALLBACK_SEED_COLOR, MATERIAL_ALGORITHM_VERSION, compute_color_roles};
 pub use qt::{KDE_COLOR_SCHEME_NAME, QtEmitter};
+
+use crate::{
+    constants::SERVICE_NAME,
+    domain::{ResolvedTheme, identity::AdapterId},
+    paths::{xdg_cache_home, xdg_config_home},
+};
 
 /// Errors produced during backend rendering.
 #[derive(Debug, Error)]
@@ -33,6 +43,14 @@ pub enum BackendError {
     Io(#[from] std::io::Error),
 }
 
+#[derive(Debug, Clone, Default)]
+pub enum BackendKind {
+    Gtk,
+    Qt,
+    #[default]
+    Material,
+}
+
 /// Output payload emitted by a [`Backend`].
 #[derive(Debug, Clone, Default)]
 pub struct BackendOutput {
@@ -44,7 +62,7 @@ pub struct BackendOutput {
 }
 
 /// A toolkit or environment emitter that renders a [`ResolvedTheme`].
-pub trait Backend: Send + Sync {
+pub trait Adapter: Send + Sync {
     /// Unique name of the backend adapter (e.g. `"gtk"`, `"qt"`).
     fn name(&self) -> &'static str;
 
@@ -56,4 +74,34 @@ pub trait Backend: Send + Sync {
     /// # Errors
     /// Returns [`BackendError`] if rendering fails.
     fn render(&self, theme: &ResolvedTheme) -> Result<BackendOutput, BackendError>;
+
+    fn config_paths(&self) -> HashMap<String, PathBuf>;
+}
+
+#[derive(Default)]
+pub struct AdapterRegistry {
+    pub adapters: HashMap<AdapterId, Box<dyn Adapter>>,
+}
+
+impl AdapterRegistry {
+    pub fn build() -> Self {
+        let mut adapters: HashMap<AdapterId, Box<dyn Adapter>> = HashMap::new();
+
+        let config_home = xdg_config_home().join("rde/theme/");
+        let data_home = rde_service_data_dir(SERVICE_NAME).unwrap();
+        let cache_dir = xdg_cache_home().join("rde/theme");
+
+        // Qt
+        let qt = QtEmitter::new(config_home, data_home);
+        adapters.insert(AdapterId::new(qt.name().to_string()).unwrap(), Box::new(qt));
+
+        // Gtk
+        let gtk = GtkEmitter::new(cache_dir);
+        adapters.insert(
+            AdapterId::new(gtk.name().to_string()).unwrap(),
+            Box::new(gtk),
+        );
+
+        Self { adapters }
+    }
 }

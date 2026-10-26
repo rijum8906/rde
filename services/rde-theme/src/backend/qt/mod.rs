@@ -4,14 +4,27 @@
 //! from semantic [`ColorRoles`].
 
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
 };
 
 use crate::{
-    backend::{Backend, BackendError, BackendOutput},
+    backend::{Adapter, BackendError, BackendOutput},
     domain::resolved::{Color, ColorRoles, ResolvedTheme},
 };
+
+pub const KDE_GLOBALS_PATH_KEY: &str = "kde_globals";
+pub const KDE_COLOR_SCHEME_PATH_KEY: &str = "kde_color_scheme";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QtThemeBackend {
+    Kde,
+    LxQt,
+    Deepin,
+    Qt6Ct,
+    InProcess, // only the caller's own process, no file
+    None,
+}
 
 /// Name of the KDE color scheme the service installs and applies.
 pub const KDE_COLOR_SCHEME_NAME: &str = "RdeM3";
@@ -313,7 +326,19 @@ impl QtEmitter {
     }
 }
 
-impl Backend for QtEmitter {
+pub fn kdeglobals_path(config_home: impl AsRef<Path>) -> PathBuf {
+    config_home.as_ref().to_path_buf().join("kdeglobals")
+}
+
+pub fn color_scheme_path(data_home: impl AsRef<Path>) -> PathBuf {
+    data_home
+        .as_ref()
+        .to_path_buf()
+        .join("color-schemes")
+        .join(format!("{KDE_COLOR_SCHEME_NAME}.colors"))
+}
+
+impl Adapter for QtEmitter {
     fn name(&self) -> &'static str {
         "qt"
     }
@@ -339,6 +364,15 @@ impl Backend for QtEmitter {
             ],
             env: Vec::new(),
         })
+    }
+
+    fn config_paths(&self) -> HashMap<String, PathBuf> {
+        let mut hash_map: HashMap<String, PathBuf> = HashMap::new();
+
+        hash_map.insert(KDE_GLOBALS_PATH_KEY.into(), self.kdeglobals_path());
+        hash_map.insert(KDE_COLOR_SCHEME_PATH_KEY.into(), self.color_scheme_path());
+
+        hash_map
     }
 }
 

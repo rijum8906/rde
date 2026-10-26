@@ -5,16 +5,21 @@
 pub mod disk;
 
 use async_trait::async_trait;
+use serde::{Deserialize, de::value::Error};
 use std::path::PathBuf;
 use thiserror::Error;
 
-use crate::domain::{
-    error::{ManifestError, RegistryError, SettingsError},
-    identity::{ThemeId, VariantId},
-    manifest::ThemeManifest,
-    registry::{ThemeEntry, ThemeRegistry},
-    resolved::ResolvedTheme,
-    settings::ThemeSettings,
+use crate::{
+    backend::BackendError,
+    domain::{
+        IdError,
+        error::{ManifestError, RegistryError, SettingsError},
+        identity::{ThemeId, VariantId},
+        manifest::ThemeManifest,
+        registry::{ThemeEntry, ThemeRegistry},
+        resolved::ResolvedTheme,
+        settings::ThemeSettings,
+    },
 };
 
 pub use disk::DiskThemeRepository;
@@ -23,12 +28,11 @@ pub use disk::DiskThemeRepository;
 #[derive(Debug, Error)]
 pub enum ThemeError {
     /// I/O error carrying the path and root cause.
-    #[error("I/O error at '{path}': {source}")]
-    Io {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("Resolve error: {0}")]
+    Resolved(String),
 
     /// Requested theme identifier was not found.
     #[error("theme '{0}' not found")]
@@ -52,7 +56,10 @@ pub enum ThemeError {
 
     /// Resolved payload parsing or structure error.
     #[error("resolved payload error: {0}")]
-    Resolved(String),
+    Backend(#[from] BackendError),
+
+    #[error(transparent)]
+    IdError(#[from] IdError),
 
     /// Schema version is unsupported.
     #[error("unsupported schema version {found}, supported {supported}")]

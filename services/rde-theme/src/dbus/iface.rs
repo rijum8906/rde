@@ -70,8 +70,7 @@ impl ThemeInterface {
     /// Current appearance mode (`"light"` or `"dark"`).
     #[zbus(property)]
     pub async fn mode(&self) -> String {
-        let state = self.service.current_state().await;
-        match state.mode {
+        match self.service.theme_mode().await {
             ThemeMode::Light => "light".to_string(),
             ThemeMode::Dark => "dark".to_string(),
         }
@@ -420,7 +419,9 @@ pub fn spawn_dbus_signal_broadcaster(connection: zbus::Connection, service: Arc<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{service::ThemeService, theme_store::DiskThemeRepository};
+    use crate::{
+        backend::AdapterRegistry, service::ThemeService, theme_store::DiskThemeRepository,
+    };
     use zbus::object_server::Interface;
 
     /// Builds a service backed by throwaway XDG directories.
@@ -433,7 +434,7 @@ mod tests {
 
         let service = ThemeService::startup(
             repo,
-            vec![],
+            AdapterRegistry::default(),
             root.join("cache").join("current.json"),
             root.join("config").join("settings.toml"),
             root.join("themes"),
