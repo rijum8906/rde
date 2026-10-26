@@ -7,8 +7,9 @@
 //! a single repaint on daemon upgrade.
 
 use material_color_utilities::{
-    dynamiccolor::{DynamicSchemeBuilder, Variant},
+    dynamiccolor::{DynamicScheme, DynamicSchemeBuilder, SpecVersion, Variant},
     hct::Hct,
+    palettes::TonalPalette,
     score::score_with,
 };
 use std::{collections::HashMap, path::Path};
@@ -20,13 +21,38 @@ use crate::domain::{
 };
 
 /// Deterministic algorithm version for the Material 3 scheme derivation.
-pub const MATERIAL_ALGORITHM_VERSION: u32 = 1;
+///
+/// Bumped to 2 when the container pairs were corrected to the standard
+/// Material tones; consumers may see one repaint on upgrade.
+pub const MATERIAL_ALGORITHM_VERSION: u32 = 2;
 
 /// Deterministic algorithm version for extracting seed colors from wallpapers.
 pub const SEED_EXTRACTOR_VERSION: u32 = 1;
 
 /// Fallback seed color (Google Blue `#4285f4`) when no wallpaper or custom seed is provided.
 pub use crate::domain::resolved::FALLBACK_SEED_COLOR;
+
+/// Builds one Material 3 dynamic scheme for a seed, appearance, and contrast.
+///
+/// # Parameters
+/// - `source`: seed color in HCT space
+/// - `is_dark`: whether the scheme renders the dark appearance
+/// - `contrast_level`: Material contrast level (`0.0`, `0.5`, or `1.0`)
+/// - `spec`: Material color specification used for the role calculation
+fn build_scheme(
+    source: Hct,
+    is_dark: bool,
+    contrast_level: f64,
+    spec: SpecVersion,
+) -> DynamicScheme {
+    DynamicSchemeBuilder::default()
+        .source_color_hct(source)
+        .variant(Variant::TonalSpot)
+        .is_dark(is_dark)
+        .contrast_level(contrast_level)
+        .spec_version(spec)
+        .build()
+}
 
 /// Computes a complete [`ColorRoles`] struct from a seed [`Color`], mode, and contrast.
 ///
@@ -52,30 +78,71 @@ pub fn compute_color_roles(seed: &Color, mode: ThemeMode, contrast: ContrastLeve
         ContrastLevel::High => 1.0,
     };
 
-    let scheme = DynamicSchemeBuilder::default()
-        .source_color_hct(hct)
-        .variant(Variant::TonalSpot)
-        .is_dark(is_dark)
-        .contrast_level(contrast_level)
-        .build();
+    // Step 1: Base roles use the 2021 spec, which is what Flutter's
+    // `ColorScheme.fromSeed` and the other RDE toolkits render.
+    let scheme = build_scheme(hct.clone(), is_dark, contrast_level, SpecVersion::Spec2021);
+
+    // Step 2: Resolve the container pairs. Material's 2021 tone-delta rules are
+    // implemented on the wrong side of the pair by this crate, which makes dark
+    // schemes carry light containers (and light schemes dark ones). At normal
+    // contrast, use the canonical container tones directly; for the
+    // accessibility levels use the 2025 calculation, which keeps containers on
+    // the correct side and honors the extra contrast.
+    let accessibility_scheme = build_scheme(hct, is_dark, contrast_level, SpecVersion::Spec2025);
+    let normal_contrast = contrast == ContrastLevel::Normal;
+
+    let pair = |palette: &TonalPalette,
+                container: fn(&DynamicScheme) -> u32,
+                on_container: fn(&DynamicScheme) -> u32| {
+        if normal_contrast {
+            let (tone, on_tone) = if is_dark { (30u8, 90u8) } else { (90u8, 30u8) };
+            (palette.tone(tone), palette.tone(on_tone))
+        } else {
+            (
+                container(&accessibility_scheme),
+                on_container(&accessibility_scheme),
+            )
+        }
+    };
+
+    let (primary_container, on_primary_container) = pair(
+        scheme.primary_palette(),
+        DynamicScheme::primary_container,
+        DynamicScheme::on_primary_container,
+    );
+    let (secondary_container, on_secondary_container) = pair(
+        scheme.secondary_palette(),
+        DynamicScheme::secondary_container,
+        DynamicScheme::on_secondary_container,
+    );
+    let (tertiary_container, on_tertiary_container) = pair(
+        scheme.tertiary_palette(),
+        DynamicScheme::tertiary_container,
+        DynamicScheme::on_tertiary_container,
+    );
+    let (error_container, on_error_container) = pair(
+        scheme.error_palette(),
+        DynamicScheme::error_container,
+        DynamicScheme::on_error_container,
+    );
 
     ColorRoles {
         primary: Color::from_argb_u32(scheme.primary()),
         on_primary: Color::from_argb_u32(scheme.on_primary()),
-        primary_container: Color::from_argb_u32(scheme.primary_container()),
-        on_primary_container: Color::from_argb_u32(scheme.on_primary_container()),
+        primary_container: Color::from_argb_u32(primary_container),
+        on_primary_container: Color::from_argb_u32(on_primary_container),
         secondary: Color::from_argb_u32(scheme.secondary()),
         on_secondary: Color::from_argb_u32(scheme.on_secondary()),
-        secondary_container: Color::from_argb_u32(scheme.secondary_container()),
-        on_secondary_container: Color::from_argb_u32(scheme.on_secondary_container()),
+        secondary_container: Color::from_argb_u32(secondary_container),
+        on_secondary_container: Color::from_argb_u32(on_secondary_container),
         tertiary: Color::from_argb_u32(scheme.tertiary()),
         on_tertiary: Color::from_argb_u32(scheme.on_tertiary()),
-        tertiary_container: Color::from_argb_u32(scheme.tertiary_container()),
-        on_tertiary_container: Color::from_argb_u32(scheme.on_tertiary_container()),
+        tertiary_container: Color::from_argb_u32(tertiary_container),
+        on_tertiary_container: Color::from_argb_u32(on_tertiary_container),
         error: Color::from_argb_u32(scheme.error()),
         on_error: Color::from_argb_u32(scheme.on_error()),
-        error_container: Color::from_argb_u32(scheme.error_container()),
-        on_error_container: Color::from_argb_u32(scheme.on_error_container()),
+        error_container: Color::from_argb_u32(error_container),
+        on_error_container: Color::from_argb_u32(on_error_container),
         background: Color::from_argb_u32(scheme.background()),
         on_background: Color::from_argb_u32(scheme.on_background()),
         surface: Color::from_argb_u32(scheme.surface()),
@@ -164,6 +231,30 @@ mod tests {
 
         let light = compute_color_roles(&seed, ThemeMode::Light, ContrastLevel::Normal);
         assert_ne!(roles1.surface, light.surface);
+    }
+
+    #[test]
+    fn normal_contrast_matches_the_flutter_color_scheme() {
+        let seed = Color::new("#6750A4").unwrap();
+
+        // Values produced by Flutter's `ColorScheme.fromSeed` for the same seed.
+        let dark = compute_color_roles(&seed, ThemeMode::Dark, ContrastLevel::Normal);
+        assert_eq!(dark.primary.as_str(), "#cfbdfe");
+        assert_eq!(dark.on_primary.as_str(), "#36275d");
+        assert_eq!(dark.primary_container.as_str(), "#4d3d75");
+        assert_eq!(dark.on_primary_container.as_str(), "#e9ddff");
+        assert_eq!(dark.tertiary_container.as_str(), "#633b48");
+        assert_eq!(dark.on_tertiary_container.as_str(), "#ffd9e3");
+        assert_eq!(dark.error_container.as_str(), "#93000a");
+        assert_eq!(dark.surface.as_str(), "#141218");
+
+        let light = compute_color_roles(&seed, ThemeMode::Light, ContrastLevel::Normal);
+        assert_eq!(light.primary.as_str(), "#65558f");
+        assert_eq!(light.primary_container.as_str(), "#e9ddff");
+        assert_eq!(light.on_primary_container.as_str(), "#4d3d75");
+        assert_eq!(light.tertiary_container.as_str(), "#ffd9e3");
+        assert_eq!(light.on_tertiary_container.as_str(), "#633b48");
+        assert_eq!(light.surface.as_str(), "#fdf7ff");
     }
 
     #[test]

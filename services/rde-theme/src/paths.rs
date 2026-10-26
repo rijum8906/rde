@@ -7,6 +7,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// File name of the published resolved theme cache.
+///
+/// Applications read this file before the session bus is ready, so both this
+/// service and its clients depend on the name staying stable.
+pub const DEFAULT_PUBLISHED_THEME_FILE: &str = "default_theme.json";
+
 /// Resolves `$XDG_DATA_HOME`, falling back to `~/.local/share`.
 #[must_use]
 pub fn xdg_data_home() -> PathBuf {
@@ -50,6 +56,7 @@ pub struct ThemePaths {
     config_themes_dir: PathBuf,
     cache_theme_dir: PathBuf,
     system_themes_dir: PathBuf,
+    published_theme_file: PathBuf,
 }
 
 impl Default for ThemePaths {
@@ -67,6 +74,10 @@ impl ThemePaths {
             config_themes_dir: xdg_config_home().join("rde").join("themes"),
             cache_theme_dir: xdg_cache_home().join("rde").join("theme"),
             system_themes_dir: PathBuf::from("/usr/share/rde/themes"),
+            published_theme_file: xdg_data_home()
+                .join("rde")
+                .join("rde-theme")
+                .join(DEFAULT_PUBLISHED_THEME_FILE),
         }
     }
 
@@ -77,12 +88,14 @@ impl ThemePaths {
         config_themes_dir: PathBuf,
         cache_theme_dir: PathBuf,
         system_themes_dir: PathBuf,
+        published_theme_file: PathBuf,
     ) -> Self {
         Self {
             data_themes_dir,
             config_themes_dir,
             cache_theme_dir,
             system_themes_dir,
+            published_theme_file,
         }
     }
 
@@ -122,9 +135,35 @@ impl ThemePaths {
         self.config_themes_dir.join("settings.toml")
     }
 
-    /// Path to the atomic cache `current.json` file.
+    /// Path to the published resolved theme cache consumed at application startup.
+    ///
+    /// Defaults to `$XDG_DATA_HOME/rde/rde-theme/default_theme.json` and is
+    /// rewritten atomically before every `ThemeChanged` signal.
     #[must_use]
-    pub fn current_cache_file(&self) -> PathBuf {
-        self.cache_theme_dir.join("current.json")
+    pub fn published_theme_file(&self) -> PathBuf {
+        self.published_theme_file.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn published_theme_file_lives_under_the_rde_data_directory() {
+        let paths = ThemePaths::resolve();
+        let expected = xdg_data_home()
+            .join("rde")
+            .join("rde-theme")
+            .join(DEFAULT_PUBLISHED_THEME_FILE);
+
+        assert_eq!(paths.published_theme_file(), expected);
+        assert_eq!(
+            paths
+                .published_theme_file()
+                .file_name()
+                .and_then(|name| name.to_str()),
+            Some("default_theme.json")
+        );
     }
 }

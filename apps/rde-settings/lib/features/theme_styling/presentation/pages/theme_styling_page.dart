@@ -1,26 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:rde_settings/core/theme/bloc/app_theme_bloc.dart';
-import 'package:rde_settings/core/theme/bloc/app_theme_event.dart';
-import 'package:rde_settings/features/theme_styling/data/datasources/dbus/rde_theme_proxy.dart';
+import 'package:rde_settings/core/theme/data/datasources/dbus/rde_theme_proxy.dart';
+import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
+import 'package:rde_settings/core/theme/domain/entities/seed_source.dart';
+import 'package:rde_settings/core/theme/domain/entities/theme_color.dart';
+import 'package:rde_settings/core/theme/domain/entities/theme_manifest.dart';
+import 'package:rde_settings/core/theme/theme_data_factory.dart';
 import 'package:rde_settings/features/theme_styling/data/datasources/dbus_theme_datasource.dart';
-import 'package:rde_settings/features/theme_styling/domain/entities/rde_color_scheme.dart';
-import 'package:rde_settings/features/theme_styling/domain/entities/rde_palette.dart';
-import 'package:rde_settings/features/theme_styling/domain/entities/rde_theme_info.dart';
-import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 import 'package:rde_settings/features/theme_styling/domain/repositories/theme_repository_impl.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/create_theme.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/delete_theme.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/load_theme_catalog.dart';
+import 'package:rde_settings/features/theme_styling/domain/use_cases/preview_theme.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/reload_themes.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/set_color_scheme.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/set_source_color.dart';
+import 'package:rde_settings/features/theme_styling/domain/use_cases/set_mode.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/set_theme.dart';
+import 'package:rde_settings/features/theme_styling/domain/use_cases/update_dynamic_theme.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/watch_theme_changes.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_state.dart';
-import 'package:rde_settings/features/theme_styling/presentation/mappers/theme_palette_mapper.dart';
 
 /// Seed colors offered as one-tap palette regeneration options.
 const List<String> _seedColors = [
@@ -51,15 +48,16 @@ const List<String> _previewRoles = [
 
 /// Parses a hex color for display, falling back to the Material seed.
 Color _displayColor(String hex) {
-  return Color(RdePalette.parseHexColor(hex) ?? 0xFF6750A4);
+  return Color(ThemeColor.parseArgb(hex) ?? 0xFF6750A4);
 }
 
 /// Theme & Styling settings backed by the `org.rde.Theme` service.
 ///
-/// The page lists the installed themes, activates them, creates and deletes
-/// themes, edits the active theme's seed color, and switches the desktop
-/// light/dark appearance. Every action is persisted by the service, and the
-/// catalogs it returns are applied to this application's own theme as well.
+/// The page lists the installed themes, activates them, edits the inputs of
+/// the built-in dynamic theme, and switches the desktop light/dark appearance.
+/// Themes themselves are author-owned manifests on disk, so this page never
+/// creates or deletes them. Every action is persisted by the service, and this
+/// application's own theme follows the payload the service publishes.
 class ThemeStylingPage extends StatelessWidget {
   const ThemeStylingPage({super.key});
 
@@ -74,11 +72,10 @@ class ThemeStylingPage extends StatelessWidget {
     return BlocProvider(
       create: (context) => ThemeBloc(
         loadThemeCatalog: LoadThemeCatalogUseCase(repository),
+        previewTheme: PreviewThemeUseCase(repository),
         setTheme: SetThemeUseCase(repository),
-        createTheme: CreateThemeUseCase(repository),
-        deleteTheme: DeleteThemeUseCase(repository),
-        setSourceColor: SetSourceColorUseCase(repository),
-        setColorScheme: SetColorSchemeUseCase(repository),
+        setMode: SetModeUseCase(repository),
+        updateDynamicTheme: UpdateDynamicThemeUseCase(repository),
         reloadThemes: ReloadThemesUseCase(repository),
         watchThemeChanges: WatchThemeChangesUseCase(repository),
       )..add(const ThemeInitEvent()),
@@ -87,7 +84,10 @@ class ThemeStylingPage extends StatelessWidget {
   }
 }
 
-/// Stateful view so the applied catalog can be tracked by identity.
+/// Renders the catalog published by [ThemeBloc].
+///
+/// The application theme itself follows `org.rde.Theme` through the system
+/// theme sync, so this view only renders the service state.
 class ThemeStylingView extends StatefulWidget {
   const ThemeStylingView({super.key});
 
@@ -96,42 +96,16 @@ class ThemeStylingView extends StatefulWidget {
 }
 
 class _ThemeStylingViewState extends State<ThemeStylingView> {
-  ThemeCatalog? _appliedCatalog;
-
-  /// Pushes the service palettes into the global app theme.
-  void _applyCatalog(BuildContext context, ThemeCatalog catalog) {
-    if (identical(_appliedCatalog, catalog)) {
-      return;
-    }
-    _appliedCatalog = catalog;
-
-    context.read<AppThemeBloc>().add(
-      ApplySystemPaletteEvent(
-        lightScheme: catalog.lightPalette.toColorScheme(),
-        darkScheme: catalog.darkPalette.toColorScheme(),
-        sourceColorArgb:
-            RdePalette.parseHexColor(catalog.sourceColor) ?? 0xFF6750A4,
-        isDark: catalog.colorScheme.isDark,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    return BlocListener<ThemeBloc, ThemeState>(
-      listenWhen: (previous, current) =>
-          current.catalog != null &&
-          !identical(previous.catalog, current.catalog),
-      listener: (context, state) => _applyCatalog(context, state.catalog!),
-      child: Scaffold(
-        body: BlocBuilder<ThemeBloc, ThemeState>(
-          builder: (context, state) {
-            if (!state.hasCatalog) {
-              return _buildUnavailableBody(context, state);
-            }
-            return _buildContent(context, state);
-          },
-        ),
+    return Scaffold(
+      body: BlocBuilder<ThemeBloc, ThemeState>(
+        builder: (context, state) {
+          if (!state.hasCatalog) {
+            return _buildUnavailableBody(context, state);
+          }
+          return _buildContent(context, state);
+        },
       ),
     );
   }
@@ -208,6 +182,8 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildActiveThemeCard(context, state),
+                        const SizedBox(height: 28),
+                        _buildDynamicThemeCard(context, state),
                         const SizedBox(height: 28),
                         _buildInstalledThemesCard(context, state),
                       ],
@@ -329,9 +305,8 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final catalog = state.catalog!;
-    final info = catalog.activeTheme;
-    final sourceColor = catalog.sourceColor;
-    final selectedSeed = RdePalette.parseHexColor(sourceColor);
+    final info = state.activeTheme;
+    final sourceColor = catalog.resolved.colors.primary.value;
 
     return Card(
       child: Padding(
@@ -413,8 +388,8 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
                     context: context,
                     label: 'Light',
                     icon: Icons.light_mode,
-                    scheme: RdeColorScheme.light,
-                    selected: (catalog.colorScheme == RdeColorScheme.light),
+                    mode: AppearanceMode.light,
+                    selected: (catalog.mode == AppearanceMode.light),
                     enabled: !state.isBusy,
                   ),
                 ),
@@ -424,78 +399,38 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
                     context: context,
                     label: 'Dark',
                     icon: Icons.dark_mode,
-                    scheme: RdeColorScheme.dark,
-                    selected: (catalog.colorScheme == RdeColorScheme.dark),
+                    mode: AppearanceMode.dark,
+                    selected: (catalog.mode == AppearanceMode.dark),
                     enabled: !state.isBusy,
                   ),
                 ),
               ],
             ),
-            const Divider(height: 32),
-
-            // Seed color of the active theme.
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Seed Color',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: state.isBusy
-                      ? null
-                      : () => _editSeedColor(context, sourceColor),
-                  icon: const Icon(Icons.colorize, size: 18),
-                  label: const Text('Custom'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Re-seeds the active theme. Both schemes and the toolkit '
-              'palettes are regenerated from this color.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 14,
-              runSpacing: 12,
-              children: _seedColors.map((hex) {
-                final selected = RdePalette.parseHexColor(hex) == selectedSeed;
-                return _buildSeedSwatch(
-                  context: context,
-                  hex: hex,
-                  selected: selected,
-                  enabled: !state.isBusy,
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Container(
-                  width: 14,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    color: _displayColor(sourceColor),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  sourceColor.toUpperCase(),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
+            if (info != null && (info.author != null || info.license != null))
+              ...[
+                const Divider(height: 32),
+                Row(
+                  children: [
+                    if (info.author != null)
+                      Expanded(
+                        child: Text(
+                          'Author • ${info.author}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    if (info.license != null)
+                      Text(
+                        'License • ${info.license}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
                 ),
               ],
-            ),
           ],
         ),
       ),
@@ -506,7 +441,7 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
     required BuildContext context,
     required String label,
     required IconData icon,
-    required RdeColorScheme scheme,
+    required AppearanceMode mode,
     required bool selected,
     required bool enabled,
   }) {
@@ -515,7 +450,7 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
 
     return InkWell(
       onTap: enabled && !selected
-          ? () => context.read<ThemeBloc>().add(SetColorSchemeEvent(scheme))
+          ? () => context.read<ThemeBloc>().add(SetAppearanceEvent(mode))
           : null,
       borderRadius: BorderRadius.circular(16),
       child: AnimatedContainer(
@@ -583,7 +518,7 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
         cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
         child: GestureDetector(
           onTap: enabled && !selected
-              ? () => context.read<ThemeBloc>().add(SetSourceColorEvent(hex))
+              ? () => context.read<ThemeBloc>().add(SetDynamicSeedEvent(hex))
               : null,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
@@ -634,35 +569,23 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Installed Themes',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${catalog.themes.length} theme'
-                        '${catalog.themes.length == 1 ? '' : 's'} installed '
-                        'by the org.rde.Theme service',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+                Text(
+                  'Installed Themes',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(width: 12),
-                FilledButton.tonalIcon(
-                  onPressed: state.isBusy ? null : () => _createTheme(context),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('New Theme'),
+                const SizedBox(height: 2),
+                Text(
+                  '${catalog.themes.length} theme'
+                  '${catalog.themes.length == 1 ? '' : 's'} available to '
+                  'org.rde.Theme, including the built-in dynamic theme',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -671,7 +594,8 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
-                  'No themes are installed. Create one from a seed color.',
+                  'No themes are installed. Add a theme manifest to the '
+                  'themes directory and reload.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -704,12 +628,16 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
 
   Widget _buildThemeRow({
     required BuildContext context,
-    required RdeThemeInfo info,
+    required ThemeManifest info,
     required bool isActive,
     required bool enabled,
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isDynamic = info.name == ThemeManifest.dynamicId;
+    final subtitle = isDynamic
+        ? 'Wallpaper-derived colors'
+        : (info.description.isNotEmpty ? info.description : info.name);
 
     return InkWell(
       onTap: enabled && !isActive
@@ -724,8 +652,17 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
               width: 26,
               height: 26,
               decoration: BoxDecoration(
-                color: _displayColor(info.sourceColor),
+                color: isActive
+                    ? colorScheme.primary
+                    : colorScheme.secondaryContainer,
                 borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                isDynamic ? Icons.wallpaper : Icons.palette_outlined,
+                size: 16,
+                color: isActive
+                    ? colorScheme.onPrimary
+                    : colorScheme.onSecondaryContainer,
               ),
             ),
             const SizedBox(width: 14),
@@ -743,9 +680,7 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    info.author.isEmpty
-                        ? info.sourceColor.toUpperCase()
-                        : '${info.sourceColor.toUpperCase()} • ${info.author}',
+                    info.author == null ? subtitle : '$subtitle • ${info.author}',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
@@ -783,16 +718,6 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
                 tooltip: 'Activate',
                 visualDensity: VisualDensity.compact,
               ),
-              IconButton(
-                onPressed: enabled ? () => _confirmDelete(context, info) : null,
-                icon: Icon(
-                  Icons.delete_outline,
-                  size: 20,
-                  color: colorScheme.error.withValues(alpha: 0.8),
-                ),
-                tooltip: 'Delete theme',
-                visualDensity: VisualDensity.compact,
-              ),
             ],
           ],
         ),
@@ -802,37 +727,38 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
 
   Widget _buildPreviewCard(BuildContext context, ThemeState state) {
     final theme = Theme.of(context);
-    final palette = state.previewPalette;
-    if (palette == null) {
+    final preview = state.previewTheme;
+    if (preview == null) {
       return const SizedBox.shrink();
     }
 
-    // The preview renders the service palette for the selected scheme instead
-    // of the app theme, so the inactive scheme can be inspected directly.
-    final scheme = palette.toColorScheme();
-    final isDark = scheme.brightness == Brightness.dark;
+    // The preview renders the payload the service resolves for the selected
+    // appearance instead of the app theme, so the inactive appearance can be
+    // inspected without switching the desktop preference.
+    final scheme = colorSchemeFromResolved(preview, mode: state.previewMode);
+    final isDark = state.previewMode.isDark;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Align(
           alignment: Alignment.centerRight,
-          child: SegmentedButton<RdeColorScheme>(
+          child: SegmentedButton<AppearanceMode>(
             segments: const [
               ButtonSegment(
-                value: RdeColorScheme.light,
+                value: AppearanceMode.light,
                 icon: Icon(Icons.light_mode, size: 16),
                 label: Text('Light'),
               ),
               ButtonSegment(
-                value: RdeColorScheme.dark,
+                value: AppearanceMode.dark,
                 icon: Icon(Icons.dark_mode, size: 16),
                 label: Text('Dark'),
               ),
             ],
-            selected: {state.previewScheme},
+            selected: {state.previewMode},
             onSelectionChanged: (selection) => context.read<ThemeBloc>().add(
-              SetPreviewSchemeEvent(selection.first),
+              SetPreviewModeEvent(selection.first),
             ),
             showSelectedIcon: false,
             style: const ButtonStyle(visualDensity: VisualDensity.compact),
@@ -1012,7 +938,7 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
                     ),
                     const SizedBox(height: 18),
 
-                    // Palette roles straight from GetPalette.
+                    // Color roles of the payload returned by Preview.
                     Text(
                       'Palette roles',
                       style: theme.textTheme.labelSmall?.copyWith(
@@ -1026,7 +952,7 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
                       spacing: 8,
                       runSpacing: 8,
                       children: _previewRoles.map((role) {
-                        final hex = palette.hex(role);
+                        final hex = preview.colors.hex(role);
                         if (hex == null) {
                           return const SizedBox.shrink();
                         }
@@ -1103,6 +1029,164 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
     );
   }
 
+  /// Renders the inputs of the built-in `rde-dynamic` theme.
+  ///
+  /// The service stores inputs only and recomputes the palette from them, so
+  /// this card edits the seed source, the fixed seed color, and the wallpaper
+  /// path instead of any resolved color.
+  Widget _buildDynamicThemeCard(BuildContext context, ThemeState state) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final catalog = state.catalog!;
+    final seedSource = catalog.dynamicSeedSource;
+    final selectedSeed = ThemeColor.tryParse(catalog.dynamicSeed);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Dynamic Theme',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'org.rde.Theme regenerates the built-in rde-dynamic palette from '
+              'the desktop wallpaper or a fixed seed color.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (!catalog.isDynamicActive) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Activate rde-dynamic to apply these inputs to the desktop.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.primary,
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            SegmentedButton<SeedSource>(
+              segments: const [
+                ButtonSegment(
+                  value: SeedSource.wallpaper,
+                  icon: Icon(Icons.wallpaper, size: 16),
+                  label: Text('Wallpaper'),
+                ),
+                ButtonSegment(
+                  value: SeedSource.fixed,
+                  icon: Icon(Icons.colorize, size: 16),
+                  label: Text('Fixed color'),
+                ),
+              ],
+              selected: {seedSource},
+              onSelectionChanged: state.isBusy
+                  ? null
+                  : (selection) => context.read<ThemeBloc>().add(
+                      SetDynamicSeedSourceEvent(selection.first),
+                    ),
+              showSelectedIcon: false,
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            ),
+            const SizedBox(height: 18),
+
+            // Wallpaper the seed color is derived from.
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    catalog.dynamicWallpaper.isEmpty
+                        ? 'No wallpaper recorded yet'
+                        : catalog.dynamicWallpaper,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                TextButton.icon(
+                  onPressed: state.isBusy
+                      ? null
+                      : () => _editWallpaper(context, catalog.dynamicWallpaper),
+                  icon: const Icon(Icons.folder_open, size: 18),
+                  label: const Text('Wallpaper'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Explicit seed color used by the fixed source.
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Seed Color',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: state.isBusy
+                      ? null
+                      : () => _editSeedColor(context, catalog.dynamicSeed),
+                  icon: const Icon(Icons.colorize, size: 18),
+                  label: const Text('Custom'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 14,
+              runSpacing: 12,
+              children: _seedColors.map((hex) {
+                final selected =
+                    ThemeColor.tryParse(hex)?.argb == selectedSeed?.argb;
+                return _buildSeedSwatch(
+                  context: context,
+                  hex: hex,
+                  selected: selected,
+                  enabled: !state.isBusy,
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: catalog.dynamicSeed.isEmpty
+                        ? colorScheme.surfaceContainerHighest
+                        : _displayColor(catalog.dynamicSeed),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  catalog.dynamicSeed.isEmpty
+                      ? 'No fixed seed color'
+                      : catalog.dynamicSeed.toUpperCase(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _editSeedColor(BuildContext context, String current) async {
     final color = await showDialog<String>(
       context: context,
@@ -1112,203 +1196,92 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
     if (color == null || !context.mounted) {
       return;
     }
-    context.read<ThemeBloc>().add(SetSourceColorEvent(color));
+    context.read<ThemeBloc>().add(SetDynamicSeedEvent(color));
   }
 
-  Future<void> _createTheme(BuildContext context) async {
-    final request = await showDialog<_NewThemeRequest>(
+  Future<void> _editWallpaper(BuildContext context, String current) async {
+    final wallpaper = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => const _CreateThemeDialog(),
+      builder: (dialogContext) => _WallpaperInputDialog(initialPath: current),
     );
 
-    if (request == null || !context.mounted) {
+    if (wallpaper == null || !context.mounted) {
       return;
     }
-    context.read<ThemeBloc>().add(
-      CreateThemeEvent(name: request.name, sourceColor: request.sourceColor),
-    );
-  }
-
-  Future<void> _confirmDelete(BuildContext context, RdeThemeInfo info) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete theme?'),
-        content: Text(
-          '"${info.displayName}" will be removed from the theme database. '
-          'This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !context.mounted) {
-      return;
-    }
-    context.read<ThemeBloc>().add(DeleteThemeEvent(info.name));
+    context.read<ThemeBloc>().add(SetDynamicWallpaperEvent(wallpaper));
   }
 }
 
-/// Result of the create-theme dialog.
-class _NewThemeRequest {
-  const _NewThemeRequest({required this.name, required this.sourceColor});
+/// Dialog that points the built-in dynamic theme at an explicit wallpaper.
+class _WallpaperInputDialog extends StatefulWidget {
+  const _WallpaperInputDialog({required this.initialPath});
 
-  final String name;
-  final String sourceColor;
-}
-
-/// Validates a theme identifier the same way the service does.
-bool _isValidThemeName(String value) {
-  return RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$').hasMatch(value);
-}
-
-/// Dialog that creates a new theme from a name and a seed color.
-class _CreateThemeDialog extends StatefulWidget {
-  const _CreateThemeDialog();
+  final String initialPath;
 
   @override
-  State<_CreateThemeDialog> createState() => _CreateThemeDialogState();
+  State<_WallpaperInputDialog> createState() => _WallpaperInputDialogState();
 }
 
-class _CreateThemeDialogState extends State<_CreateThemeDialog> {
-  final _nameController = TextEditingController();
-  final _colorController = TextEditingController(text: '#006A6A');
+class _WallpaperInputDialogState extends State<_WallpaperInputDialog> {
+  late final TextEditingController _controller;
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialPath);
+  }
+
+  @override
   void dispose() {
-    _nameController.dispose();
-    _colorController.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
   void _submit() {
-    final name = _nameController.text.trim();
-    final color = _colorController.text.trim();
-
-    setState(() {
-      // Step 1: Reject names the service would reject.
-      if (!_isValidThemeName(name)) {
-        _error =
-            'Use letters, digits, "-", "_" or "." (max 64 characters), '
-            'starting with a letter or digit.';
-        return;
-      }
-
-      // Step 2: Require a parseable hex color.
-      if (RdePalette.parseHexColor(color) == null) {
-        _error = 'Enter a hex color such as #006A6A or #06A.';
-        return;
-      }
-
-      _error = null;
-    });
-
-    if (_error != null) {
+    final path = _controller.text.trim();
+    if (!path.startsWith('/')) {
+      setState(
+        () => _error = 'Enter an absolute path, such as /home/you/wall.png.',
+      );
       return;
     }
-    Navigator.of(context).pop(_NewThemeRequest(name: name, sourceColor: color));
+
+    Navigator.of(context).pop(path);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final previewColor = RdePalette.parseHexColor(_colorController.text.trim());
 
     return AlertDialog(
-      title: const Text('New Theme'),
+      title: const Text('Wallpaper'),
       content: SizedBox(
-        width: 380,
+        width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'The theme is generated from a single seed color and installed '
-              'next to the existing themes.',
+              'org.rde.Theme derives the dynamic palette from this image.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 16),
             TextField(
-              controller: _nameController,
+              controller: _controller,
               autofocus: true,
               decoration: const InputDecoration(
-                labelText: 'Theme name',
-                hintText: 'ocean',
+                labelText: 'Wallpaper path',
+                hintText: '/home/you/Pictures/wallpaper.png',
               ),
-              textInputAction: TextInputAction.next,
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: previewColor == null
-                        ? colorScheme.surfaceContainerHighest
-                        : Color(previewColor),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: colorScheme.outlineVariant),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _colorController,
-                    decoration: const InputDecoration(
-                      labelText: 'Seed color',
-                      hintText: '#006A6A',
-                    ),
-                    onChanged: (_) => setState(() {}),
-                    onSubmitted: (_) => _submit(),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 8,
-              children: _seedColors.map((hex) {
-                return InkWell(
-                  onTap: () => setState(() {
-                    _colorController.text = hex;
-                  }),
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: _displayColor(hex),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color:
-                            _colorController.text.trim().toUpperCase() ==
-                                hex.toUpperCase()
-                            ? colorScheme.onSurface
-                            : Colors.transparent,
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
+              onChanged: (_) => setState(() => _error = null),
+              onSubmitted: (_) => _submit(),
             ),
             if (_error != null) ...[
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Text(
                 _error!,
                 style: theme.textTheme.bodySmall?.copyWith(
@@ -1324,7 +1297,7 @@ class _CreateThemeDialogState extends State<_CreateThemeDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(onPressed: _submit, child: const Text('Create')),
+        FilledButton(onPressed: _submit, child: const Text('Apply')),
       ],
     );
   }
@@ -1361,7 +1334,7 @@ class _ColorInputDialogState extends State<_ColorInputDialog> {
   void _submit() {
     final color = _controller.text.trim();
 
-    if (RdePalette.parseHexColor(color) == null) {
+    if (ThemeColor.parseArgb(color) == null) {
       setState(() => _error = 'Enter a hex color such as #006A6A or #06A.');
       return;
     }
@@ -1373,7 +1346,7 @@ class _ColorInputDialogState extends State<_ColorInputDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final previewColor = RdePalette.parseHexColor(_controller.text.trim());
+    final previewColor = ThemeColor.parseArgb(_controller.text.trim());
 
     return AlertDialog(
       title: const Text('Custom Seed Color'),

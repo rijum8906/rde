@@ -665,7 +665,8 @@ class DashboardView extends StatelessWidget {
               spacing: 12,
               runSpacing: 12,
               children: accentColors.map((color) {
-                final isSelected = state.accentColor.value == color.value;
+                final isSelected =
+                    state.accentColor.toARGB32() == color.toARGB32();
                 return MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: GestureDetector(

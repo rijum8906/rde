@@ -1,4 +1,5 @@
-import 'package:rde_settings/features/theme_styling/domain/entities/rde_color_scheme.dart';
+import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
+import 'package:rde_settings/core/theme/domain/entities/seed_source.dart';
 
 /// Base class for events handled by the theme bloc.
 abstract class ThemeEvent {
@@ -10,12 +11,12 @@ class ThemeInitEvent extends ThemeEvent {
   const ThemeInitEvent();
 }
 
-/// Asks the service to re-read its database and then refreshes the UI.
+/// Asks the service to re-read manifests and settings, then refreshes the UI.
 class ReloadThemeDatabaseEvent extends ThemeEvent {
   const ReloadThemeDatabaseEvent();
 }
 
-/// Internal event fired when the service reports a property change.
+/// Internal event fired when the service publishes a new theme state.
 class ThemeServiceChangedEvent extends ThemeEvent {
   const ThemeServiceChangedEvent();
 }
@@ -29,43 +30,49 @@ class DismissThemeErrorEvent extends ThemeEvent {
 class SelectThemeEvent extends ThemeEvent {
   const SelectThemeEvent(this.theme);
 
+  /// Identifier of the theme to activate.
   final String theme;
 }
 
-/// Creates a theme from a seed color and activates it.
-class CreateThemeEvent extends ThemeEvent {
-  const CreateThemeEvent({required this.name, required this.sourceColor});
+/// Switches the desktop light/dark appearance.
+class SetAppearanceEvent extends ThemeEvent {
+  const SetAppearanceEvent(this.mode);
 
-  final String name;
-  final String sourceColor;
+  /// Appearance to persist for the whole desktop.
+  final AppearanceMode mode;
 }
 
-/// Deletes an installed, non-active theme.
-class DeleteThemeEvent extends ThemeEvent {
-  const DeleteThemeEvent(this.theme);
-
-  final String theme;
-}
-
-/// Re-seeds the active theme with a new source color.
-class SetSourceColorEvent extends ThemeEvent {
-  const SetSourceColorEvent(this.sourceColor);
-
-  final String sourceColor;
-}
-
-/// Writes the global light/dark preference.
-class SetColorSchemeEvent extends ThemeEvent {
-  const SetColorSchemeEvent(this.scheme);
-
-  final RdeColorScheme scheme;
-}
-
-/// Switches which palette the live preview renders.
+/// Switches which appearance the live preview renders.
 ///
-/// This only changes the preview, not the desktop preference.
-class SetPreviewSchemeEvent extends ThemeEvent {
-  const SetPreviewSchemeEvent(this.scheme);
+/// This only resolves a preview payload, not the desktop preference.
+class SetPreviewModeEvent extends ThemeEvent {
+  const SetPreviewModeEvent(this.mode);
 
-  final RdeColorScheme scheme;
+  /// Appearance to render in the preview.
+  final AppearanceMode mode;
+}
+
+/// Selects whether the dynamic theme derives its seed from the wallpaper or a
+/// fixed color.
+class SetDynamicSeedSourceEvent extends ThemeEvent {
+  const SetDynamicSeedSourceEvent(this.source);
+
+  /// Seed source to persist.
+  final SeedSource source;
+}
+
+/// Re-seeds the built-in dynamic theme from an explicit color.
+class SetDynamicSeedEvent extends ThemeEvent {
+  const SetDynamicSeedEvent(this.seed);
+
+  /// Seed color in any supported hexadecimal form.
+  final String seed;
+}
+
+/// Points the built-in dynamic theme at an explicit wallpaper.
+class SetDynamicWallpaperEvent extends ThemeEvent {
+  const SetDynamicWallpaperEvent(this.wallpaper);
+
+  /// Absolute path of the wallpaper to derive the seed color from.
+  final String wallpaper;
 }

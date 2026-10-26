@@ -1,14 +1,16 @@
+// Entry point of the RDE shell.
+
 import 'package:flutter/material.dart';
+import 'package:rde_shell/app.dart';
 import 'package:rde_shell/core/bootstrap/window_bootstrap.dart';
-import 'app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  bool isSupported = await bootstrapShellWindow();
+  final bool isSupported = await bootstrapShellWindow();
 
   if (!isSupported) {
-    debugPrint('❌ Wayland Layer Shell not supported');
+    debugPrint('RDE Shell requires a compositor with zwlr_layer_shell_v1');
     return;
   }
 

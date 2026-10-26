@@ -15,10 +15,9 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
   Timer? _statsTimer;
 
   DashboardBloc({
-    required GetDashboardSettingsUseCase getSettingsUseCase,
+    required this._getSettingsUseCase,
     required SaveDashboardSettingsUseCase saveSettingsUseCase,
-  }) : _getSettingsUseCase = getSettingsUseCase,
-       _saveSettingsUseCase = saveSettingsUseCase,
+  }) : _saveSettingsUseCase = saveSettingsUseCase,
        super(DashboardState.initial()) {
     on<DashboardInitEvent>(_onInit);
     on<ToggleWifiEvent>(_onToggleWifi);

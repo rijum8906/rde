@@ -79,7 +79,7 @@ impl App {
         let service = ThemeService::startup(
             Arc::new(disk_repo),
             vec![gtk_emitter, qt_emitter],
-            paths.current_cache_file(),
+            paths.published_theme_file(),
             paths.settings_file(),
             paths.data_themes_dir().to_path_buf(),
         )

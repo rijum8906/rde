@@ -131,14 +131,21 @@ impl ThemeInterface {
     // METHODS
     // =================================
 
-    /// Returns the currently active [`crate::domain::resolved::ResolvedTheme`] as JSON.
-    pub async fn get_resolved_theme(&self) -> zbus::fdo::Result<ResolvedTheme> {
+    /// Returns the currently active [`crate::domain::resolved::ResolvedTheme`].
+    ///
+    /// The payload is wrapped in a one-element tuple: zbus 5 flattens a bare
+    /// struct return into separate out arguments, while consumers expect a
+    /// single D-Bus struct value.
+    pub async fn get_resolved_theme(&self) -> zbus::fdo::Result<(ResolvedTheme,)> {
         let state = self.service.current_state().await;
-        Ok(state.resolved)
+        Ok((state.resolved,))
     }
 
-    /// Returns the author [`crate::domain::manifest::ThemeManifest`] for the requested theme ID as JSON.
-    pub async fn get_theme_manifest(&self, id: &str) -> zbus::fdo::Result<ThemeManifest> {
+    /// Returns the author [`crate::domain::manifest::ThemeManifest`] for the requested theme ID.
+    ///
+    /// Like [`Self::get_resolved_theme`], the manifest is returned as a single
+    /// D-Bus struct value through a one-element tuple.
+    pub async fn get_theme_manifest(&self, id: &str) -> zbus::fdo::Result<(ThemeManifest,)> {
         let theme_id = if id == ThemeId::DYNAMIC {
             ThemeId::builtin_dynamic()
         } else {
@@ -154,7 +161,7 @@ impl ThemeInterface {
                 zbus::fdo::Error::Failed(format!("failed to load manifest for '{id}': {e}"))
             })?;
 
-        Ok(manifest)
+        Ok((manifest,))
     }
 
     /// Returns the JSON list of installed theme IDs.
@@ -178,6 +185,30 @@ impl ThemeInterface {
 
         self.service
             .set_active(theme_id)
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+    }
+
+    /// Switches the desktop appearance between light and dark.
+    ///
+    /// # Errors
+    /// Returns `org.freedesktop.DBus.Error.InvalidArgs` for an unknown mode and
+    /// `org.freedesktop.DBus.Error.Failed` when the preference cannot be persisted.
+    pub async fn set_mode(&self, mode: &str) -> zbus::fdo::Result<()> {
+        // Step 1: Accept only the two appearance values the settings file stores.
+        let target = match mode.trim().to_lowercase().as_str() {
+            "light" => ThemeMode::Light,
+            "dark" => ThemeMode::Dark,
+            other => {
+                return Err(zbus::fdo::Error::InvalidArgs(format!(
+                    "invalid mode '{other}'"
+                )));
+            }
+        };
+
+        // Step 2: Persist and republish through the service.
+        self.service
+            .set_mode(target)
             .await
             .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
     }
@@ -454,12 +485,52 @@ mod tests {
         let mut xml = String::new();
         iface.introspect_to_writer(&mut xml, 0);
 
-        // Mutating method for the built-in dynamic theme.
-        assert!(xml.contains("UpdateDynamicTheme"), "{xml}");
+        // Methods consumed by the settings app.
+        for method in [
+            "GetResolvedTheme",
+            "GetThemeManifest",
+            "ListThemes",
+            "SetActiveTheme",
+            "SetMode",
+            "UpdateDynamicTheme",
+            "Reload",
+            "Preview",
+        ] {
+            assert!(xml.contains(method), "missing {method}: {xml}");
+        }
+
+        // Properties and signals the settings app subscribes to.
+        for name in [
+            "ActiveTheme",
+            "AvailableThemes",
+            "Generation",
+            "ThemeChanged",
+            "ThemeListChanged",
+        ] {
+            assert!(xml.contains(name), "missing {name}: {xml}");
+        }
 
         // Read-only views of the dynamic inputs for settings UIs.
         assert!(xml.contains("DynamicSeedSource"), "{xml}");
         assert!(xml.contains("DynamicSeed"), "{xml}");
         assert!(xml.contains("DynamicWallpaper"), "{xml}");
+    }
+
+    /// The Flutter client decodes these payloads by signature. Keeping the
+    /// literals here in one place makes a struct change fail the build instead
+    /// of silently breaking the settings app at runtime.
+    #[test]
+    fn payload_signatures_match_the_settings_client_contract() {
+        use zbus::zvariant::Type;
+
+        let colors = format!("({})", "s".repeat(34));
+        assert_eq!(
+            ResolvedTheme::SIGNATURE.to_string(),
+            format!("(ussu{colors}(ss)(ddddd)(uuuss)(s))"),
+        );
+        assert_eq!(
+            ThemeManifest::SIGNATURE.to_string(),
+            "(ussssssa{s(uusss)}s)",
+        );
     }
 }

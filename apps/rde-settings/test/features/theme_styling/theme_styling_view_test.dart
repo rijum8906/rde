@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rde_settings/core/theme/bloc/app_theme_bloc.dart';
+import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 import 'package:rde_settings/features/theme_styling/presentation/pages/theme_styling_page.dart';
@@ -74,16 +75,15 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
-  testWidgets('applies the service palettes to the app theme bloc', (
-    tester,
-  ) async {
+  testWidgets('renders the payload published by the service', (tester) async {
     final harness = await pumpView(tester);
 
-    expect(harness.appThemeBloc.state.lightScheme, isNotNull);
-    expect(harness.appThemeBloc.state.darkScheme, isNotNull);
-    expect(harness.appThemeBloc.state.accentColor, const Color(0xFF6DD6DA));
     expect(
-      harness.appThemeBloc.state.lightScheme?.primary,
+      harness.themeBloc.state.catalog?.resolved.colors.primary.toColor(),
+      const Color(0xFF6DD6DA),
+    );
+    expect(
+      harness.themeBloc.state.previewTheme?.colors.primary.toColor(),
       const Color(0xFF6DD6DA),
     );
   });
@@ -107,7 +107,7 @@ void main() {
     await tester.tap(find.text('Light').first);
     await tester.pumpAndSettle();
 
-    expect(harness.repository.calls, contains('setColorScheme:light'));
-    expect(harness.themeBloc.state.colorScheme.isDark, isFalse);
+    expect(harness.repository.calls, contains('setMode:light'));
+    expect(harness.themeBloc.state.mode, AppearanceMode.light);
   });
 }

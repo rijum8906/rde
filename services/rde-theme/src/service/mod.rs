@@ -6,7 +6,7 @@
 //! # Publishing Invariant
 //! **Write the file first, then bump the generation, then emit the signal.**
 //! Never emit before the file is durable on disk, ensuring subscribers that
-//! immediately read `current.json` upon signal receipt observe the updated state.
+//! read `default_theme.json` upon signal receipt observe the updated state.
 
 use std::{
     path::{Path, PathBuf},
@@ -72,7 +72,7 @@ impl ThemeService {
     /// 1. Load user settings (recovering to default if missing or corrupt).
     /// 2. Load theme registry (rebuilding from disk if missing or corrupt).
     /// 3. Resolve active variant (falling back to built-in dynamic theme on error).
-    /// 4. Atomically persist `current.json`.
+    /// 4. Atomically persist the published theme cache.
     /// 5. Bump publication generation counter.
     /// 6. Render and atomically write all backend configuration files.
     /// 7. Apply backend environment variables to process environment.
@@ -120,10 +120,10 @@ impl ThemeService {
         )
         .await;
 
-        // Step 4: Invariant Step A: Write current.json atomically first.
+        // Step 4: Invariant Step A: Write the published theme cache atomically first.
         let initial_generation = 1;
         if let Err(err) = Self::write_current_json(&cache_path, &resolved) {
-            warn!(error = %err, "Failed to write initial current.json cache; in-memory state remains authoritative");
+            warn!(error = %err, "Failed to write initial published theme cache; in-memory state remains authoritative");
         }
 
         // Step 5: Invariant Step B: Increment generation & establish published state.
@@ -241,7 +241,7 @@ impl ThemeService {
         }
     }
 
-    /// Internal helper writing `current.json` atomically.
+    /// Internal helper writing the published theme cache atomically.
     fn write_current_json(path: &Path, resolved: &ResolvedTheme) -> Result<(), ThemeError> {
         let bytes = serde_json::to_vec_pretty(resolved)
             .map_err(|e| ThemeError::Serialization(e.to_string()))?;
@@ -340,7 +340,7 @@ impl ThemeService {
         }
 
         let current = self.state.read().await.clone();
-        let settings = self.settings.read().await.clone();
+        let mut settings = self.settings.read().await.clone();
 
         // Step 2: Resolve the target theme payload for the persisted appearance.
         let resolved =
@@ -353,8 +353,52 @@ impl ThemeService {
             return Ok(());
         }
 
-        // Step 4: Perform publication transaction.
+        // Step 4: Persist the choice before publishing, so a restart restores
+        // the same theme into the published cache.
+        settings.active_theme = Some(id.clone());
+        self.repo.save_settings(&settings).await?;
+        *self.settings.write().await = settings;
+
+        // Step 5: Perform publication transaction.
         self.publish_transaction(resolved, Some(id), current.mode)
+            .await
+    }
+
+    /// Switches the desktop appearance mode and republishes the active theme.
+    ///
+    /// # Idempotency
+    /// Selecting the already published mode leaves the generation and signals untouched.
+    ///
+    /// # Hard Invariant
+    /// The preference is persisted before the resolved payload is written, the
+    /// generation is bumped, and `ThemeChanged` is emitted.
+    pub async fn set_mode(&self, mode: ThemeMode) -> Result<(), ThemeError> {
+        info!(mode = ?mode, "Setting appearance mode");
+
+        // Step 1: Read the persisted settings and stop early when nothing changes.
+        let mut next = self.settings.read().await.clone();
+        let current = self.state.read().await.clone();
+        if next.mode == mode && current.mode == mode {
+            debug!("Appearance mode is unchanged; skipping publication");
+            return Ok(());
+        }
+
+        // Step 2: Persist the new preference before touching the published state.
+        next.mode = mode;
+        self.repo.save_settings(&next).await?;
+        *self.settings.write().await = next.clone();
+
+        // Step 3: Resolve the active theme's variant for the new mode.
+        let target_theme_id = current
+            .active
+            .clone()
+            .unwrap_or_else(ThemeId::builtin_dynamic);
+        let resolved =
+            Self::resolve_with_fallback(self.repo.as_ref(), &target_theme_id, mode, next.contrast)
+                .await;
+
+        // Step 4: Publish; the generation bump notifies every themed application.
+        self.publish_transaction(resolved, current.active, mode)
             .await
     }
 
@@ -506,9 +550,9 @@ impl ThemeService {
         active: Option<ThemeId>,
         mode: ThemeMode,
     ) -> Result<(), ThemeError> {
-        // Step 1: Invariant Step A: Write current.json cache atomically first.
+        // Step 1: Invariant Step A: Write the published theme cache atomically first.
         if let Err(err) = Self::write_current_json(&self.cache_path, &resolved) {
-            warn!(error = %err, "Failed to write current.json cache; proceeding with in-memory state");
+            warn!(error = %err, "Failed to write published theme cache; proceeding with in-memory state");
         }
 
         // Step 2: Invariant Step B: Increment generation counter.
@@ -792,8 +836,12 @@ mod tests {
         .await
         .unwrap();
 
-        // Set active to theme_a
+        // Set active to theme_a; the choice is persisted for the next startup.
         service.set_active(theme_a.clone()).await.unwrap();
+        {
+            let settings = repo.settings.lock().unwrap();
+            assert_eq!(settings.active_theme.as_ref(), Some(&theme_a));
+        }
         let state_after_first = service.current_state().await;
         let gen_first = state_after_first.generation;
 
@@ -870,6 +918,46 @@ mod tests {
             service.settings().await.dynamic.fixed_seed.as_deref(),
             Some("#006a6a")
         );
+    }
+
+    #[tokio::test]
+    async fn test_set_mode_persists_and_republishes() {
+        let temp = tempfile::tempdir().unwrap();
+        let repo = Arc::new(FakeRepo::new());
+        let service = Arc::new(
+            ThemeService::startup(
+                repo.clone(),
+                vec![],
+                temp.path().join("current.json"),
+                temp.path().join("settings.toml"),
+                temp.path().join("themes"),
+            )
+            .await
+            .unwrap(),
+        );
+
+        // Startup publishes the default dark appearance.
+        let generation_before = service.current_state().await.generation;
+        let mut sub = service.subscribe_theme_changed();
+
+        // Step 1: Switching to light persists the preference and republishes.
+        service.set_mode(ThemeMode::Light).await.unwrap();
+        assert_eq!(service.settings().await.mode, ThemeMode::Light);
+        assert_eq!(repo.settings.lock().unwrap().mode, ThemeMode::Light);
+
+        let published = service.current_state().await;
+        assert_eq!(published.mode, ThemeMode::Light);
+        assert_eq!(published.generation, generation_before + 1);
+        let received = sub.try_recv().expect("republished theme on mode change");
+        assert_eq!(received, published.resolved);
+
+        // Step 2: Selecting the same mode again neither bumps nor signals.
+        service.set_mode(ThemeMode::Light).await.unwrap();
+        assert_eq!(
+            service.current_state().await.generation,
+            published.generation
+        );
+        assert!(sub.try_recv().is_err());
     }
 
     #[tokio::test]

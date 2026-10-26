@@ -44,6 +44,14 @@ $XDG_DATA_HOME/rde/rde-theme/          # ~/.local/share/rde/rde-theme by default
 The service follows the XDG base directory specification: `$XDG_DATA_HOME` is used when
 set, otherwise `~/.local/share`.
 
+### Published theme cache
+
+Before emitting `ThemeChanged`, the service atomically writes the resolved payload to
+`$XDG_DATA_HOME/rde/rde-theme/default_theme.json` (`~/.local/share/rde/rde-theme/default_theme.json`
+by default). Applications read this file at startup so the first frame already renders the
+desktop theme; after a `ThemeChanged` signal they reload the authoritative payload with
+`GetResolvedTheme`.
+
 ### `themes.toml` — registry
 
 Session state only. It never stores palette values, so editing a theme's source color

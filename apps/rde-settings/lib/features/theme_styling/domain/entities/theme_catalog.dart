@@ -1,56 +1,61 @@
-import 'rde_color_scheme.dart';
-import 'rde_palette.dart';
-import 'rde_theme_info.dart';
-import 'theme_service_snapshot.dart';
+import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
+import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
+import 'package:rde_settings/core/theme/domain/entities/seed_source.dart';
+import 'package:rde_settings/core/theme/domain/entities/theme_manifest.dart';
+import 'package:rde_settings/core/theme/domain/entities/theme_snapshot.dart';
 
 /// Complete theme state the settings UI renders from.
 ///
-/// Combines the service properties, the manifest metadata of every installed
-/// theme, and both palettes of the active theme, so the UI can switch between
-/// theme pickers, seed colors, and scheme previews without extra D-Bus calls.
+/// Combines the service properties, the author manifest of every installed
+/// theme, and the resolved payload the desktop currently renders, so the UI can
+/// switch themes, edit the dynamic seed inputs, and preview appearances without
+/// extra D-Bus calls.
 class ThemeCatalog {
   const ThemeCatalog({
     required this.snapshot,
     required this.themes,
-    required this.lightPalette,
-    required this.darkPalette,
+    required this.resolved,
   });
 
   /// Service properties the catalog was built from.
-  final ThemeServiceSnapshot snapshot;
+  final ThemeSnapshot snapshot;
 
-  /// Metadata of every installed theme, ordered like
-  /// [ThemeServiceSnapshot.installedThemes].
-  final List<RdeThemeInfo> themes;
+  /// Author manifests of every theme the picker offers, including the built-in
+  /// dynamic theme.
+  final List<ThemeManifest> themes;
 
-  /// Palette of the active theme in light appearance.
-  final RdePalette lightPalette;
+  /// Payload the desktop currently renders.
+  final ResolvedTheme resolved;
 
-  /// Palette of the active theme in dark appearance.
-  final RdePalette darkPalette;
+  /// Identifier of the active theme, resolving `rde-dynamic` for the built-in
+  /// theme.
+  String get currentTheme => snapshot.activeThemeId;
 
-  /// Identifier of the active theme.
-  String get currentTheme => snapshot.currentTheme;
+  /// Appearance the desktop currently renders.
+  AppearanceMode get mode => snapshot.mode;
 
-  /// Active scheme of the desktop.
-  RdeColorScheme get colorScheme => snapshot.colorScheme;
+  /// Input the dynamic theme derives its seed color from.
+  SeedSource get dynamicSeedSource => snapshot.dynamicSeedSource;
 
-  /// Source color of the active theme in `#RRGGBB` form.
-  String get sourceColor => snapshot.sourceColor;
+  /// Explicit seed color of the dynamic theme, empty when unset.
+  String get dynamicSeed => snapshot.dynamicSeed;
 
-  /// Metadata of the active theme, or `null` when the manifest disappeared
-  /// between calls.
-  RdeThemeInfo? get activeTheme {
+  /// Wallpaper the dynamic theme derives its seed color from, empty when unset.
+  String get dynamicWallpaper => snapshot.dynamicWallpaper;
+
+  /// Whether the built-in dynamic theme is active.
+  bool get isDynamicActive => currentTheme == ThemeManifest.dynamicId;
+
+  /// Manifest of the active theme, or `null` when it disappeared between calls.
+  ThemeManifest? get activeTheme => themeById(currentTheme);
+
+  /// Returns the manifest of [id], or `null` when the theme is unknown.
+  ThemeManifest? themeById(String id) {
     for (final theme in themes) {
-      if (theme.name == snapshot.currentTheme) {
+      if (theme.name == id) {
         return theme;
       }
     }
     return null;
-  }
-
-  /// Returns the palette of the active theme for [scheme].
-  RdePalette paletteFor(RdeColorScheme scheme) {
-    return scheme.isDark ? darkPalette : lightPalette;
   }
 }
