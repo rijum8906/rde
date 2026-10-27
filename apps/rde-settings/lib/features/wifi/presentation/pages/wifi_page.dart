@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:rde_settings/features/wifi/presentation/widgets/wifi_network_card.dart';
+import 'package:rde_settings/features/wifi/presentation/widgets/wifi_radio_card.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:rde_settings/features/wifi/data/datasources/dbus/network_manager_proxy.dart';
 import 'package:rde_settings/features/wifi/data/datasources/dbus_wifi_datasource.dart';
@@ -10,7 +12,6 @@ import 'package:rde_settings/features/wifi/presentation/bloc/wifi_state.dart';
 import 'package:rde_settings/features/wifi/presentation/widgets/wifi_error_banner.dart';
 import 'package:rde_settings/features/wifi/presentation/widgets/wifi_header.dart';
 import 'package:rde_settings/features/wifi/presentation/widgets/wifi_password_dialog.dart';
-import 'package:rde_settings/features/wifi/presentation/widgets/wifi_radio_card.dart';
 import 'package:rde_settings/features/wifi/presentation/widgets/wifi_saved_card.dart';
 
 /// Sections of the Wi-Fi page.
@@ -162,13 +163,16 @@ class _WifiViewState extends State<WifiView> {
                     WifiErrorBanner(message: state.errorMessage!),
                     const SizedBox(height: 12),
                   ],
-                  if (_section == WifiSection.available)
-                    WifiRadioCard(
+
+                  if (_section == WifiSection.available) ...[
+                    WifiIdentityCard(isScanning: isLoading),
+                    const SizedBox(height: 16),
+                    WifiNetworksCard(
                       state: state,
                       isLoading: isLoading,
                       onConnect: (network) => _handleConnect(network, state),
-                    )
-                  else
+                    ),
+                  ] else
                     WifiSavedCard(
                       state: state,
                       onConnect: (network) => context.read<WifiBloc>().add(

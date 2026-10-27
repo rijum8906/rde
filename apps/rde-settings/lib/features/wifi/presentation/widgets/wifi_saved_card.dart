@@ -23,7 +23,7 @@ class WifiSavedCard extends StatelessWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -35,16 +35,18 @@ class WifiSavedCard extends StatelessWidget {
                   color: colorScheme.primary,
                 ),
                 const SizedBox(width: 12),
-                Text(
-                  'Saved Devices & Profiles',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.onSurface,
+                Expanded(
+                  child: Text(
+                    'Saved Devices & Profiles',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurface,
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Text(
               'Profiles NetworkManager reconnects to automatically. '
               'Connect uses the stored credentials.',
@@ -60,25 +62,60 @@ class WifiSavedCard extends StatelessWidget {
                     'appears here.',
               )
             else
-              Column(
-                children: List.generate(state.savedNetworks.length, (index) {
-                  final network = state.savedNetworks[index];
-                  return Column(
-                    children: [
-                      if (index > 0) const Divider(),
-                      WifiSavedTile(
-                        network: network,
-                        isConnected: state.connectedSsid == network.ssid,
-                        isConnecting: state.connectingSsid == network.ssid,
-                        onConnect: () => onConnect(network),
-                        onForget: () => onForget(network),
-                      ),
-                    ],
-                  );
-                }),
+              _SavedGroup(
+                networks: state.savedNetworks,
+                state: state,
+                onConnect: onConnect,
+                onForget: onForget,
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SavedGroup extends StatelessWidget {
+  const _SavedGroup({
+    required this.networks,
+    required this.state,
+    required this.onConnect,
+    required this.onForget,
+  });
+
+  final List<WifiNetwork> networks;
+  final WifiState state;
+  final ValueChanged<WifiNetwork> onConnect;
+  final ValueChanged<WifiNetwork> onForget;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+      child: Column(
+        children: [
+          for (var i = 0; i < networks.length; i++) ...[
+            if (i > 0)
+              Divider(
+                height: 1,
+                indent: 64,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+            WifiSavedTile(
+              network: networks[i],
+              isConnected: state.connectedSsid == networks[i].ssid,
+              isConnecting: state.connectingSsid == networks[i].ssid,
+              onConnect: () => onConnect(networks[i]),
+              onForget: () => onForget(networks[i]),
+            ),
+          ],
+        ],
       ),
     );
   }

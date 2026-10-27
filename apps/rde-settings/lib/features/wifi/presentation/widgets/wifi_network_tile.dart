@@ -82,7 +82,21 @@ class WifiNetworkTile extends StatelessWidget {
           else if (isConnecting)
             const RdeLoadingIndicator(size: 24)
           else
-            TextButton(onPressed: onConnect, child: const Text('Connect')),
+            FilledButton.tonal(
+              onPressed: onConnect,
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                minimumSize: const Size(
+                  0,
+                  32,
+                ), // override the default 64×40 min
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Connect', style: TextStyle(fontSize: 12)),
+            ),
         ],
       ),
     );

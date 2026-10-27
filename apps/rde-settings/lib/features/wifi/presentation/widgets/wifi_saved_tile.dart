@@ -24,62 +24,126 @@ class WifiSavedTile extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.bookmark_added_outlined,
-                size: 20,
-                color: isConnected
-                    ? colorScheme.primary
-                    : colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    network.ssid,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      fontWeight: isConnected
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                    ),
+          _SavedAvatar(connected: isConnected),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  network.ssid,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    fontWeight: isConnected ? FontWeight.bold : FontWeight.w500,
                   ),
-                  Text(
-                    isConnected ? 'Currently Connected' : 'Saved Profile',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          Row(
-            children: [
-              if (!isConnected) ...[
-                if (isConnecting)
-                  const RdeLoadingIndicator(size: 24)
-                else
-                  TextButton(
-                    onPressed: onConnect,
-                    child: const Text('Connect'),
-                  ),
-                const SizedBox(width: 8),
-              ],
-              IconButton(
-                onPressed: onForget,
-                icon: Icon(
-                  Icons.delete_outline,
-                  color: colorScheme.error.withValues(alpha: 0.8),
                 ),
-                tooltip: 'Forget Profile',
-              ),
-            ],
+                Text(
+                  isConnected ? 'Currently Connected' : 'Saved Profile',
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (isConnected)
+            _SavedConnectedBadge()
+          else if (isConnecting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12.0),
+              child: RdeLoadingIndicator(size: 20),
+            )
+          else
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FilledButton.tonal(
+                  onPressed: onConnect,
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
+                  child: const Text('Connect'),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'More actions',
+                  icon: const Icon(Icons.more_vert, size: 20),
+                  onSelected: (value) {
+                    if (value == 'forget') onForget();
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'forget', child: Text('Forget')),
+                  ],
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SavedAvatar extends StatelessWidget {
+  const _SavedAvatar({required this.connected});
+
+  final bool connected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: connected
+            ? colorScheme.primaryContainer
+            : colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.bookmark_added_outlined,
+          size: 20,
+          color: connected
+              ? colorScheme.onPrimaryContainer
+              : colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
+class _SavedConnectedBadge extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: colorScheme.primary,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check, size: 14, color: colorScheme.onPrimary),
+          const SizedBox(width: 4),
+          Text(
+            'Connected',
+            style: TextStyle(
+              color: colorScheme.onPrimary,
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
+            ),
           ),
         ],
       ),

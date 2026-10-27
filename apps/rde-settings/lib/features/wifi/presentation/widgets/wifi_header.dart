@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:rde_settings/core/widgets/loading_indicator.dart';
 import 'package:rde_settings/features/wifi/presentation/bloc/wifi_bloc.dart';
 import 'package:rde_settings/features/wifi/presentation/bloc/wifi_event.dart';
 
@@ -47,7 +46,7 @@ class WifiHeader extends StatelessWidget {
                 ? null
                 : () => context.read<WifiBloc>().add(const ScanNetworksEvent()),
             icon: isLoading
-                ? const RdeLoadingIndicator(size: 18)
+                ? const Icon(Icons.wifi_find)
                 : const Icon(Icons.refresh),
             tooltip: 'Rescan Networks',
           ),
