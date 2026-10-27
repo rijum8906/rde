@@ -40,6 +40,7 @@ dependencies:
   flutter_bloc: ^9.1.1
   bloc: ^9.2.1
   expressive_loading_indicator: ^0.0.1
+  equatable: ^3.0.0
 
 dev_dependencies:
   flutter_test:

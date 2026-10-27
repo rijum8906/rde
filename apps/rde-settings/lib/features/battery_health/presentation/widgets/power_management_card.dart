@@ -10,6 +10,15 @@ class PowerManagementCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final state = context.watch<BatteryHealthBloc>().state;
+    final snapshot = state.snapshot;
+    final isBusy = state.isBusy;
+
+    // Charge threshold support depends on the snapshot. Before the first
+    // read, treat it as unsupported (the switch is disabled) rather than
+    // letting the user toggle a setting the device might not have.
+    final thresholdSupported = snapshot?.chargeThresholdSupported ?? false;
+    final thresholdEnabled = snapshot?.chargeThresholdEnabled ?? false;
+    final chargeLimit = (snapshot?.chargeEndThreshold ?? 0) / 100.0;
 
     return Card(
       child: Padding(
@@ -24,6 +33,8 @@ class PowerManagementCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
+
+            // ── Power Saver ──────────────────────────────────────────────
             SwitchListTile(
               title: const Text(
                 'Power Saver Mode',
@@ -32,26 +43,44 @@ class PowerManagementCard extends StatelessWidget {
               subtitle: const Text(
                 'Reduces hardware speed and turns down active brightness',
               ),
-              value: state.powerSavingMode,
-              onChanged: (val) => context.read<BatteryHealthBloc>().add(
-                TogglePowerSavingEvent(val),
-              ),
+              value: state.powerSaverActive,
+              onChanged: isBusy
+                  ? null
+                  : (val) => context.read<BatteryHealthBloc>().add(
+                      TogglePowerSavingEvent(val),
+                    ),
             ),
+
             const Divider(height: 24),
+
+            // ── Health Protection ────────────────────────────────────────
+            // Reads from `snapshot.chargeThresholdEnabled`, not from
+            // `powerSaverActive`. Disabled when the battery doesn't report
+            // `ChargeThresholdSupported`, so the switch can't be toggled on
+            // hardware that has no threshold driver.
             SwitchListTile(
               title: const Text(
                 'Battery Health Protection',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              subtitle: const Text(
-                'Cap maximum battery charge level to prolong lithium battery lifespan',
+              subtitle: Text(
+                thresholdSupported
+                    ? 'Cap maximum battery charge level to prolong lithium battery lifespan'
+                    : 'This battery does not report charge-threshold support',
               ),
-              value: state.healthProtection,
-              onChanged: (val) => context.read<BatteryHealthBloc>().add(
-                ToggleHealthProtectionEvent(val),
-              ),
+              value: thresholdEnabled,
+              onChanged: !thresholdSupported || isBusy
+                  ? null
+                  : (val) => context.read<BatteryHealthBloc>().add(
+                      ToggleHealthProtectionEvent(val),
+                    ),
             ),
-            if (state.healthProtection) ...[
+
+            // ── Charge limit slider ──────────────────────────────────────
+            // Only shown when the threshold is enabled: the slider edits
+            // `ChargeEndThreshold`, which only has meaning when the
+            // threshold is active.
+            if (thresholdEnabled) ...[
               const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -65,7 +94,7 @@ class PowerManagementCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${(state.chargeLimit * 100).toInt()}%',
+                      '${(chargeLimit * 100).round()}%',
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -74,13 +103,15 @@ class PowerManagementCard extends StatelessWidget {
                 ),
               ),
               Slider(
-                value: state.chargeLimit,
+                value: chargeLimit.clamp(0.6, 1.0),
                 min: 0.6,
                 max: 1.0,
                 divisions: 8,
-                onChanged: (val) => context.read<BatteryHealthBloc>().add(
-                  ChangeChargeLimitEvent(val),
-                ),
+                onChanged: isBusy
+                    ? null
+                    : (val) => context.read<BatteryHealthBloc>().add(
+                        ChangeChargeLimitEvent(val),
+                      ),
               ),
             ],
           ],
