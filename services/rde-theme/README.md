@@ -25,7 +25,8 @@ bus as `org.rde.Theme`.
 - **`backend/`**: palette engines and toolkit output.
   - [`backend/mod.rs`](src/backend/mod.rs): `ThemeBackend` trait that resolves manifests into palettes.
   - [`backend/material/`](src/backend/material/mod.rs): Material 3 seed and scheme computation.
-  - [`backend/qt/`](src/backend/qt/mod.rs): writes qt5ct/qt6ct and KDE color schemes.
+  - [`backend/kde/`](src/backend/kde/mod.rs): writes `kdeglobals` and the Plasma color scheme.
+  - [`backend/qt/`](src/backend/qt/mod.rs): writes qt5ct/qt6ct palettes and tool configs.
   - [`backend/gtk/`](src/backend/gtk/mod.rs): renders GTK CSS `@define-color` overrides.
 - **`dbus/`**: `org.rde.Theme` interface at `/org/rde/Theme`.
 
@@ -186,44 +187,50 @@ Qt and KDE applications are re-colored automatically. The service writes:
 
 | File | Purpose |
 | :--- | :--- |
-| `$XDG_DATA_HOME/color-schemes/RdeM3.colors` | Standard KDE color scheme, applied with `plasma-apply-colorscheme RdeM3` |
+| `$XDG_DATA_HOME/color-schemes/<theme>-<variant>-v<generation>.colors` | Plasma color scheme, applied with `plasma-apply-colorscheme` |
 | `$XDG_CONFIG_HOME/kdeglobals` | Color groups read by KDE applications, `[General] AccentColor` for Plasma accents |
+| `$XDG_CONFIG_HOME/qt5ct/colors/<theme>-<variant>-v<generation>.conf` | qt5ct palette, written only when qt5ct is installed |
+| `$XDG_CONFIG_HOME/qt5ct/qt5ct.conf` | qt5ct selection (`custom_palette`, `color_scheme_path`), merged |
+| `$XDG_CONFIG_HOME/qt6ct/…` | Same pair for qt6ct |
 
-`kdeglobals` is merged, not replaced: only the color keys the service owns are
-rewritten, so styles, fonts, icons, and unrelated keys survive every theme change.
-qt5ct/qt6ct files are not generated; Qt applications that do not use the KDE platform
-theme keep their own palette.
+`kdeglobals` and the qt5ct/qt6ct configs are merged, not replaced: only the keys
+the service owns are rewritten, so styles, fonts, icons, and unrelated keys
+survive every theme change. The generated scheme and palette names carry the
+publication generation, so a regenerated palette is a new file instead of an
+overwrite the desktop cannot notice.
 
 Defaults are `~/.local/share` and `~/.config`; the XDG variables are honored.
 
 - **Material 3 mapping**: the palette is mapped onto Qt's `QPalette` roles
-  (`Window`/`Base`/`Text` from surface roles, `Highlight` from `primary`, tooltips from
-  `inverse_surface`, and so on) in `WindowText, Button, Light, …` serialization order.
-  21 roles are written, which is the exact `QPalette::NColorRoles` count for Qt 5.12+
-  and Qt 6, and works for qt6ct on Qt 6.6+, where `Accent` is derived from `Highlight`.
+  (`Window`/`Base`/`Text` from surface roles, `Highlight`/`Accent` from `primary`,
+  tooltips from `inverse_surface`, and so on) in Qt's `WindowText, Button, Light, …`
+  serialization order. 22 values are written per group (including the unused `NoRole`
+  slot and the Qt 6.6 `Accent` role) so every role index lines up; Qt 5 ignores the
+  trailing `Accent` value.
 - **Plasma accent**: `kdeglobals [General] AccentColor` is pinned to the theme's
   primary color so Plasma 6 accent-colored widgets follow the theme.
 - **Three color groups**: active and inactive share colors; disabled widgets keep the
   surfaces but neutralize text and links to outline tones.
 - **Non-destructive merging**: only the appearance keys and color groups the service
   owns are changed. Comments, styles, fonts, icons, and unrelated keys in `kdeglobals`
-  are preserved.
+  and the qt5ct/qt6ct configs are preserved.
 - **Idempotent**: files are written atomically and only when their content changes, so
   Qt's configuration watcher is not woken up needlessly.
 - **Best effort**: an unwritable Qt directory is logged as a warning and reported in the
   apply result; it never blocks theme changes or service startup.
 
-Qt applications must use `QT_QPA_PLATFORMTHEME=qt5ct` (or `qt6ct`) for the palette to be
-picked up; KDE applications read `kdeglobals` directly. Restart Qt applications that were
-started before the first application to pick up the new palette. Qt 5.12+ and Qt 6 are
-supported; older Qt 5 releases expect the pre-`PlaceholderText` color list and fall back
-to their system palette.
+qt5ct/qt6ct are only written when their platform theme is detected or their config
+directory already exists. Qt applications must use `QT_QPA_PLATFORMTHEME=qt5ct` (or
+`qt6ct`) for the palette to be picked up; KDE applications read `kdeglobals` directly.
+Restart Qt applications that were started before the first application to pick up the
+new palette; KDE updates apply live through `plasma-apply-colorscheme`.
 
 Verify the generated files after a theme change:
 
 ```bash
-cat ~/.local/share/color-schemes/RdeM3.colors
+cat ~/.local/share/color-schemes/*-v*.colors
 cat ~/.config/kdeglobals
+ls ~/.config/qt5ct/colors ~/.config/qt6ct/colors
 ```
 
 ## Workflows

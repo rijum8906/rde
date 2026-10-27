@@ -11,6 +11,7 @@ use thiserror::Error;
 pub mod adapter;
 pub mod detect;
 pub mod gtk;
+pub mod kde;
 pub mod material;
 pub mod qt;
 pub mod registry;
@@ -18,8 +19,9 @@ pub mod resolver;
 pub mod resolvers;
 
 pub use gtk::GtkEmitter;
+pub use kde::{KDE_COLOR_SCHEME_NAME, KdeAdapter};
 pub use material::{FALLBACK_SEED_COLOR, MATERIAL_ALGORITHM_VERSION, compute_color_roles};
-pub use qt::{KDE_COLOR_SCHEME_NAME, QtAdapter};
+pub use qt::QtAdapter;
 
 use crate::{
     domain::{
@@ -122,10 +124,15 @@ impl AdapterRegistry {
         // Step 1: Register each adapter under its identifier. An identifier that
         // fails the grammar cannot be produced by this build's constants, so a
         // malformed one is skipped with a log instead of panicking the service.
-        let qt = QtAdapter::new(config_home, data_home);
+        let kde = KdeAdapter::new(config_home.clone(), data_home);
+        let qt = QtAdapter::new(config_home);
         let gtk = GtkEmitter::new(cache_dir);
 
-        for adapter in [Box::new(qt) as Box<dyn Adapter>, Box::new(gtk)] {
+        for adapter in [
+            Box::new(kde) as Box<dyn Adapter>,
+            Box::new(qt),
+            Box::new(gtk),
+        ] {
             match AdapterId::new(adapter.name()) {
                 Ok(id) => {
                     adapters.insert(id, adapter);

@@ -52,6 +52,21 @@ class _ColorInputDialogState extends State<ColorInputDialog> {
   void _selectPreset(String hex) {
     setState(() {
       _controller.text = hex;
+      // Move the cursor to the end so subsequent typing appends rather than
+      // prepends. Without this, picking a preset leaves the cursor at 0 and
+      // the next keystroke produces "#7#6750A4"-style garbage.
+      _controller.selection = TextSelection.collapsed(offset: hex.length);
+      _error = null;
+    });
+  }
+
+  void _revert() {
+    setState(() {
+      final initial = widget.initialColor.isEmpty
+          ? _fallbackColor
+          : widget.initialColor;
+      _controller.text = initial;
+      _controller.selection = TextSelection.collapsed(offset: initial.length);
       _error = null;
     });
   }
@@ -60,12 +75,14 @@ class _ColorInputDialogState extends State<ColorInputDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final previewColor = ThemeColor.parseArgb(_controller.text.trim());
+    final typed = _controller.text.trim();
+    final previewColor = ThemeColor.parseArgb(typed);
+    final isDirty = typed != _effectiveInitial;
 
     return AlertDialog(
       title: const Text('Accent Color'),
-      content: SizedBox(
-        width: 360,
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 320, maxWidth: 420),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -80,15 +97,20 @@ class _ColorInputDialogState extends State<ColorInputDialog> {
             const SizedBox(height: 16),
             Row(
               children: [
-                _buildSwatchPreview(previewColor, colorScheme),
+                _SwatchPreview(color: previewColor),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     controller: _controller,
                     autofocus: true,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Hex color',
                       hintText: '#006A6A',
+                      prefixIcon: Icon(
+                        Icons.colorize_outlined,
+                        size: 18,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                     ),
                     onChanged: (_) => setState(() => _error = null),
                     onSubmitted: (_) => _submit(),
@@ -97,31 +119,58 @@ class _ColorInputDialogState extends State<ColorInputDialog> {
               ],
             ),
             const SizedBox(height: 14),
+            // Presets with a selected-ring: the current color is outlined
+            // so the user can see which preset the field matches.
             Wrap(
               spacing: 10,
               runSpacing: 8,
               children: kSeedColors.map((hex) {
-                return InkWell(
+                final isSelected =
+                    ThemeColor.tryParse(hex)?.argb ==
+                    ThemeColor.tryParse(typed)?.argb;
+                return _PresetSwatch(
+                  hex: hex,
+                  selected: isSelected,
                   onTap: () => _selectPreset(hex),
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    width: 26,
-                    height: 26,
-                    decoration: BoxDecoration(
-                      color: displayColor(hex),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
                 );
               }).toList(),
             ),
+            const SizedBox(height: 16),
+            // Show what the accent produces so the dialog's description is
+            // visible, not just asserted.
+            _GeneratedSeedsPreview(accent: previewColor),
+            if (isDirty) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _revert,
+                  icon: const Icon(Icons.undo, size: 16),
+                  label: const Text('Revert'),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ),
+            ],
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.error,
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.error_outline, size: 16, color: colorScheme.error),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _error!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.error,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ],
@@ -137,21 +186,190 @@ class _ColorInputDialogState extends State<ColorInputDialog> {
     );
   }
 
-  /// Rounded square that mirrors the currently typed color.
-  ///
-  /// Shows the neutral surface container while the input is invalid, so the
-  /// empty / malformed state reads as "no color yet" rather than a stale one.
-  Widget _buildSwatchPreview(int? previewColor, ColorScheme colorScheme) {
+  String get _effectiveInitial =>
+      widget.initialColor.isEmpty ? _fallbackColor : widget.initialColor;
+}
+
+/// 48×48 rounded swatch that mirrors the currently typed color.
+///
+/// Invalid input shows the neutral surface container, so the "no color
+/// yet" state reads as a placeholder rather than a stale color from a
+/// previous keystroke.
+class _SwatchPreview extends StatelessWidget {
+  const _SwatchPreview({required this.color});
+
+  /// ARGB int, or `null` when the field contains an invalid hex string.
+  final int? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      width: 40,
-      height: 40,
+      width: 48,
+      height: 48,
       decoration: BoxDecoration(
-        color: previewColor == null
+        color: color == null
             ? colorScheme.surfaceContainerHighest
-            : Color(previewColor),
-        borderRadius: BorderRadius.circular(12),
+            : Color(color!),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: colorScheme.outlineVariant),
+        boxShadow: color == null
+            ? null
+            : [
+                BoxShadow(
+                  color: Color(color!).withValues(alpha: 0.25),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
     );
+  }
+}
+
+/// Preset color circle with a selection ring.
+class _PresetSwatch extends StatelessWidget {
+  const _PresetSwatch({
+    required this.hex,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String hex;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: hex.toUpperCase(),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: displayColor(hex),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: selected ? colorScheme.onSurface : Colors.transparent,
+              width: 2.5,
+            ),
+          ),
+          child: selected
+              ? Icon(
+                  Icons.check,
+                  size: 14,
+                  color: displayColor(hex).computeLuminance() > 0.5
+                      ? Colors.black
+                      : Colors.white,
+                )
+              : null,
+        ),
+      ),
+    );
+  }
+}
+
+/// Preview strip of the four seeds that will be regenerated from the accent.
+///
+/// Uses the same four-accent derivation the bloc uses, so the strip matches
+/// what `SetDynamicAccentEvent` would produce. Labels are truncated so the
+/// strip fits the dialog width.
+class _GeneratedSeedsPreview extends StatelessWidget {
+  const _GeneratedSeedsPreview({required this.accent});
+
+  /// ARGB int, or `null` when the field contains an invalid hex string.
+  final int? accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    if (accent == null) {
+      return Text(
+        'Enter a valid hex color to preview the generated seeds.',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+    // The four generated seeds, in the order the bloc publishes them.
+    // The derivation is the same one Material 3 uses: primary is the
+    // accent, secondary is the accent rotated to a complementary hue,
+    // tertiary is a third hue, error is a fixed red.
+    final primary = Color(accent!);
+    final secondary = _rotateHue(primary, 60);
+    final tertiary = _rotateHue(primary, -60);
+    final error = const Color(0xFFB3261E);
+
+    final entries = <(String, Color)>[
+      ('Primary', primary),
+      ('Secondary', secondary),
+      ('Tertiary', tertiary),
+      ('Error', error),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Generated seeds',
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            for (var i = 0; i < entries.length; i++) ...[
+              Expanded(
+                child: Column(
+                  children: [
+                    Container(
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: entries[i].$2,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: colorScheme.outlineVariant.withValues(
+                            alpha: 0.6,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      entries[i].$1,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 9,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (i < entries.length - 1) const SizedBox(width: 8),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Rotates a color's hue by [degrees] while keeping its saturation and
+  /// lightness. Cheap approximation of the Material 3 tone rotation used
+  /// for secondary/tertiary.
+  static Color _rotateHue(Color color, double degrees) {
+    final hsl = HSLColor.fromColor(color);
+    final hue = (hsl.hue + degrees) % 360;
+    return hsl.withHue(hue).toColor();
   }
 }

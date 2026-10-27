@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:rde_settings/core/theme/data/datasources/dbus/rde_theme_proxy.dart';
+import 'package:rde_settings/core/widgets/loading_indicator.dart';
 import 'package:rde_settings/features/dashboard/data/repositories/dashboard_repository_impl.dart';
 import 'package:rde_settings/features/dashboard/domain/use_cases/get_dashboard_settings.dart';
 import 'package:rde_settings/features/dashboard/domain/use_cases/save_dashboard_settings.dart';
@@ -52,7 +53,7 @@ class DashboardView extends StatelessWidget {
       body: BlocBuilder<DashboardBloc, DashboardState>(
         builder: (context, state) {
           if (state.status == DashboardStatus.loading) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: RdeLoadingIndicator());
           }
 
           if (state.status == DashboardStatus.failure) {

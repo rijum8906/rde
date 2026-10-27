@@ -159,12 +159,16 @@ class NavigationSidebar extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
+    // Step 1: One surface color is used by both the rail and the fade that
+    // covers its bottom edge, so the fade stays invisible over the background.
+    final sidebarColor = isDark
+        ? colorScheme.surfaceContainerLow
+        : colorScheme.surfaceContainerLowest;
+
     return Container(
       width: 280,
       decoration: BoxDecoration(
-        color: isDark
-            ? colorScheme.surfaceContainerLow
-            : colorScheme.surfaceContainerLowest,
+        color: sidebarColor,
         border: Border(
           right: BorderSide(
             color: colorScheme.outlineVariant.withValues(alpha: 0.4),
@@ -178,51 +182,80 @@ class NavigationSidebar extends StatelessWidget {
           const _SidebarHeader(),
           const Divider(),
           Expanded(
-            child: ListView.builder(
-              itemCount: _sections.length,
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-              itemBuilder: (context, sectionIndex) {
-                final section = _sections[sectionIndex];
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (section.title != null) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(
-                          left: 24,
-                          top: 18,
-                          bottom: 6,
-                        ),
-                        child: Text(
-                          section.title!.toUpperCase(),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.primary,
-                            letterSpacing: 1.3,
-                            fontSize: 10,
+            // Step 2: The rail holds every destination plus a fade over its
+            // bottom edge, which hints that more sections continue below.
+            child: Stack(
+              children: [
+                ListView.builder(
+                  itemCount: _sections.length,
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 4,
+                  ),
+                  itemBuilder: (context, sectionIndex) {
+                    final section = _sections[sectionIndex];
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (section.title != null) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              left: 24,
+                              top: 18,
+                              bottom: 6,
+                            ),
+                            child: Text(
+                              section.title!.toUpperCase(),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                                letterSpacing: 1.3,
+                                fontSize: 10,
+                              ),
+                            ),
                           ),
+                        ],
+                        ...section.items.map((item) {
+                          final isSelected =
+                              currentPath == item.path ||
+                              (item.path == '/wifi' && currentPath == '/');
+
+                          return _SidebarItemWidget(
+                            item: item,
+                            isSelected: isSelected,
+                            onTap: () {
+                              if (!isSelected) {
+                                context.go(item.path);
+                              }
+                            },
+                          );
+                        }),
+                      ],
+                    );
+                  },
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: IgnorePointer(
+                    child: Container(
+                      height: 28,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            sidebarColor.withValues(alpha: 0),
+                            sidebarColor,
+                          ],
                         ),
                       ),
-                    ],
-                    ...section.items.map((item) {
-                      final isSelected =
-                          currentPath == item.path ||
-                          (item.path == '/wifi' && currentPath == '/');
-
-                      return _SidebarItemWidget(
-                        item: item,
-                        isSelected: isSelected,
-                        onTap: () {
-                          if (!isSelected) {
-                            context.go(item.path);
-                          }
-                        },
-                      );
-                    }),
-                  ],
-                );
-              },
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -355,6 +388,9 @@ class _SidebarItemWidgetState extends State<_SidebarItemWidget> {
               borderRadius: BorderRadius.circular(28),
               hoverColor: Colors.transparent,
               splashColor: colorScheme.primary.withValues(alpha: 0.1),
+              // Keyboard users tab through the rail, so focus has to be as
+              // visible as hover on a pointer-driven desktop.
+              focusColor: colorScheme.primary.withValues(alpha: 0.12),
               highlightColor: Colors.transparent,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
@@ -369,6 +405,22 @@ class _SidebarItemWidgetState extends State<_SidebarItemWidget> {
                 ),
                 child: Row(
                   children: [
+                    // Step 3: The active destination is marked with an accent
+                    // rail on its leading edge, the navigation-rail idiom, so
+                    // the marker sits where the eye already starts reading.
+                    // The rail keeps its width while collapsed, which leaves
+                    // the labels of selected and unselected rows aligned.
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOutCubic,
+                      width: 4,
+                      height: widget.isSelected ? 18 : 0,
+                      margin: const EdgeInsets.only(right: 10),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
                     AnimatedScale(
                       scale: widget.isSelected
                           ? 1.05
@@ -392,15 +444,6 @@ class _SidebarItemWidgetState extends State<_SidebarItemWidget> {
                         ),
                       ),
                     ),
-                    if (widget.isSelected)
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: colorScheme.primary,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
                   ],
                 ),
               ),

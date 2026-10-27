@@ -1,111 +1,77 @@
 import 'package:fpdart/fpdart.dart';
 import 'package:rde_settings/core/errors/rde_error.dart';
-import 'package:rde_settings/features/wifi/data/datasources/dbus/rde_wifi_proxy.dart';
+import 'package:rde_settings/features/wifi/data/datasources/dbus/network_manager_proxy.dart';
 import 'package:rde_settings/features/wifi/domain/entities/wifi_network.dart';
 
+/// Maps the page's Wi-Fi operations onto the NetworkManager proxy.
 class DbusWifiDatasource {
-  final RdeWifiProxy _wifiProxy;
+  DbusWifiDatasource(this._networkManager);
 
-  DbusWifiDatasource(this._wifiProxy);
+  final NetworkManagerProxy _networkManager;
 
-  Future<Either<RdeError, List<WifiNetwork>>> scanNetworks() async {
-    // Trigger background scan
-    await _wifiProxy.scan();
-
-    // Fetch the visible networks list
-    final res = await _wifiProxy.getNetworks();
-
-    return res.fold(
-      (error) {
-        // Fallback for development workspaces if DBus service is offline
-        return right([
-          WifiNetwork(ssid: 'RDE-Net', security: 'WPA2/WPA3', strength: '95%'),
-          WifiNetwork(ssid: 'Home-WiFi', security: 'WPA2', strength: '80%'),
-          WifiNetwork(
-            ssid: 'Office-5G',
-            security: 'WPA2 Enterprise',
-            strength: '60%',
-          ),
-        ]);
-      },
-      (networks) {
-        if (networks.isEmpty) {
-          return right([
-            WifiNetwork(
-              ssid: 'RDE-Net',
-              security: 'WPA2/WPA3',
-              strength: '95%',
-            ),
-            WifiNetwork(ssid: 'Home-WiFi', security: 'WPA2', strength: '80%'),
-            WifiNetwork(
-              ssid: 'Office-5G',
-              security: 'WPA2 Enterprise',
-              strength: '60%',
-            ),
-          ]);
-        }
-        return right(networks);
-      },
-    );
+  /// Watches NetworkManager for events that change what the page shows.
+  Stream<void> watchChanges() {
+    return _networkManager.watchChanges();
   }
 
+  /// Requests a scan and returns the visible networks.
+  Future<Either<RdeError, List<WifiNetwork>>> scanNetworks() {
+    return _networkManager.scanNetworks();
+  }
+
+  /// Connects to [ssid], adding a profile when [password] is present.
   Future<Either<RdeError, void>> connectToNetwork(
     String ssid,
     String? password,
-  ) async {
-    if (password != null && password.isNotEmpty) {
-      return _wifiProxy.connect(ssid, password);
-    } else {
-      return _wifiProxy.connectSavedNetwork(ssid);
-    }
+  ) {
+    return _networkManager.connect(ssid, password: password);
   }
 
-  Future<Either<RdeError, void>> disconnect() async {
-    return _wifiProxy.disconnect();
+  /// Disconnects the active Wi-Fi connection.
+  Future<Either<RdeError, void>> disconnect() {
+    return _networkManager.disconnect();
   }
 
-  Future<Either<RdeError, void>> forgetNetwork(String ssid) async {
-    return _wifiProxy.forgotDevice(ssid);
+  /// Deletes the saved profile for [ssid].
+  Future<Either<RdeError, void>> forgetNetwork(String ssid) {
+    return _networkManager.forget(ssid);
   }
 
+  /// Returns the saved Wi-Fi profiles as page entities.
   Future<Either<RdeError, List<WifiNetwork>>> getSavedNetworks() async {
-    final res = await _wifiProxy.getSavedNetworks();
-    return res.fold(
-      (error) {
-        // Fallback for development/offline
-        return right([
-          WifiNetwork(ssid: 'RDE-Net', security: 'WPA2/WPA3', strength: '95%'),
-          WifiNetwork(ssid: 'Home-WiFi', security: 'WPA2', strength: '80%'),
-        ]);
-      },
-      (ssids) {
-        if (ssids.isEmpty) {
-          return right([
-            WifiNetwork(
-              ssid: 'RDE-Net',
-              security: 'WPA2/WPA3',
-              strength: '95%',
-            ),
-            WifiNetwork(ssid: 'Home-WiFi', security: 'WPA2', strength: '80%'),
-          ]);
-        }
-        return right(
-          ssids
-              .map(
-                (ssid) =>
-                    WifiNetwork(ssid: ssid, security: 'Saved', strength: '0%'),
-              )
-              .toList(),
-        );
-      },
+    final result = await _networkManager.savedSsids();
+    return result.map(
+      (ssids) => ssids
+          .map(
+            (ssid) =>
+                WifiNetwork(ssid: ssid, security: 'Saved', strength: '0%'),
+          )
+          .toList(),
     );
   }
 
-  Future<Either<RdeError, bool>> getEnabled() async {
-    return _wifiProxy.getEnabled();
+  /// Returns the currently associated network, or `null` when disconnected.
+  Future<Either<RdeError, WifiNetwork?>> getCurrentNetwork() {
+    return _networkManager.currentNetwork();
   }
 
-  Future<Either<RdeError, void>> setEnabled(bool value) async {
-    return _wifiProxy.setEnabled(value);
+  /// Returns the autoconnect priority of [ssid]'s saved profile.
+  Future<Either<RdeError, int>> getNetworkPriority(String ssid) {
+    return _networkManager.priority(ssid);
+  }
+
+  /// Updates the autoconnect priority of [ssid]'s saved profile.
+  Future<Either<RdeError, void>> setNetworkPriority(String ssid, int priority) {
+    return _networkManager.setPriority(ssid, priority);
+  }
+
+  /// Reads the Wi-Fi radio state.
+  Future<Either<RdeError, bool>> getEnabled() {
+    return _networkManager.wirelessEnabled();
+  }
+
+  /// Turns the Wi-Fi radio on or off.
+  Future<Either<RdeError, void>> setEnabled(bool value) {
+    return _networkManager.setWirelessEnabled(value);
   }
 }

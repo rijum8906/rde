@@ -24,7 +24,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use crate::{
-    backend::{AdapterRegistry, GtkEmitter, QtAdapter},
+    backend::{AdapterRegistry, GtkEmitter, KdeAdapter, QtAdapter},
     constants::{DBUS_SERVICE_NAME, SERVICE_NAME, SHUTDOWN_TIMEOUT},
     dbus::{
         PORTAL_OBJECT_PATH, PortalSettingsInterface, THEME_OBJECT_PATH, ThemeInterface,
@@ -74,13 +74,16 @@ impl App {
         // Step 4: Register the toolkit adapters
         let gtk_emitter = GtkEmitter::new(paths.cache_theme_dir().to_path_buf());
         // KDE reads `kdeglobals` from the XDG config root and looks color schemes
-        // up under `color-schemes/` in the XDG data home, so the emitter targets
-        // those directories instead of the rde theme subdirectories.
-        let qt_emitter = QtAdapter::new(xdg_config_home(), xdg_data_home());
+        // up under `color-schemes/` in the XDG data home, so the KDE adapter
+        // targets those directories instead of the rde theme subdirectories.
+        let kde_emitter = KdeAdapter::new(xdg_config_home(), xdg_data_home());
+        // qt5ct/qt6ct keep their palettes and tool configs in the XDG config home.
+        let qt_emitter = QtAdapter::new(xdg_config_home());
 
         let mut adapter_registry = AdapterRegistry::default();
         for adapter in [
             Box::new(gtk_emitter) as Box<dyn crate::backend::Adapter>,
+            Box::new(kde_emitter),
             Box::new(qt_emitter),
         ] {
             let id = crate::domain::identity::AdapterId::new(adapter.name())

@@ -73,6 +73,18 @@ impl SessionEnv {
     }
 }
 
+/// Reports whether the qt5ct and qt6ct platform theme plugins are installed.
+///
+/// # Returns
+/// `(qt5ct, qt6ct)` availability, probed through the same plugin directories Qt
+/// uses. A missing plugin is not conclusive on its own: the Qt adapter also
+/// treats an existing `<tool>` config directory as proof that the tool is in
+/// use, which covers plugins outside the probed paths.
+pub fn qtct_plugins() -> (bool, bool) {
+    let env = qt::QtEnv::detect_qt();
+    (env.qt5ct_plugin_installed, env.qt6ct_plugin_installed)
+}
+
 fn detect_desktop() -> DesktopKind {
     let raw = env::var("XDG_CURRENT_DESKTOP")
         .or_else(|_| env::var("XDG_SESSION_DESKTOP"))

@@ -8,7 +8,8 @@ class GetCurrentNetworkUseCase {
 
   const GetCurrentNetworkUseCase(this._wifiRepository);
 
-  Future<Either<Failure, WifiNetwork>> call() async {
+  /// Returns the network the Wi-Fi adapter is associated with, if any.
+  Future<Either<Failure, WifiNetwork?>> call() async {
     return _wifiRepository.getCurrentNetwork();
   }
 }
