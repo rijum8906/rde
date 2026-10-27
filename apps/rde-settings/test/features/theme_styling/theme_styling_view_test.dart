@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rde_settings/core/theme/bloc/app_theme_bloc.dart';
 import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
+import 'package:rde_settings/core/utils/accent_seeds.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 import 'package:rde_settings/features/theme_styling/presentation/views/theme_styling_view.dart';
@@ -96,6 +97,36 @@ void main() {
 
     expect(harness.repository.calls, contains('setTheme:ocean'));
     expect(harness.themeBloc.state.catalog?.currentTheme, 'ocean');
+  });
+
+  testWidgets('picking a custom accent derives all four seeds', (tester) async {
+    final harness = await pumpView(tester);
+
+    await tester.tap(find.text('Custom'));
+    await tester.pumpAndSettle();
+
+    // Custom mode exposes a single accent option instead of one control per
+    // palette family.
+    final accentControl = find.text('Accent color');
+    expect(accentControl, findsOneWidget);
+
+    await tester.ensureVisible(accentControl);
+    await tester.tap(accentControl);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '#0061A4');
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+
+    final expected = seedsFromAccent('#0061A4');
+    expect(
+      harness.repository.calls,
+      contains(
+        'updateDynamicTheme:${expected.primary}:${expected.secondary}:'
+        '${expected.tertiary}:${expected.error}',
+      ),
+    );
+    expect(harness.themeBloc.state.dynamicSeeds, expected);
   });
 
   testWidgets('selecting the light appearance calls the service', (

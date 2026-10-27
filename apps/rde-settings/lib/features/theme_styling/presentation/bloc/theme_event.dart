@@ -1,5 +1,4 @@
 import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
-import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
 
 /// Base class for events handled by the theme bloc.
 abstract class ThemeEvent {
@@ -52,15 +51,12 @@ class SetPreviewModeEvent extends ThemeEvent {
   final AppearanceMode mode;
 }
 
-/// Re-seeds one palette family of the built-in dynamic theme.
-class SetDynamicSeedEvent extends ThemeEvent {
-  const SetDynamicSeedEvent(this.role, this.seed);
+/// Re-seeds every palette family of the built-in dynamic theme from one accent.
+class SetDynamicAccentEvent extends ThemeEvent {
+  const SetDynamicAccentEvent(this.accent);
 
-  /// Family whose palette is regenerated.
-  final DynamicSeedRole role;
-
-  /// Seed color in any supported hexadecimal form.
-  final String seed;
+  /// Accent color in any supported hexadecimal form.
+  final String accent;
 }
 
 /// Extracts the four seeds from the wallpaper the desktop currently shows.

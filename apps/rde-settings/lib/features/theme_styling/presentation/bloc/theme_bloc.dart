@@ -4,8 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:rde_settings/core/errors/rde_error.dart';
-import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
-import 'package:rde_settings/core/theme/domain/entities/theme_color.dart';
+import 'package:rde_settings/core/utils/accent_seeds.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/extract_wallpaper_seeds.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/load_theme_catalog.dart';
@@ -44,7 +43,7 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     on<SelectThemeEvent>(_onSelectTheme);
     on<SetAppearanceEvent>(_onSetAppearance);
     on<SetPreviewModeEvent>(_onSetPreviewMode);
-    on<SetDynamicSeedEvent>(_onSetDynamicSeed);
+    on<SetDynamicAccentEvent>(_onSetDynamicAccent);
     on<ExtractWallpaperSeedsEvent>(_onExtractWallpaperSeeds);
 
     // Live sync is best effort: when the session bus cannot deliver the
@@ -155,50 +154,27 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     await _loadPreview(emit);
   }
 
-  Future<void> _onSetDynamicSeed(
-    SetDynamicSeedEvent event,
+  Future<void> _onSetDynamicAccent(
+    SetDynamicAccentEvent event,
     Emitter<ThemeState> emit,
   ) async {
     if (state.isBusy) {
       return;
     }
 
+    // Step 1: Derive every family from the picked accent. The helper also
+    // normalizes the hex form and falls back when the value is malformed.
+    final seeds = seedsFromAccent(event.accent);
+
     emit(state.copyWith(isBusy: true, clearError: true));
 
-    // Normalize the incoming value the same way the service will.
-    final seed = ThemeColor.tryParse(event.seed)?.value ?? event.seed.trim();
-
-    // Primary is mandatory in org.rde.Theme. Always carry the current primary
-    // through unchanged when another family is being edited, and only override
-    // it when the user is actually editing primary.
-    final current = state.dynamicSeeds;
-    final primary = event.role == DynamicSeedRole.primary
-        ? seed
-        : current.seedFor(DynamicSeedRole.primary);
-
-    // Sanity guard: never publish an empty primary upstream.
-    if (ThemeColor.tryParse(primary) == null) {
-      emit(
-        state.copyWith(
-          isBusy: false,
-          errorMessage: 'Primary seed is invalid; refusing to update.',
-        ),
-      );
-      return;
-    }
-
+    // Step 2: Send all four seeds; the service regenerates each palette.
     final failure = _failureOf(
       await updateDynamicTheme(
-        primary: primary,
-        secondary: event.role == DynamicSeedRole.secondary
-            ? seed
-            : current.seedFor(DynamicSeedRole.secondary),
-        tertiary: event.role == DynamicSeedRole.tertiary
-            ? seed
-            : current.seedFor(DynamicSeedRole.tertiary),
-        error: event.role == DynamicSeedRole.error
-            ? seed
-            : current.seedFor(DynamicSeedRole.error),
+        primary: seeds.primary,
+        secondary: seeds.secondary,
+        tertiary: seeds.tertiary,
+        error: seeds.error,
       ),
     );
     if (failure != null) {
@@ -206,11 +182,8 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
       return;
     }
 
-    emit(
-      state.copyWith(
-        dynamicSeeds: state.dynamicSeeds.withSeed(event.role, seed),
-      ),
-    );
+    // Step 3: Mirror the derived seeds and refresh the catalog.
+    emit(state.copyWith(dynamicSeeds: seeds));
     await _load(emit);
   }
 

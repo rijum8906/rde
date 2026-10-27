@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 // ...bloc/state/event imports...
-import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
 import 'package:rde_settings/core/utils/seed_mode.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_state.dart';
@@ -21,7 +20,6 @@ class ThemeStylingView extends StatefulWidget {
 
 class _ThemeStylingViewState extends State<ThemeStylingView> {
   SeedMode _seedMode = SeedMode.dynamic;
-  DynamicSeedRole _seedRole = DynamicSeedRole.primary;
 
   @override
   Widget build(BuildContext context) {
@@ -68,11 +66,8 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
                         DynamicThemeCard(
                           state: state,
                           seedMode: _seedMode,
-                          seedRole: _seedRole,
                           onSeedModeChanged: (m) =>
                               setState(() => _seedMode = m),
-                          onSeedRoleChanged: (r) =>
-                              setState(() => _seedRole = r),
                         ),
                         const SizedBox(height: 28),
                         InstalledThemesCard(state: state),

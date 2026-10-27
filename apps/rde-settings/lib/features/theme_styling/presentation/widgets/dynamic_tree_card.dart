@@ -1,28 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
 import 'package:rde_settings/core/utils/seed_mode.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_state.dart';
-import 'package:rde_settings/features/theme_styling/presentation/widgets/custom_seed_controls.dart';
+import 'package:rde_settings/features/theme_styling/presentation/widgets/accent_color_controls.dart';
 import 'package:rde_settings/features/theme_styling/presentation/widgets/seed_summary.dart';
 import 'package:rde_settings/features/theme_styling/presentation/widgets/wallpaper_seed_controls.dart';
 
-// ...state + SeedMode + WallpaperSeedControls + CustomSeedControls + SeedSummary...
+// ...state + SeedMode + WallpaperSeedControls + AccentColorControls + SeedSummary...
 
 class DynamicThemeCard extends StatelessWidget {
   const DynamicThemeCard({
     super.key,
     required this.state,
     required this.seedMode,
-    required this.seedRole,
     required this.onSeedModeChanged,
-    required this.onSeedRoleChanged,
   });
 
   final ThemeState state;
   final SeedMode seedMode;
-  final DynamicSeedRole seedRole;
   final ValueChanged<SeedMode> onSeedModeChanged;
-  final ValueChanged<DynamicSeedRole> onSeedRoleChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +39,7 @@ class DynamicThemeCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Every palette of rde-dynamic is generated from four seed colors.',
+              'Every palette of rde-dynamic is generated from one accent color.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -74,11 +69,7 @@ class DynamicThemeCard extends StatelessWidget {
             if (seedMode == SeedMode.dynamic)
               WallpaperSeedControls(state: state)
             else
-              CustomSeedControls(
-                state: state,
-                seedRole: seedRole,
-                onSeedRoleChanged: onSeedRoleChanged,
-              ),
+              AccentColorControls(state: state),
             const SizedBox(height: 16),
             SeedSummary(seeds: state.dynamicSeeds),
             if (!catalog.isDynamicActive) ...[
