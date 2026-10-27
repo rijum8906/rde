@@ -264,8 +264,8 @@ class _SidebarHeaderState extends State<_SidebarHeader> {
                   decoration: BoxDecoration(
                     color: _isHovered
                         ? colorScheme.primaryContainer
-                        : colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
+                        : colorScheme.primaryContainer.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(
                     Icons.settings_outlined,
@@ -319,18 +319,23 @@ class _SidebarItemWidgetState extends State<_SidebarItemWidget> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
+    // Step 1: Selection is carried by the primary family, so the active
+    // destination wears the accent the user chose instead of Material's
+    // default secondary container.
     final Color textColor = widget.isSelected
-        ? colorScheme.onSecondaryContainer
+        ? colorScheme.onPrimaryContainer
         : (_isHovered ? colorScheme.onSurface : colorScheme.onSurfaceVariant);
 
     final Color iconColor = widget.isSelected
-        ? colorScheme.onSecondaryContainer
+        ? colorScheme.onPrimaryContainer
         : (_isHovered ? colorScheme.primary : colorScheme.onSurfaceVariant);
 
+    // Step 2: Hovering an unselected destination lays an M3 state layer over the
+    // rail: a translucent wash of the accent rather than a solid neutral fill.
     final Color backgroundColor = widget.isSelected
-        ? colorScheme.secondaryContainer
+        ? colorScheme.primaryContainer
         : (_isHovered
-              ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.4)
+              ? colorScheme.primary.withValues(alpha: 0.08)
               : Colors.transparent);
 
     final double translationX = _isHovered && !widget.isSelected ? 4.0 : 0.0;

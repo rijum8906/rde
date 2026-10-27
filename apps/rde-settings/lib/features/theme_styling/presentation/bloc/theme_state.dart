@@ -1,6 +1,7 @@
-import 'package:rde_settings/features/theme_styling/domain/entities/rde_color_scheme.dart';
-import 'package:rde_settings/features/theme_styling/domain/entities/rde_palette.dart';
-import 'package:rde_settings/features/theme_styling/domain/entities/rde_theme_info.dart';
+import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
+import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
+import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
+import 'package:rde_settings/core/theme/domain/entities/theme_manifest.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 
 /// Lifecycle of the theme page's data.
@@ -11,7 +12,9 @@ class ThemeState {
   const ThemeState({
     required this.status,
     this.catalog,
-    this.previewScheme = RdeColorScheme.dark,
+    this.previewMode = AppearanceMode.dark,
+    this.previewResolved,
+    this.dynamicSeeds = DynamicSeeds.fallback,
     this.isBusy = false,
     this.errorMessage,
   });
@@ -26,8 +29,17 @@ class ThemeState {
   /// Latest service state, `null` until the first successful load.
   final ThemeCatalog? catalog;
 
-  /// Scheme rendered by the live preview.
-  final RdeColorScheme previewScheme;
+  /// Appearance rendered by the live preview.
+  final AppearanceMode previewMode;
+
+  /// Payload the live preview renders, `null` until it is resolved.
+  final ResolvedTheme? previewResolved;
+
+  /// Seeds the dynamic palettes are generated from.
+  ///
+  /// The service exposes no seed properties, so this mirrors the last seeds this
+  /// page wrote (or extracted) and starts at the service defaults.
+  final DynamicSeeds dynamicSeeds;
 
   /// True while a service mutation or catalog refresh is in flight.
   final bool isBusy;
@@ -36,16 +48,16 @@ class ThemeState {
   final String? errorMessage;
 
   /// Installed themes, empty until the catalog is loaded.
-  List<RdeThemeInfo> get themes => catalog?.themes ?? const [];
+  List<ThemeManifest> get themes => catalog?.themes ?? const [];
 
-  /// Metadata of the active theme.
-  RdeThemeInfo? get activeTheme => catalog?.activeTheme;
+  /// Manifest of the active theme.
+  ThemeManifest? get activeTheme => catalog?.activeTheme;
 
-  /// Global scheme of the desktop.
-  RdeColorScheme get colorScheme => catalog?.colorScheme ?? RdeColorScheme.dark;
+  /// Appearance the desktop currently renders.
+  AppearanceMode get mode => catalog?.mode ?? AppearanceMode.dark;
 
-  /// Palette the live preview renders.
-  RdePalette? get previewPalette => catalog?.paletteFor(previewScheme);
+  /// Payload the live preview renders.
+  ResolvedTheme? get previewTheme => previewResolved;
 
   /// Whether the catalog has been loaded at least once.
   bool get hasCatalog => catalog != null;
@@ -53,7 +65,9 @@ class ThemeState {
   ThemeState copyWith({
     ThemeStatus? status,
     ThemeCatalog? catalog,
-    RdeColorScheme? previewScheme,
+    AppearanceMode? previewMode,
+    ResolvedTheme? previewResolved,
+    DynamicSeeds? dynamicSeeds,
     bool? isBusy,
     String? errorMessage,
     bool clearError = false,
@@ -61,7 +75,9 @@ class ThemeState {
     return ThemeState(
       status: status ?? this.status,
       catalog: catalog ?? this.catalog,
-      previewScheme: previewScheme ?? this.previewScheme,
+      previewMode: previewMode ?? this.previewMode,
+      previewResolved: previewResolved ?? this.previewResolved,
+      dynamicSeeds: dynamicSeeds ?? this.dynamicSeeds,
       isBusy: isBusy ?? this.isBusy,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );

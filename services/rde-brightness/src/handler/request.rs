@@ -21,10 +21,10 @@
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use rde_core::errors::{RdeError, RdeResult};
+use rde_ipc::client::IpcClient;
 use rde_ipc::{
     error::IpcError,
     message::{DaemonRequest, ServiceResponse},
-    socket::IpcClient,
 };
 use tracing::{debug, info, warn};
 
@@ -46,7 +46,7 @@ use crate::handler::SupervisionContext;
 /// Returns [`RdeError::Socket`] when a response cannot be written.
 pub async fn handle_daemon_request(
     request: DaemonRequest,
-    client: &mut IpcClient,
+    client: &mut dyn IpcClient,
     context: &SupervisionContext,
 ) -> RdeResult<()> {
     match request {
@@ -102,16 +102,22 @@ fn socket_error(error: IpcError) -> RdeError {
 mod tests {
     use std::sync::{Arc, atomic::AtomicBool};
 
-    use rde_ipc::message::{GetStatusRequest, MessagePayload, ServiceStatus};
+    use rde_ipc::{
+        message::{GetStatusRequest, MessagePayload, ServiceStatus},
+        socket::UnixIpcClient,
+    };
     use tokio::net::UnixStream;
     use tokio_util::sync::CancellationToken;
 
     use super::*;
 
     /// Builds a connected client pair backed by an in-memory socket.
-    fn client_pair() -> (IpcClient, IpcClient) {
+    fn client_pair() -> (UnixIpcClient, UnixIpcClient) {
         let (service_side, daemon_side) = UnixStream::pair().expect("in-memory socket pair");
-        (IpcClient::from(service_side), IpcClient::from(daemon_side))
+        (
+            UnixIpcClient::from(service_side),
+            UnixIpcClient::from(daemon_side),
+        )
     }
 
     /// Builds a context with the given running state.

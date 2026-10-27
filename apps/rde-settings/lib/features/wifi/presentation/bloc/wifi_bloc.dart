@@ -7,9 +7,7 @@ import 'wifi_state.dart';
 class WifiBloc extends Bloc<WifiEvent, WifiState> {
   final WifiRepository _wifiRepository;
 
-  WifiBloc({required WifiRepository wifiRepository})
-    : _wifiRepository = wifiRepository,
-      super(WifiState.initial()) {
+  WifiBloc({required this._wifiRepository}) : super(WifiState.initial()) {
     on<WifiInitEvent>(_onInit);
     on<ScanNetworksEvent>(_onScanNetworks);
     on<ToggleWifiRadioEvent>(_onToggleWifiRadio);

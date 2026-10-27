@@ -4,14 +4,14 @@
 //! and graceful disconnect operations for communicating with the `rde-daemon` supervisor.
 //!
 //! ## Features
-//! - Thread-safe `IpcClient` socket handle creation via Unix domain socket
+//! - Thread-safe `UnixIpcClient` socket handle creation via Unix domain socket
 //! - Registration handshake (`RegisterRequest`) with `rde-daemon` supervisor
 //! - Asynchronous message routing loop for incoming IPC messages
 //!
 //! ## Related
 //! - [`crate::ipc::daemon_request`]
 //! - [`crate::ipc::daemon_response`]
-//! - [`rde_ipc::socket::IpcClient`](rde_ipc::socket::IpcClient)
+//! - [`rde_ipc::socket::UnixIpcClient`](rde_ipc::socket::UnixIpcClient)
 //!
 //! ## Authors
 //! - Riju Mondal <rijum8906@gmail.com>
@@ -22,16 +22,19 @@
 //! ## Copyright
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
+use rde_ipc::client::IpcClient;
 use std::sync::Arc;
 
 use futures_util::lock::Mutex;
 use rde_core::{errors::RdeResult, utils::ipc::get_socket_path};
-use rde_ipc::{message::DaemonRequest, socket::IpcClient};
+use rde_ipc::{message::DaemonRequest, socket::UnixIpcClient};
 
-/// Wrapper around a thread-safe reference-counted `IpcClient` socket connection.
+use crate::ipc::socket_error;
+
+/// Wrapper around a thread-safe reference-counted `UnixIpcClient` socket connection.
 pub struct IpcHandler {
-    /// Arc-Mutex protected `IpcClient` for concurrent socket operations.
-    pub client: Arc<Mutex<IpcClient>>,
+    /// Arc-Mutex protected `UnixIpcClient` for concurrent socket operations.
+    pub client: Arc<Mutex<UnixIpcClient>>,
 }
 
 impl IpcHandler {
@@ -41,7 +44,9 @@ impl IpcHandler {
     /// Returns `RdeError` if resolving socket path or establishing connection fails.
     pub async fn connect() -> RdeResult<Self> {
         let socket_path = get_socket_path()?;
-        let client = IpcClient::connect(&socket_path).await?;
+        let client = UnixIpcClient::connect_to(&socket_path)
+            .await
+            .map_err(socket_error)?;
 
         Ok(Self {
             client: Arc::new(Mutex::new(client)),
@@ -98,7 +103,7 @@ impl IpcHandler {
                 match msg.payload {
                     rde_ipc::message::MessagePayload::DaemonRequest(daemon_request) => {
                         if let Err(e) =
-                            IpcHandler::handle_daemon_request(daemon_request, &mut client_guard)
+                            IpcHandler::handle_daemon_request(daemon_request, &mut *client_guard)
                                 .await
                         {
                             tracing::error!("Error handling daemon request: {}", e);
@@ -106,7 +111,7 @@ impl IpcHandler {
                     }
                     rde_ipc::message::MessagePayload::DaemonResponse(daemon_response) => {
                         if let Err(e) =
-                            IpcHandler::handle_daemon_response(daemon_response, &mut client_guard)
+                            IpcHandler::handle_daemon_response(daemon_response, &mut *client_guard)
                                 .await
                         {
                             tracing::error!("Error handling daemon response: {}", e);
@@ -136,9 +141,15 @@ impl IpcHandler {
                 service_name: "wifi".to_string(),
                 reason: Some("Service process shutting down".to_string()),
             })
-            .await?;
+            .await
+            .map_err(socket_error)?;
 
         // Close the underlying IPC socket connection
-        self.client.lock().await.close().await
+        self.client
+            .lock()
+            .await
+            .disconnect()
+            .await
+            .map_err(socket_error)
     }
 }

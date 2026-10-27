@@ -4,7 +4,8 @@
 //! daemon supervisor.
 
 use rde_core::errors::RdeResult;
-use rde_ipc::{message::DaemonResponse, socket::IpcClient};
+use rde_ipc::client::IpcClient;
+use rde_ipc::message::DaemonResponse;
 use tracing::{error, info};
 
 use crate::constants::SERVICE_NAME;
@@ -19,7 +20,7 @@ use crate::constants::SERVICE_NAME;
 /// Never fails: responses are informational and only affect logging.
 pub async fn handle_daemon_response(
     response: DaemonResponse,
-    _client: &mut IpcClient,
+    _client: &mut dyn IpcClient,
 ) -> RdeResult<()> {
     match response {
         DaemonResponse::RegisterAck(ack) => {

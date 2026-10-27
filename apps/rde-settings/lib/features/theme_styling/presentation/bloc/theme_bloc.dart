@@ -4,14 +4,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
+import 'package:rde_settings/core/theme/domain/entities/theme_color.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/create_theme.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/delete_theme.dart';
+import 'package:rde_settings/features/theme_styling/domain/use_cases/extract_wallpaper_seeds.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/load_theme_catalog.dart';
+import 'package:rde_settings/features/theme_styling/domain/use_cases/preview_theme.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/reload_themes.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/set_color_scheme.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/set_source_color.dart';
+import 'package:rde_settings/features/theme_styling/domain/use_cases/set_mode.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/set_theme.dart';
+import 'package:rde_settings/features/theme_styling/domain/use_cases/update_dynamic_theme.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/watch_theme_changes.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_state.dart';
@@ -21,16 +23,17 @@ import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_stat
 /// Reads happen through [LoadThemeCatalogUseCase]; mutations go through the
 /// matching use case and are always followed by a catalog reload, so the UI
 /// reflects the service's authoritative state instead of optimistic guesses.
-/// The bloc also subscribes to the service's property-change signal so theme
-/// switches made by other RDE applications appear here immediately.
+/// The bloc also subscribes to the service's `ThemeChanged` and
+/// `ThemeListChanged` signals so theme switches made by other RDE applications
+/// appear here immediately.
 class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
   ThemeBloc({
     required this.loadThemeCatalog,
+    required this.previewTheme,
     required this.setTheme,
-    required this.createTheme,
-    required this.deleteTheme,
-    required this.setSourceColor,
-    required this.setColorScheme,
+    required this.setMode,
+    required this.updateDynamicTheme,
+    required this.extractWallpaperSeeds,
     required this.reloadThemes,
     required this.watchThemeChanges,
   }) : super(ThemeState.initial()) {
@@ -39,14 +42,13 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     on<ThemeServiceChangedEvent>(_onServiceChanged);
     on<DismissThemeErrorEvent>(_onDismissError);
     on<SelectThemeEvent>(_onSelectTheme);
-    on<CreateThemeEvent>(_onCreateTheme);
-    on<DeleteThemeEvent>(_onDeleteTheme);
-    on<SetSourceColorEvent>(_onSetSourceColor);
-    on<SetColorSchemeEvent>(_onSetColorScheme);
-    on<SetPreviewSchemeEvent>(_onSetPreviewScheme);
+    on<SetAppearanceEvent>(_onSetAppearance);
+    on<SetPreviewModeEvent>(_onSetPreviewMode);
+    on<SetDynamicSeedEvent>(_onSetDynamicSeed);
+    on<ExtractWallpaperSeedsEvent>(_onExtractWallpaperSeeds);
 
     // Live sync is best effort: when the session bus cannot deliver the
-    // signal, explicit actions and the refresh button still work.
+    // signals, explicit actions and the refresh button still work.
     _subscription = watchThemeChanges().listen(
       (_) => add(const ThemeServiceChangedEvent()),
       onError: (Object error) {
@@ -56,11 +58,11 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
   }
 
   final LoadThemeCatalogUseCase loadThemeCatalog;
+  final PreviewThemeUseCase previewTheme;
   final SetThemeUseCase setTheme;
-  final CreateThemeUseCase createTheme;
-  final DeleteThemeUseCase deleteTheme;
-  final SetSourceColorUseCase setSourceColor;
-  final SetColorSchemeUseCase setColorScheme;
+  final SetModeUseCase setMode;
+  final UpdateDynamicThemeUseCase updateDynamicTheme;
+  final ExtractWallpaperSeedsUseCase extractWallpaperSeeds;
   final ReloadThemesUseCase reloadThemes;
   final WatchThemeChangesUseCase watchThemeChanges;
 
@@ -75,8 +77,8 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     ReloadThemeDatabaseEvent event,
     Emitter<ThemeState> emit,
   ) async {
-    // Step 1: Ask the service to reconcile its database with the manifests on
-    // disk, which also re-applies the active theme to the toolkit schemes.
+    // Step 1: Ask the service to reconcile manifests, variant files, and
+    // settings with what is durable on disk.
     emit(state.copyWith(isBusy: true, clearError: true));
     final failure = _failureOf(await reloadThemes());
     if (failure != null) {
@@ -121,69 +123,99 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     await _load(emit);
   }
 
-  Future<void> _onCreateTheme(
-    CreateThemeEvent event,
+  Future<void> _onSetAppearance(
+    SetAppearanceEvent event,
     Emitter<ThemeState> emit,
   ) async {
-    if (state.isBusy) {
+    if (state.isBusy || state.mode == event.mode) {
       return;
     }
 
-    // Step 1: Install the theme from the requested seed color.
-    emit(state.copyWith(isBusy: true, clearError: true));
-    final createFailure = _failureOf(
-      await createTheme(event.name, event.sourceColor),
+    emit(
+      state.copyWith(isBusy: true, clearError: true, previewMode: event.mode),
     );
-    if (createFailure != null) {
-      emit(state.copyWith(isBusy: false, errorMessage: createFailure.message));
+    final failure = _failureOf(await setMode(event.mode));
+    if (failure != null) {
+      emit(state.copyWith(isBusy: false, errorMessage: failure.message));
       return;
     }
 
-    // Step 2: Activate it so the newly created colors apply immediately.
-    final activateFailure = _failureOf(await setTheme(event.name));
-
-    // Step 3: Refresh the list regardless, because the theme now exists.
     await _load(emit);
-
-    // Step 4: Surface an activation failure without hiding the new theme.
-    if (activateFailure != null) {
-      emit(state.copyWith(errorMessage: activateFailure.message));
-    }
   }
 
-  Future<void> _onDeleteTheme(
-    DeleteThemeEvent event,
+  Future<void> _onSetPreviewMode(
+    SetPreviewModeEvent event,
+    Emitter<ThemeState> emit,
+  ) async {
+    if (state.previewMode == event.mode) {
+      return;
+    }
+
+    emit(state.copyWith(previewMode: event.mode));
+    await _loadPreview(emit);
+  }
+
+  Future<void> _onSetDynamicSeed(
+    SetDynamicSeedEvent event,
     Emitter<ThemeState> emit,
   ) async {
     if (state.isBusy) {
       return;
     }
 
-    // The service rejects deleting the active theme; fail fast with a clear
-    // message instead of a round trip.
-    if (event.theme == state.catalog?.currentTheme) {
+    emit(state.copyWith(isBusy: true, clearError: true));
+
+    // Normalize the incoming value the same way the service will.
+    final seed = ThemeColor.tryParse(event.seed)?.value ?? event.seed.trim();
+
+    // Primary is mandatory in org.rde.Theme. Always carry the current primary
+    // through unchanged when another family is being edited, and only override
+    // it when the user is actually editing primary.
+    final current = state.dynamicSeeds;
+    final primary = event.role == DynamicSeedRole.primary
+        ? seed
+        : current.seedFor(DynamicSeedRole.primary);
+
+    // Sanity guard: never publish an empty primary upstream.
+    if (ThemeColor.tryParse(primary) == null) {
       emit(
         state.copyWith(
-          errorMessage:
-              'The active theme cannot be deleted. '
-              'Activate another theme first.',
+          isBusy: false,
+          errorMessage: 'Primary seed is invalid; refusing to update.',
         ),
       );
       return;
     }
 
-    emit(state.copyWith(isBusy: true, clearError: true));
-    final failure = _failureOf(await deleteTheme(event.theme));
+    final failure = _failureOf(
+      await updateDynamicTheme(
+        primary: primary,
+        secondary: event.role == DynamicSeedRole.secondary
+            ? seed
+            : current.seedFor(DynamicSeedRole.secondary),
+        tertiary: event.role == DynamicSeedRole.tertiary
+            ? seed
+            : current.seedFor(DynamicSeedRole.tertiary),
+        error: event.role == DynamicSeedRole.error
+            ? seed
+            : current.seedFor(DynamicSeedRole.error),
+      ),
+    );
     if (failure != null) {
       emit(state.copyWith(isBusy: false, errorMessage: failure.message));
       return;
     }
 
+    emit(
+      state.copyWith(
+        dynamicSeeds: state.dynamicSeeds.withSeed(event.role, seed),
+      ),
+    );
     await _load(emit);
   }
 
-  Future<void> _onSetSourceColor(
-    SetSourceColorEvent event,
+  Future<void> _onExtractWallpaperSeeds(
+    ExtractWallpaperSeedsEvent event,
     Emitter<ThemeState> emit,
   ) async {
     if (state.isBusy) {
@@ -191,44 +223,33 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     }
 
     emit(state.copyWith(isBusy: true, clearError: true));
-    final failure = _failureOf(await setSourceColor(event.sourceColor));
-    if (failure != null) {
-      emit(state.copyWith(isBusy: false, errorMessage: failure.message));
-      return;
-    }
 
-    await _load(emit);
-  }
+    // Step 1: The app owns wallpaper decoding; ask it for the four seeds.
+    final extracted = await extractWallpaperSeeds();
 
-  Future<void> _onSetColorScheme(
-    SetColorSchemeEvent event,
-    Emitter<ThemeState> emit,
-  ) async {
-    if (state.isBusy || state.colorScheme == event.scheme) {
-      return;
-    }
+    // Step 2: Hand the seeds to the service, which regenerates every family.
+    return extracted.fold(
+      (failure) async =>
+          emit(state.copyWith(isBusy: false, errorMessage: failure.message)),
+      (seeds) async {
+        final failure = _failureOf(
+          await updateDynamicTheme(
+            primary: seeds.primary,
+            secondary: seeds.secondary,
+            tertiary: seeds.tertiary,
+            error: seeds.error,
+          ),
+        );
+        if (failure != null) {
+          emit(state.copyWith(isBusy: false, errorMessage: failure.message));
+          return;
+        }
 
-    emit(
-      state.copyWith(
-        isBusy: true,
-        clearError: true,
-        previewScheme: event.scheme,
-      ),
+        // Step 3: Mirror the extracted seeds and refresh the catalog.
+        emit(state.copyWith(dynamicSeeds: seeds));
+        await _load(emit);
+      },
     );
-    final failure = _failureOf(await setColorScheme(event.scheme));
-    if (failure != null) {
-      emit(state.copyWith(isBusy: false, errorMessage: failure.message));
-      return;
-    }
-
-    await _load(emit);
-  }
-
-  void _onSetPreviewScheme(
-    SetPreviewSchemeEvent event,
-    Emitter<ThemeState> emit,
-  ) {
-    emit(state.copyWith(previewScheme: event.scheme));
   }
 
   /// Loads the catalog and publishes it as the new state.
@@ -273,22 +294,54 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
       }
 
       // Step 3: Publish the new catalog. The preview follows the desktop
-      // scheme on the first load and keeps the user's choice afterwards.
+      // appearance on the first load and keeps the user's choice afterwards.
       final loaded = catalog!;
+      final firstLoad = !state.hasCatalog;
+      final previewMode = firstLoad ? loaded.mode : state.previewMode;
       emit(
         state.copyWith(
           status: ThemeStatus.success,
           catalog: loaded,
-          previewScheme: state.hasCatalog
-              ? state.previewScheme
-              : loaded.colorScheme,
+          previewMode: previewMode,
+          previewResolved: previewMode == loaded.mode
+              ? loaded.resolved
+              : state.previewResolved,
           isBusy: false,
           clearError: true,
         ),
       );
+
+      // Step 4: Re-resolve the preview when it shows the other appearance.
+      if (previewMode != loaded.mode) {
+        await _loadPreview(emit);
+      }
     } finally {
       _isLoading = false;
     }
+  }
+
+  /// Resolves the payload the live preview renders.
+  ///
+  /// The active appearance is served from the loaded catalog; the other one is
+  /// computed by the service through `Preview` without committing it.
+  Future<void> _loadPreview(Emitter<ThemeState> emit) async {
+    final catalog = state.catalog;
+    if (catalog == null) {
+      return;
+    }
+
+    // Step 1: Reuse the published payload when the preview shows it.
+    if (state.previewMode == catalog.mode) {
+      emit(state.copyWith(previewResolved: catalog.resolved));
+      return;
+    }
+
+    // Step 2: Ask the service for a preview of the other appearance.
+    final result = await previewTheme(catalog.currentTheme, state.previewMode);
+    result.fold(
+      (failure) => emit(state.copyWith(errorMessage: failure.message)),
+      (resolved) => emit(state.copyWith(previewResolved: resolved)),
+    );
   }
 
   /// Extracts the failure of a void result, or `null` on success.

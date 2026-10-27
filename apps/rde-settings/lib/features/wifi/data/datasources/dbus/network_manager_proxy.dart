@@ -1,6 +1,5 @@
 import 'package:dbus/dbus.dart';
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/data/datasource/network_manager/nm_device.dart';
 import 'package:rde_settings/core/dbus/dbus.dart';
 import 'package:rde_settings/core/errors/rde_error.dart';
 import 'package:rde_settings/features/wifi/domain/entities/wifi_network.dart';

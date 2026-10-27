@@ -1,141 +1,148 @@
 //! # Theme Database Paths
 //!
-//! Resolves the XDG theme database location (`themes.toml` plus one manifest per
-//! theme) and every path derived from it.
+//! Resolves XDG base directories and paths for themes, settings, and cache files.
 
 use std::{
     env,
     path::{Path, PathBuf},
 };
 
-use rde_core::errors::{RdeError, RdeResult};
-
-use crate::{
-    constants::{DATA_HOME_SUBDIR, MANIFEST_FILE_NAME, REGISTRY_FILE_NAME, THEMES_DIR_NAME},
-    domain::theme::ThemeId,
-};
-
-/// Filesystem layout of the theme database.
+/// File name of the published resolved theme cache.
 ///
-/// The root is the single source of truth; every other path is derived from it
-/// so tests can point the service at a temporary directory.
-///
-/// # Example
-/// ```text
-/// ThemePaths::resolve()?.root() == ~/.local/share/rde/rde-theme
-/// ```
+/// Applications read this file before the session bus is ready, so both this
+/// service and its clients depend on the name staying stable.
+pub const DEFAULT_PUBLISHED_THEME_FILE: &str = "default_theme.json";
+
+/// Resolves `$XDG_DATA_HOME`, falling back to `~/.local/share`.
+#[must_use]
+pub fn xdg_data_home() -> PathBuf {
+    if let Ok(path) = env::var("XDG_DATA_HOME") {
+        if !path.is_empty() {
+            return PathBuf::from(path);
+        }
+    }
+    let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    PathBuf::from(home).join(".local").join("share")
+}
+
+/// Resolves `$XDG_CONFIG_HOME`, falling back to `~/.config`.
+#[must_use]
+pub fn xdg_config_home() -> PathBuf {
+    if let Ok(path) = env::var("XDG_CONFIG_HOME") {
+        if !path.is_empty() {
+            return PathBuf::from(path);
+        }
+    }
+    let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    PathBuf::from(home).join(".config")
+}
+
+/// Resolves `$XDG_CACHE_HOME`, falling back to `~/.cache`.
+#[must_use]
+pub fn xdg_cache_home() -> PathBuf {
+    if let Ok(path) = env::var("XDG_CACHE_HOME") {
+        if !path.is_empty() {
+            return PathBuf::from(path);
+        }
+    }
+    let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    PathBuf::from(home).join(".cache")
+}
+
+/// Paths configuration for theme data, settings, and cache files.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ThemePaths {
-    /// Root directory of the theme database.
-    root: PathBuf,
+    data_themes_dir: PathBuf,
+    config_themes_dir: PathBuf,
+    cache_theme_dir: PathBuf,
+    system_themes_dir: PathBuf,
+    published_theme_file: PathBuf,
+}
+
+impl Default for ThemePaths {
+    fn default() -> Self {
+        Self::resolve()
+    }
 }
 
 impl ThemePaths {
-    /// Resolves the theme database location following the XDG base directory
-    /// specification.
-    ///
-    /// # Workflow
-    /// 1. Use `$XDG_DATA_HOME` when it is set to a non-empty value
-    /// 2. Otherwise fall back to `$HOME/.local/share`
-    /// 3. Append [`DATA_HOME_SUBDIR`] (`rde/rde-theme`)
-    ///
-    /// # Errors
-    /// Returns [`RdeError::NotFound`] when neither `XDG_DATA_HOME` nor `HOME`
-    /// is available, since the database location cannot be determined.
-    pub fn resolve() -> RdeResult<Self> {
-        Ok(Self::from_root(xdg_data_home()?.join(DATA_HOME_SUBDIR)))
+    /// Resolves default paths using standard XDG base environment variables.
+    #[must_use]
+    pub fn resolve() -> Self {
+        Self {
+            data_themes_dir: xdg_data_home().join("rde").join("themes"),
+            config_themes_dir: xdg_config_home().join("rde").join("themes"),
+            cache_theme_dir: xdg_cache_home().join("rde").join("theme"),
+            system_themes_dir: PathBuf::from("/usr/share/rde/themes"),
+            published_theme_file: xdg_data_home()
+                .join("rde")
+                .join("rde-theme")
+                .join(DEFAULT_PUBLISHED_THEME_FILE),
+        }
     }
 
-    /// Builds a layout rooted at an explicit directory.
-    ///
-    /// Used by tests and by callers that need an isolated theme database.
-    pub fn from_root(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+    /// Constructs custom paths for testing or isolated environments.
+    #[must_use]
+    pub fn custom(
+        data_themes_dir: PathBuf,
+        config_themes_dir: PathBuf,
+        cache_theme_dir: PathBuf,
+        system_themes_dir: PathBuf,
+        published_theme_file: PathBuf,
+    ) -> Self {
+        Self {
+            data_themes_dir,
+            config_themes_dir,
+            cache_theme_dir,
+            system_themes_dir,
+            published_theme_file,
+        }
     }
 
-    /// Returns the root directory of the theme database.
-    pub fn root(&self) -> &Path {
-        &self.root
+    /// User themes directory containing installed themes and `themes.toml`.
+    #[must_use]
+    pub fn data_themes_dir(&self) -> &Path {
+        &self.data_themes_dir
     }
 
-    /// Returns the path of the theme registry file (`themes.toml`).
+    /// User configuration directory containing `settings.toml`.
+    #[must_use]
+    pub fn config_themes_dir(&self) -> &Path {
+        &self.config_themes_dir
+    }
+
+    /// Cache directory holding `current.json` and generated stylesheets.
+    #[must_use]
+    pub fn cache_theme_dir(&self) -> &Path {
+        &self.cache_theme_dir
+    }
+
+    /// System-wide read-only themes directory (`/usr/share/rde/themes`).
+    #[must_use]
+    pub fn system_themes_dir(&self) -> &Path {
+        &self.system_themes_dir
+    }
+
+    /// Path to the factual `themes.toml` registry file.
+    #[must_use]
     pub fn registry_file(&self) -> PathBuf {
-        self.root.join(REGISTRY_FILE_NAME)
+        self.data_themes_dir.join("themes.toml")
     }
 
-    /// Returns the directory containing one subdirectory per installed theme.
-    pub fn themes_dir(&self) -> PathBuf {
-        self.root.join(THEMES_DIR_NAME)
+    /// Path to the user preference `settings.toml` file.
+    #[must_use]
+    pub fn settings_file(&self) -> PathBuf {
+        self.config_themes_dir.join("settings.toml")
     }
 
-    /// Returns the directory of a single installed theme.
-    pub fn theme_dir(&self, theme: &ThemeId) -> PathBuf {
-        self.themes_dir().join(theme.as_str())
-    }
-
-    /// Returns the manifest path of a single installed theme.
-    pub fn manifest_file(&self, theme: &ThemeId) -> PathBuf {
-        self.theme_dir(theme).join(MANIFEST_FILE_NAME)
-    }
-
-    /// Creates the root and `themes/` directories when they are missing.
+    /// Path to the published resolved theme cache consumed at application startup.
     ///
-    /// # Errors
-    /// Returns [`RdeError::Io`] when the directories cannot be created, for
-    /// example because the data home is not writable.
-    pub fn ensure(&self) -> RdeResult<()> {
-        std::fs::create_dir_all(self.themes_dir()).map_err(RdeError::Io)
+    /// Defaults to `$XDG_DATA_HOME/rde/rde-theme/default_theme.json` and is
+    /// rewritten atomically before every `ThemeChanged` signal.
+    #[must_use]
+    pub fn published_theme_file(&self) -> PathBuf {
+        self.published_theme_file.clone()
     }
-}
-
-/// Returns the XDG data home, where user data such as the theme database and
-/// KDE color scheme files live.
-///
-/// # Returns
-/// `$XDG_DATA_HOME` when it is set to a non-empty value, otherwise
-/// `$HOME/.local/share`.
-///
-/// # Errors
-/// Returns [`RdeError::NotFound`] when neither variable provides a directory.
-pub fn xdg_data_home() -> RdeResult<PathBuf> {
-    match environment_dir("XDG_DATA_HOME") {
-        Some(directory) => Ok(directory),
-        None => Ok(home_dir()?.join(".local").join("share")),
-    }
-}
-
-/// Returns the XDG configuration home used by the Qt and KDE configuration
-/// files.
-///
-/// # Returns
-/// `$XDG_CONFIG_HOME` when it is set to a non-empty value, otherwise
-/// `$HOME/.config`.
-///
-/// # Errors
-/// Returns [`RdeError::NotFound`] when neither variable provides a directory.
-pub fn xdg_config_home() -> RdeResult<PathBuf> {
-    match environment_dir("XDG_CONFIG_HOME") {
-        Some(directory) => Ok(directory),
-        None => Ok(home_dir()?.join(".config")),
-    }
-}
-
-/// Reads an environment variable as a non-empty directory path.
-fn environment_dir(variable: &str) -> Option<PathBuf> {
-    env::var_os(variable)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-}
-
-/// Returns the user's home directory from the environment.
-///
-/// # Errors
-/// Returns [`RdeError::NotFound`] when `HOME` is unset or empty.
-fn home_dir() -> RdeResult<PathBuf> {
-    env::var_os("HOME")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .ok_or_else(|| RdeError::NotFound("home directory is not available".to_string()))
 }
 
 #[cfg(test)]
@@ -143,19 +150,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn derives_every_path_from_the_root() {
-        let theme = ThemeId::new("ocean").expect("valid theme id");
-        let paths = ThemePaths::from_root("/tmp/rde-theme-test");
+    fn published_theme_file_lives_under_the_rde_data_directory() {
+        let paths = ThemePaths::resolve();
+        let expected = xdg_data_home()
+            .join("rde")
+            .join("rde-theme")
+            .join(DEFAULT_PUBLISHED_THEME_FILE);
 
-        assert_eq!(paths.root(), Path::new("/tmp/rde-theme-test"));
+        assert_eq!(paths.published_theme_file(), expected);
         assert_eq!(
-            paths.registry_file(),
-            Path::new("/tmp/rde-theme-test/themes.toml")
-        );
-        assert_eq!(paths.themes_dir(), Path::new("/tmp/rde-theme-test/themes"));
-        assert_eq!(
-            paths.manifest_file(&theme),
-            Path::new("/tmp/rde-theme-test/themes/ocean/theme.toml")
+            paths
+                .published_theme_file()
+                .file_name()
+                .and_then(|name| name.to_str()),
+            Some("default_theme.json")
         );
     }
 }

@@ -17,7 +17,7 @@ It bridges modern **Material 3 (M3)** design principles with Linux desktop toolk
 
 ## 🎨 Material 3 Design System Engine
 
-`rde-theme` uses Google's Material 3 design system to construct harmonious color schemes from seed colors (or wallpaper images). The engine lives in `backend/material/` behind the `ThemeBackend` trait and emits the toolkit-neutral `domain::palette::Palette`, so storage, D-Bus, and toolkit writers never depend on Material types.
+`rde-theme` uses Google's Material 3 design system to construct harmonious color schemes from four seed colors (primary, secondary, tertiary, error). The engine lives in `backend/material/` behind the `ThemeBackend` trait and emits the toolkit-neutral `domain::palette::Palette`, so storage, D-Bus, and toolkit writers never depend on Material types.
 
 ### 1. Color Role Mapping Schema
 
@@ -65,7 +65,7 @@ The engine maintains a strict, strongly-typed Material 3 color role system:
 
 ### 2. Tonal Palette & Scheme Generation
 
-- **Dynamic Color Extraction**: Generates dynamic palettes from user seed hex colors or dominant wallpaper colors.
+- **Dynamic Color Generation**: Generates one tonal palette per seed color, so primary, secondary, tertiary, and error families stay independently tunable.
 - **Light / Dark Mode Variants**: Automatically derives both Light and Dark M3 color schemes from the active tonal palette, adjusting contrast ratios according to Web Content Accessibility Guidelines (WCAG 2.1 AA standard).
 - **Role Exposure**: Palettes are published as a stable `role_name → #RRGGBB` map (37 roles), so consumers never depend on Rust struct layout.
 

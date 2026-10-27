@@ -1,19 +1,39 @@
 import 'package:fpdart/fpdart.dart';
 import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
+import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
+import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
 import 'package:rde_settings/features/theme_styling/data/datasources/dbus_theme_datasource.dart';
-import 'package:rde_settings/features/theme_styling/domain/entities/rde_color_scheme.dart';
+import 'package:rde_settings/features/theme_styling/data/datasources/wallpaper/kde_wallpaper_seed_source.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 import 'package:rde_settings/features/theme_styling/domain/repositories/theme_repository.dart';
+import 'package:rde_settings/features/theme_styling/domain/repositories/wallpaper_seed_source.dart';
 
 /// Connects the theme datasource to the domain repository contract.
 class ThemeRepositoryImpl implements ThemeRepository {
-  ThemeRepositoryImpl(this._datasource);
+  /// Creates the repository.
+  ///
+  /// [wallpaper] resolves seeds from the desktop wallpaper; it defaults to the
+  /// KDE implementation and is injectable for tests.
+  ThemeRepositoryImpl(this._datasource, {WallpaperSeedSource? wallpaper})
+    : _wallpaper = wallpaper ?? KdeWallpaperSeedSource();
 
   final DbusThemeDatasource _datasource;
+  final WallpaperSeedSource _wallpaper;
 
   @override
   Future<Either<Failure, ThemeCatalog>> loadCatalog() async {
     final result = await _datasource.loadCatalog();
+    return result.mapLeft((error) => Failure(error.message));
+  }
+
+  @override
+  Future<Either<Failure, ResolvedTheme>> preview(
+    String theme,
+    AppearanceMode mode, [
+    ContrastLevel contrast = ContrastLevel.normal,
+  ]) async {
+    final result = await _datasource.preview(theme, mode, contrast);
     return result.mapLeft((error) => Failure(error.message));
   }
 
@@ -24,30 +44,30 @@ class ThemeRepositoryImpl implements ThemeRepository {
   }
 
   @override
-  Future<Either<Failure, void>> createTheme(
-    String name,
-    String sourceColor,
-  ) async {
-    final result = await _datasource.createTheme(name, sourceColor);
+  Future<Either<Failure, void>> setMode(AppearanceMode mode) async {
+    final result = await _datasource.setMode(mode);
     return result.mapLeft((error) => Failure(error.message));
   }
 
   @override
-  Future<Either<Failure, void>> deleteTheme(String theme) async {
-    final result = await _datasource.deleteTheme(theme);
-    return result.mapLeft((error) => Failure(error.message));
+  Future<Either<Failure, void>> updateDynamicTheme({
+    String primary = '',
+    String secondary = '',
+    String tertiary = '',
+    String error = '',
+  }) async {
+    final result = await _datasource.updateDynamicTheme(
+      primary: primary,
+      secondary: secondary,
+      tertiary: tertiary,
+      error: error,
+    );
+    return result.mapLeft((failure) => Failure(failure.message));
   }
 
   @override
-  Future<Either<Failure, void>> setSourceColor(String sourceColor) async {
-    final result = await _datasource.setSourceColor(sourceColor);
-    return result.mapLeft((error) => Failure(error.message));
-  }
-
-  @override
-  Future<Either<Failure, void>> setColorScheme(RdeColorScheme scheme) async {
-    final result = await _datasource.setColorScheme(scheme);
-    return result.mapLeft((error) => Failure(error.message));
+  Future<Either<Failure, DynamicSeeds>> seedsFromWallpaper() {
+    return _wallpaper.seeds();
   }
 
   @override

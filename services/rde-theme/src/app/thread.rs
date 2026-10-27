@@ -3,8 +3,9 @@
 //! Connects to the `rde-daemon` supervision socket, registers the service, routes
 //! supervisor messages, and deregisters on disconnect.
 
+use rde_ipc::client::IpcClient;
 use std::{
-    path::PathBuf,
+    path::Path,
     process,
     sync::{Arc, atomic::Ordering},
     time::Duration,
@@ -17,7 +18,7 @@ use rde_core::{
 use rde_ipc::{
     IpcCommand,
     message::{RegisterRequest, ServiceRequest},
-    socket::IpcClient,
+    socket::UnixIpcClient,
     thread::IpcThread,
 };
 use tokio::sync::mpsc;
@@ -64,7 +65,7 @@ impl App {
             };
 
             // Step 2: Connect with the shared retry policy.
-            let mut client = IpcClient::default();
+            let mut client = UnixIpcClient::default();
             if !connect(&mut client, &socket_path).await {
                 error!(
                     attempts = MAX_SOCKET_CONN_RETRY_COUNT,
@@ -131,7 +132,7 @@ impl App {
 ///
 /// # Returns
 /// `true` when a connection was established, `false` after the final attempt.
-async fn connect(client: &mut IpcClient, socket_path: &PathBuf) -> bool {
+async fn connect(client: &mut dyn IpcClient, socket_path: &Path) -> bool {
     for attempt in 1..=MAX_SOCKET_CONN_RETRY_COUNT {
         match client.connect(socket_path).await {
             Ok(()) => {
@@ -165,7 +166,7 @@ async fn connect(client: &mut IpcClient, socket_path: &PathBuf) -> bool {
 ///
 /// # Errors
 /// Returns [`RdeError::Socket`] when the request cannot be written.
-async fn register(client: &mut IpcClient, version: &str) -> RdeResult<()> {
+async fn register(client: &mut dyn IpcClient, version: &str) -> RdeResult<()> {
     let request = ServiceRequest::Register(RegisterRequest {
         name: SERVICE_NAME.to_string(),
         pid: process::id(),
@@ -177,7 +178,7 @@ async fn register(client: &mut IpcClient, version: &str) -> RdeResult<()> {
     });
 
     client
-        .send_service_requst(request)
+        .send_service_request(request)
         .await
         .map_err(|error| RdeError::Socket(error.to_string()))?;
 
@@ -188,14 +189,14 @@ async fn register(client: &mut IpcClient, version: &str) -> RdeResult<()> {
 ///
 /// # Errors
 /// Returns [`RdeError::Socket`] when the request cannot be written.
-async fn deregister(client: &mut IpcClient) -> RdeResult<()> {
+async fn deregister(client: &mut dyn IpcClient) -> RdeResult<()> {
     let request = ServiceRequest::Deregister {
         name: SERVICE_NAME.to_string(),
         pid: process::id(),
     };
 
     client
-        .send_service_requst(request)
+        .send_service_request(request)
         .await
         .map_err(|error| RdeError::Socket(error.to_string()))?;
 
