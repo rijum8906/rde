@@ -1,7 +1,7 @@
 //! # Supervision Socket Integration Tests
 //!
 //! Exercises the daemon through the same interface a real service uses: bind a
-//! supervision socket, connect an [`IpcClient`], register, and disconnect.
+//! supervision socket, connect an [`UnixIpcClient`], register, and disconnect.
 //!
 //! ## Features
 //! - Registration handshake returns a successful `RegisterAck`
@@ -17,6 +17,7 @@
 //! ## Copyright
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
+use rde_ipc::client::IpcClient;
 use std::time::Duration;
 
 use rde_core::errors::{RdeError, RdeResult};
@@ -26,7 +27,7 @@ use rde_ipc::{
     message::{
         AckResponse, DaemonResponse, Message, MessagePayload, RegisterRequest, ServiceRequest,
     },
-    socket::IpcClient,
+    socket::UnixIpcClient,
 };
 
 /// Polls `condition` until it holds or the timeout elapses.
@@ -56,12 +57,12 @@ async fn registration_is_acknowledged_and_cleaned_up_on_disconnect() -> RdeResul
     let server = Server::new_with_path(socket_path.clone())?;
 
     // 2. Connect as a service would.
-    let mut client = IpcClient::default();
+    let mut client = UnixIpcClient::default();
     client.connect(&socket_path).await.map_err(ipc_error)?;
 
     // 3. Send the registration handshake.
     client
-        .send_service_requst(ServiceRequest::Register(RegisterRequest {
+        .send_service_request(ServiceRequest::Register(RegisterRequest {
             name: "test-service".to_string(),
             pid: std::process::id(),
             version: "0.1.0".to_string(),

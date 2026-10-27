@@ -21,12 +21,12 @@
 //! ## Copyright
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
+use rde_ipc::client::IpcClient;
 use std::time::SystemTime;
 
 use rde_core::errors::{RdeError, RdeResult};
-use rde_ipc::{
-    message::{AckResponse, DaemonResponse, ServiceId, ServiceInfo, ServiceRequest, ServiceStatus},
-    socket::IpcClient,
+use rde_ipc::message::{
+    AckResponse, DaemonResponse, ServiceId, ServiceInfo, ServiceRequest, ServiceStatus,
 };
 
 use crate::app::App;
@@ -44,7 +44,7 @@ use crate::app::App;
 /// to the client fails. The caller treats any error as a reason to close the
 /// connection and clean up the session.
 pub async fn handle_client_request(
-    client: &mut IpcClient,
+    client: &mut dyn IpcClient,
     request: ServiceRequest,
     registered_service: &mut Option<String>,
 ) -> RdeResult<()> {

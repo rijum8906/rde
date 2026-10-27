@@ -25,3 +25,15 @@
 pub mod daemon_request;
 pub mod daemon_response;
 pub mod handler;
+
+/// Maps a supervision-socket failure onto the service's domain error.
+///
+/// # Parameters
+/// - `error`: transport error reported by [`rde_ipc::client::IpcClient`]
+///
+/// # Returns
+/// [`RdeError::Socket`] carrying the transport message, mirroring how every
+/// other RDE service reports supervision failures.
+pub(crate) fn socket_error(error: rde_ipc::error::IpcError) -> rde_core::errors::RdeError {
+    rde_core::errors::RdeError::Socket(error.to_string())
+}

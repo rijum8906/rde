@@ -20,7 +20,8 @@
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use rde_core::errors::RdeResult;
-use rde_ipc::{message::DaemonResponse, socket::IpcClient};
+use rde_ipc::client::IpcClient;
+use rde_ipc::message::DaemonResponse;
 
 use crate::ipc::handler::IpcHandler;
 
@@ -29,13 +30,13 @@ impl IpcHandler {
     ///
     /// # Parameters
     /// - `response`: The incoming `DaemonResponse` payload from the supervisor.
-    /// - `_client`: Active `IpcClient` socket connection.
+    /// - `_client`: Active `UnixIpcClient` socket connection.
     ///
     /// # Errors
     /// Returns `RdeResult::Ok(())` on successful message processing.
     pub async fn handle_daemon_response(
         response: DaemonResponse,
-        _client: &mut IpcClient,
+        _client: &mut dyn IpcClient,
     ) -> RdeResult<()> {
         match response {
             DaemonResponse::RegisterAck(ack) => {

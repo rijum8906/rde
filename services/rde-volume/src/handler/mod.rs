@@ -21,16 +21,14 @@
 //! ## Copyright
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
+use rde_ipc::client::IpcClient;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
 
 use rde_core::errors::RdeResult;
-use rde_ipc::{
-    message::{Message, MessagePayload, ServiceStatus},
-    socket::IpcClient,
-};
+use rde_ipc::message::{Message, MessagePayload, ServiceStatus};
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
@@ -88,7 +86,7 @@ impl SupervisionContext {
 /// caller can close a dead supervision connection.
 pub async fn handle_message(
     message: Message,
-    client: &mut IpcClient,
+    client: &mut dyn IpcClient,
     context: &SupervisionContext,
 ) -> RdeResult<()> {
     match message.payload {

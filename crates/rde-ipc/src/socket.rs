@@ -2,12 +2,12 @@ use std::path::{Path, PathBuf};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 
+use async_trait::async_trait;
 use rde_core::errors::RdeResult;
 
+use crate::client::IpcClient;
 use crate::error::{IpcError, IpcResult};
-use crate::message::{
-    DaemonRequest, DaemonResponse, Message, MessagePayload, ServiceRequest, ServiceResponse,
-};
+use crate::message::{Message, ServiceRequest};
 
 // =============================
 // ======= Socket Server =========
@@ -100,10 +100,10 @@ impl IpcServer {
         Ok(stream)
     }
 
-    /// accept a new connection and wrap it in an IpcClient
-    pub async fn accept_client(&self) -> RdeResult<IpcClient> {
+    /// accept a new connection and wrap it in a [`UnixIpcClient`]
+    pub async fn accept_client(&self) -> RdeResult<UnixIpcClient> {
         let stream = self.accept().await?;
-        Ok(IpcClient::from(stream))
+        Ok(UnixIpcClient::from(stream))
     }
 
     /// get the socket path
@@ -125,7 +125,7 @@ impl IpcServer {
 // SOCKET CLIENT (Service Side)
 // ============================================
 
-/// IPC Client: Connects to the daemon's supervision socket.
+/// Production [`IpcClient`] over a Unix-domain socket.
 ///
 /// # SECURITY:
 /// - Ensure the client validates that it is connecting to the correct socket path owned by the daemon.
@@ -133,27 +133,66 @@ impl IpcServer {
 /// # NOTE:
 /// - Employs a length-prefixed protocol with a 4-byte Little-Endian prefix followed by JSON payload.
 #[derive(Debug, Default)]
-pub struct IpcClient {
+pub struct UnixIpcClient {
     is_connected: bool,
     stream: Option<UnixStream>,
+    socket_path: Option<PathBuf>,
 }
 
-impl From<UnixStream> for IpcClient {
+impl From<UnixStream> for UnixIpcClient {
     fn from(value: UnixStream) -> Self {
         Self {
             is_connected: true,
             stream: Some(value),
+            // The peer chose the address; only a client that dialled knows the path.
+            socket_path: None,
         }
     }
 }
 
-impl IpcClient {
-    pub fn is_connected(&self) -> bool {
-        self.is_connected
+impl UnixIpcClient {
+    /// Connects to `socket_path` and returns the ready client.
+    ///
+    /// # Parameters
+    /// - `socket_path`: path of the socket owned by `rde-daemon`
+    ///
+    /// # Errors
+    /// Returns [`IpcError::Connection`] when the socket cannot be reached.
+    pub async fn connect_to(socket_path: impl AsRef<Path>) -> IpcResult<Self> {
+        let mut client = Self::default();
+        client.connect(socket_path.as_ref()).await?;
+        Ok(client)
     }
 
-    /// Connect to the daemon's socket
-    pub async fn connect(&mut self, socket_path: &PathBuf) -> IpcResult<()> {
+    /// Closes the connection.
+    ///
+    /// Deprecated in favour of [`IpcClient::disconnect`], which is also part of
+    /// the [`IpcClient`] contract.
+    ///
+    /// # Errors
+    /// Returns [`IpcError::Io`] when the shutdown call fails.
+    #[deprecated(note = "use IpcClient::disconnect instead")]
+    pub async fn close(&mut self) -> IpcResult<()> {
+        self.disconnect().await
+    }
+
+    /// Sends a service-to-daemon request.
+    ///
+    /// Deprecated in favour of [`IpcClient::send_service_request`], which fixes
+    /// the misspelling of this method.
+    ///
+    /// # Errors
+    /// Returns [`IpcError::NotConnected`] when there is no connection.
+    #[deprecated(note = "use IpcClient::send_service_request instead")]
+    pub async fn send_service_requst(&mut self, request: ServiceRequest) -> IpcResult<u64> {
+        self.send_service_request(request).await
+    }
+}
+
+#[async_trait]
+impl IpcClient for UnixIpcClient {
+    /// Connects to the daemon's socket.
+    async fn connect(&mut self, socket_path: &Path) -> IpcResult<()> {
         let stream = UnixStream::connect(socket_path)
             .await
             .map_err(|e| IpcError::Connection {
@@ -163,107 +202,82 @@ impl IpcClient {
 
         self.stream = Some(stream);
         self.is_connected = true;
+        self.socket_path = Some(socket_path.to_path_buf());
 
         Ok(())
     }
 
-    /// Close the connection
-    pub async fn close(&mut self) -> IpcResult<()> {
-        if let Some(mut stream) = self.stream.take() {
-            stream.shutdown().await?;
-            self.is_connected = false;
-        }
-
-        Err(IpcError::NotConnected)
+    fn is_connected(&self) -> bool {
+        self.is_connected
     }
 
-    /// Send a raw message envelope
-    pub async fn send(&mut self, msg: &Message) -> IpcResult<()> {
-        if let Some(stream) = self.stream.as_mut() {
-            let data = serde_json::to_vec(msg).map_err(|e| IpcError::InvalidArgs(e.to_string()))?;
-            let len = data.len() as u32;
+    fn socket_path(&self) -> Option<&Path> {
+        self.socket_path.as_deref()
+    }
 
-            // Send length first (4 bytes, Little-Endian as per spec)
-            stream.write_all(&len.to_le_bytes()).await?;
+    async fn disconnect(&mut self) -> IpcResult<()> {
+        // Step 1: Take the stream so the client is left idle whichever way the
+        // shutdown below ends.
+        self.is_connected = false;
+        self.socket_path = None;
 
-            // Send the payload
-            stream.write_all(&data).await?;
-            stream.flush().await?;
-
+        let Some(mut stream) = self.stream.take() else {
+            // Step 2: Disconnecting an idle client is a no-op, not an error.
             return Ok(());
-        }
+        };
 
-        Err(IpcError::NotConnected)
+        // Step 3: Report a failed shutdown, but never keep the stream alive.
+        stream.shutdown().await.map_err(IpcError::Io)
     }
 
-    /// Send a request payload (automatically wrapped in a Message envelope)
-    pub async fn send_daemon_request(&mut self, req: DaemonRequest) -> IpcResult<u64> {
-        let msg = Message::new(MessagePayload::DaemonRequest(req));
-        let id = msg.message_id;
-        self.send(&msg).await?;
-        Ok(id)
+    /// Writes a raw message envelope.
+    async fn send(&mut self, message: &Message) -> IpcResult<u64> {
+        let Some(stream) = self.stream.as_mut() else {
+            return Err(IpcError::NotConnected);
+        };
+
+        let data = serde_json::to_vec(message).map_err(|e| IpcError::InvalidArgs(e.to_string()))?;
+        let len = data.len() as u32;
+
+        // Send length first (4 bytes, Little-Endian as per spec)
+        stream.write_all(&len.to_le_bytes()).await?;
+
+        // Send the payload
+        stream.write_all(&data).await?;
+        stream.flush().await?;
+
+        Ok(message.message_id)
     }
 
-    /// Send a request payload (automatically wrapped in a Message envelope)
-    pub async fn send_service_requst(&mut self, req: ServiceRequest) -> IpcResult<u64> {
-        let msg = Message::new(MessagePayload::ServiceRequest(req));
-        let id = msg.message_id;
-        self.send(&msg).await?;
-        Ok(id)
-    }
+    /// Receives a raw message envelope.
+    async fn recv(&mut self) -> IpcResult<Message> {
+        let Some(stream) = self.stream.as_mut() else {
+            return Err(IpcError::NotConnected);
+        };
 
-    /// Send a response payload (automatically wrapped in a Message envelope)
-    pub async fn send_daemon_response(&mut self, resp: DaemonResponse) -> IpcResult<u64> {
-        let msg = Message::new(MessagePayload::DaemonResponse(resp));
-        let id = msg.message_id;
-        self.send(&msg).await?;
-        Ok(id)
-    }
-
-    /// Send a response payload (automatically wrapped in a Message envelope)
-    pub async fn send_service_response(&mut self, resp: ServiceResponse) -> IpcResult<u64> {
-        let msg = Message::new(MessagePayload::ServiceResponse(resp));
-        let id = msg.message_id;
-        self.send(&msg).await?;
-        Ok(id)
-    }
-
-    /// Receive a raw message envelope
-    pub async fn recv(&mut self) -> IpcResult<Message> {
-        if let Some(stream) = self.stream.as_mut() {
-            // Read message length (4 bytes)
-            let mut len_buf = [0u8; 4];
-            stream
-                .read_exact(&mut len_buf)
-                .await
-                .map_err(IpcError::Io)?;
-            let len = u32::from_le_bytes(len_buf) as usize;
-
-            // Read the message
-            let mut buf = vec![0u8; len];
-            stream.read_exact(&mut buf).await?;
-
-            let msg: Message =
-                serde_json::from_slice(&buf).map_err(|e| IpcError::InvalidArgs(e.to_string()))?;
-
-            return Ok(msg);
-        }
-
-        Err(IpcError::NotConnected)
-    }
-
-    /// Receive a message with a timeout
-    pub async fn recv_timeout(&mut self, duration: std::time::Duration) -> IpcResult<Message> {
-        tokio::time::timeout(duration, self.recv())
+        // Read message length (4 bytes)
+        let mut len_buf = [0u8; 4];
+        stream
+            .read_exact(&mut len_buf)
             .await
-            .map_err(|_| IpcError::Socket("Timeout receiving message".to_string()))?
+            .map_err(IpcError::Io)?;
+        let len = u32::from_le_bytes(len_buf) as usize;
+
+        // Read the message
+        let mut buf = vec![0u8; len];
+        stream.read_exact(&mut buf).await?;
+
+        serde_json::from_slice(&buf).map_err(|e| IpcError::InvalidArgs(e.to_string()))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::message::{AckResponse, GetStatusRequest, RegisterRequest, types::ServiceStatus};
+    use crate::message::{
+        AckResponse, DaemonRequest, DaemonResponse, GetStatusRequest, MessagePayload,
+        RegisterRequest, ServiceRequest, ServiceResponse, types::ServiceStatus,
+    };
     use tempfile::tempdir;
 
     #[tokio::test]
@@ -311,7 +325,7 @@ mod tests {
         });
 
         // Connect client
-        let mut client = IpcClient::default();
+        let mut client = UnixIpcClient::default();
         client.connect(&socket_path).await.unwrap();
 
         // 1. Receive HealthCheck request
@@ -340,6 +354,61 @@ mod tests {
         // Wait for server task to finish
         server_handle.await.unwrap();
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn connect_to_round_trips_a_frame_and_disconnects_idempotently() -> IpcResult<()> {
+        let temp_dir = tempdir()?;
+        let socket_path = temp_dir.path().join("rde-client-test.sock");
+
+        let server = IpcServer::new_with_path(socket_path.clone())?;
+        let server_handle = tokio::spawn(async move {
+            let mut peer = server.accept_client().await.unwrap();
+
+            // The peer answers the frame the client writes below.
+            let request = peer.recv().await.unwrap();
+            assert!(matches!(
+                request.payload,
+                MessagePayload::DaemonRequest(DaemonRequest::HealthCheck)
+            ));
+            peer.send_daemon_response(DaemonResponse::RegisterAck(AckResponse {
+                success: true,
+                reason: None,
+            }))
+            .await
+            .unwrap();
+
+            server.shutdown().unwrap();
+        });
+
+        // Step 1: The constructor returns a client that already knows its path.
+        let mut client = UnixIpcClient::connect_to(&socket_path).await?;
+        assert!(client.is_connected());
+        assert_eq!(client.socket_path(), Some(socket_path.as_path()));
+
+        // Step 2: A frame written by the client is answered on the same socket.
+        client
+            .send_daemon_request(DaemonRequest::HealthCheck)
+            .await?;
+        let response = client.recv().await?;
+        assert!(matches!(
+            response.payload,
+            MessagePayload::DaemonResponse(DaemonResponse::RegisterAck(_))
+        ));
+
+        // Step 3: Disconnecting releases the connection, and doing it twice is a
+        // no-op rather than an error.
+        client.disconnect().await?;
+        assert!(!client.is_connected());
+        assert_eq!(client.socket_path(), None);
+        client
+            .disconnect()
+            .await
+            .expect("a second disconnect must be a no-op");
+        assert!(matches!(client.recv().await, Err(IpcError::NotConnected)));
+
+        server_handle.await.unwrap();
         Ok(())
     }
 
@@ -376,7 +445,7 @@ mod tests {
         });
 
         // Connect client
-        let mut client = IpcClient::default();
+        let mut client = UnixIpcClient::default();
         client.connect(&socket_path).await.unwrap();
 
         // 1. Send registration request
@@ -386,7 +455,7 @@ mod tests {
             version: "0.1.0".to_string(),
             capabilities: vec![],
         });
-        client.send_service_requst(request).await?;
+        client.send_service_request(request).await?;
 
         // Receive response
         let response = client.recv().await?;

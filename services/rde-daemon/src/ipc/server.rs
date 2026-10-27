@@ -24,12 +24,13 @@
 //! ## Copyright
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
+use rde_ipc::client::IpcClient;
 use std::{sync::Arc, time::Duration};
 
 use rde_core::errors::{RdeError, RdeResult};
 use rde_ipc::{
     message::{MIN_PROTOCOL_VERSION, MessagePayload},
-    socket::{IpcClient, IpcServer},
+    socket::{IpcServer, UnixIpcClient},
 };
 use tokio::{net::UnixStream, task::JoinHandle};
 
@@ -139,7 +140,7 @@ impl Server {
     /// Any service registered on this connection is removed from the registry
     /// before the function returns, whichever way the session ended.
     pub async fn handle_client(stream: UnixStream) -> RdeResult<()> {
-        let mut client = IpcClient::from(stream);
+        let mut client = UnixIpcClient::from(stream);
         let mut registered_service: Option<String> = None;
 
         loop {
