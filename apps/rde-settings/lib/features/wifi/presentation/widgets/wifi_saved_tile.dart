@@ -14,6 +14,7 @@ class WifiSavedTile extends StatelessWidget {
     required this.isConnected,
     required this.isConnecting,
     required this.onConnect,
+    required this.onDisconnect,
     required this.onForget,
   });
 
@@ -21,6 +22,7 @@ class WifiSavedTile extends StatelessWidget {
   final bool isConnected;
   final bool isConnecting;
   final VoidCallback onConnect;
+  final VoidCallback onDisconnect;
   final VoidCallback onForget;
 
   @override
@@ -57,7 +59,28 @@ class WifiSavedTile extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           if (isConnected)
-            const _SavedConnectedBadge()
+            Row(
+              children: [
+                TextButton(
+                  onPressed: onDisconnect,
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
+                  child: const Text('Disconnect'),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'More actions',
+                  icon: const Icon(Icons.more_vert, size: 20),
+                  onSelected: (value) {
+                    if (value == 'forget') onForget();
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'forget', child: Text('Forget')),
+                  ],
+                ),
+              ],
+            )
           else if (isConnecting)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 12.0),
@@ -122,37 +145,6 @@ class _SavedAvatar extends StatelessWidget {
               ? colorScheme.onPrimaryContainer
               : colorScheme.onSurfaceVariant,
         ),
-      ),
-    );
-  }
-}
-
-class _SavedConnectedBadge extends StatelessWidget {
-  const _SavedConnectedBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: colorScheme.primary,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.check, size: 14, color: colorScheme.onPrimary),
-          const SizedBox(width: 4),
-          Text(
-            'Connected',
-            style: TextStyle(
-              color: colorScheme.onPrimary,
-              fontWeight: FontWeight.bold,
-              fontSize: 11,
-            ),
-          ),
-        ],
       ),
     );
   }

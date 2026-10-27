@@ -17,11 +17,13 @@ class WifiNetworksCard extends StatelessWidget {
     required this.state,
     required this.isLoading,
     required this.onConnect,
+    required this.onDisconnect,
   });
 
   final WifiState state;
   final bool isLoading;
   final ValueChanged<WifiNetwork> onConnect;
+  final ValueChanged<WifiNetwork> onDisconnect;
 
   @override
   Widget build(BuildContext context) {
@@ -76,6 +78,7 @@ class WifiNetworksCard extends StatelessWidget {
                   networks: section.$2,
                   state: state,
                   onConnect: onConnect,
+                  onDisconnect: onDisconnect,
                 ),
                 const SizedBox(height: 16),
               ],
@@ -150,11 +153,13 @@ class _NetworksGroup extends StatelessWidget {
     required this.networks,
     required this.state,
     required this.onConnect,
+    required this.onDisconnect,
   });
 
   final List<WifiNetwork> networks;
   final WifiState state;
   final ValueChanged<WifiNetwork> onConnect;
+  final ValueChanged<WifiNetwork> onDisconnect;
 
   @override
   Widget build(BuildContext context) {
@@ -187,6 +192,7 @@ class _NetworksGroup extends StatelessWidget {
                 (saved) => saved.ssid == networks[i].ssid,
               ),
               onConnect: () => onConnect(networks[i]),
+              onDisconnect: () => onDisconnect(networks[i]),
             ),
           ],
         ],

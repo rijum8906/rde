@@ -14,6 +14,7 @@ class _FakeWifiRepository implements WifiRepository {
   bool failConnect = false;
   String? currentSsid;
   String? lastPassword;
+  int disconnectCalls = 0;
 
   /// Stands in for the NetworkManager signal stream.
   final StreamController<void> changes = StreamController<void>.broadcast();
@@ -43,6 +44,7 @@ class _FakeWifiRepository implements WifiRepository {
   Future<Either<Failure, void>> disconnectFromNetwork(
     WifiNetwork network,
   ) async {
+    disconnectCalls += 1;
     currentSsid = null;
     return const Right(null);
   }
@@ -216,6 +218,27 @@ void main() {
     expect(state.connectingSsid, isNull);
     expect(state.errorMessage, isNull);
     expect(state.savedNetworks, isEmpty);
+
+    await bloc.close();
+  });
+
+  test('disconnecting clears the current network', () async {
+    final repository = _FakeWifiRepository()..currentSsid = 'Home';
+    final bloc = WifiBloc(wifiRepository: repository);
+
+    bloc.add(const WifiInitEvent());
+    await bloc.stream.firstWhere((state) => state.status == WifiStatus.success);
+    expect(bloc.state.connectedSsid, 'Home');
+
+    final disconnected = bloc.stream.firstWhere(
+      (state) => state.connectedSsid == null && state.isWifiEnabled,
+    );
+    bloc.add(const DisconnectFromNetworkEvent('Home'));
+    final state = await disconnected;
+
+    expect(repository.disconnectCalls, 1);
+    expect(state.connectingSsid, isNull);
+    expect(state.errorMessage, isNull);
 
     await bloc.close();
   });

@@ -171,12 +171,18 @@ class _WifiViewState extends State<WifiView> {
                       state: state,
                       isLoading: isLoading,
                       onConnect: (network) => _handleConnect(network, state),
+                      onDisconnect: (network) => context.read<WifiBloc>().add(
+                        DisconnectFromNetworkEvent(network.ssid),
+                      ),
                     ),
                   ] else
                     WifiSavedCard(
                       state: state,
                       onConnect: (network) => context.read<WifiBloc>().add(
                         ConnectToNetworkEvent(network.ssid),
+                      ),
+                      onDisconnect: (network) => context.read<WifiBloc>().add(
+                        DisconnectFromNetworkEvent(network.ssid),
                       ),
                       onForget: (network) => context.read<WifiBloc>().add(
                         ForgetSavedNetworkEvent(network.ssid),
