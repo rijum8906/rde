@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:rde_settings/core/widgets/loading_indicator.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_state.dart';
@@ -33,11 +34,7 @@ class WallpaperSeedControls extends StatelessWidget {
                   const ExtractWallpaperSeedsEvent(),
                 ),
           icon: state.isBusy
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+              ? const RdeLoadingIndicator(size: 16)
               : const Icon(Icons.wallpaper, size: 18),
           label: const Text('Use wallpaper colors'),
         ),

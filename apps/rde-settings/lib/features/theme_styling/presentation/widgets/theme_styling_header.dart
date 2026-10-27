@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:rde_settings/core/widgets/loading_indicator.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_state.dart';
@@ -49,11 +50,7 @@ class ThemeStylingHeader extends StatelessWidget {
                   const ReloadThemeDatabaseEvent(),
                 ),
           icon: state.isBusy
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+              ? const RdeLoadingIndicator(size: 18)
               : const Icon(Icons.refresh),
           tooltip: 'Reload theme database',
         ),

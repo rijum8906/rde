@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:rde_settings/core/widgets/loading_indicator.dart';
 import 'package:rde_settings/features/wifi/data/datasources/dbus/network_manager_proxy.dart';
 import 'package:rde_settings/features/wifi/data/datasources/dbus_wifi_datasource.dart';
 import 'package:rde_settings/features/wifi/domain/entities/wifi_network.dart';
@@ -209,13 +210,7 @@ class _WifiViewState extends State<WifiView> {
                                   const ScanNetworksEvent(),
                                 ),
                           icon: isLoading
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
+                              ? const RdeLoadingIndicator(size: 18)
                               : const Icon(Icons.refresh),
                           tooltip: 'Rescan Networks',
                         ),
@@ -347,7 +342,7 @@ class _WifiViewState extends State<WifiView> {
               if (isLoading && state.networks.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 36.0),
-                  child: Center(child: CircularProgressIndicator()),
+                  child: Center(child: RdeLoadingIndicator()),
                 )
               else if (state.networks.isEmpty)
                 Padding(
@@ -527,11 +522,7 @@ class _WifiViewState extends State<WifiView> {
               ),
             )
           else if (isConnecting)
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2.5),
-            )
+            const RdeLoadingIndicator(size: 24)
           else
             TextButton(
               onPressed: () => _handleConnect(context, network, state),
@@ -591,11 +582,7 @@ class _WifiViewState extends State<WifiView> {
             children: [
               if (!isConnected) ...[
                 if (isConnecting)
-                  const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2.5),
-                  )
+                  const RdeLoadingIndicator(size: 24)
                 else
                   TextButton(
                     onPressed: () {

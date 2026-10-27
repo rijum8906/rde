@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:rde_settings/core/widgets/loading_indicator.dart';
 import 'package:rde_settings/features/about_rde/presentation/bloc/about_rde_bloc.dart';
 import 'package:rde_settings/features/about_rde/presentation/bloc/about_rde_event.dart';
 import 'package:rde_settings/features/about_rde/presentation/bloc/about_rde_state.dart';
@@ -281,15 +282,9 @@ class AboutRdeView extends StatelessWidget {
                             const TriggerUpdateCheckEvent(),
                           ),
                     icon: isChecking
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
-                            ),
+                        ? const RdeLoadingIndicator(
+                            size: 18,
+                            color: Colors.white,
                           )
                         : const Icon(Icons.system_update_alt_rounded),
                     label: Text(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:rde_settings/core/widgets/loading_indicator.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_state.dart';
@@ -16,7 +17,7 @@ class ThemeUnavailableBody extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     if (state.status != ThemeStatus.failure) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: RdeLoadingIndicator());
     }
 
     return Center(
