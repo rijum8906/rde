@@ -24,7 +24,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use crate::{
-    backend::{AdapterRegistry, GtkEmitter, QtEmitter},
+    backend::{AdapterRegistry, GtkEmitter, QtAdapter},
     constants::{DBUS_SERVICE_NAME, SERVICE_NAME, SHUTDOWN_TIMEOUT},
     dbus::{
         PORTAL_OBJECT_PATH, PortalSettingsInterface, THEME_OBJECT_PATH, ThemeInterface,
@@ -76,7 +76,7 @@ impl App {
         // KDE reads `kdeglobals` from the XDG config root and looks color schemes
         // up under `color-schemes/` in the XDG data home, so the emitter targets
         // those directories instead of the rde theme subdirectories.
-        let qt_emitter = QtEmitter::new(xdg_config_home(), xdg_data_home());
+        let qt_emitter = QtAdapter::new(xdg_config_home(), xdg_data_home());
 
         let mut adapter_registry = AdapterRegistry::default();
         for adapter in [

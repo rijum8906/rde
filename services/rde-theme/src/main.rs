@@ -11,7 +11,7 @@ use rde_theme::app::App;
 /// # Errors
 /// Returns [`rde_core::errors::RdeError`] if initialization, D-Bus registration,
 /// or signal handling fails.
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> RdeResult<()> {
     let mut app = App::new().await?;
     app.run().await

@@ -53,7 +53,7 @@ pub trait Adapter: Send + Sync {
     /// produces the same files. Must be atomic per-file (use
     /// `core::fs::atomic_write`). Must not touch files outside its own
     /// surface (no `theme.json`, no other desktop's config).
-    fn apply(&self, palette: &ResolvedTheme) -> Result<Vec<PathBuf>, BackendError>;
+    fn apply(&mut self, palette: &ResolvedTheme) -> Result<Vec<PathBuf>, BackendError>;
 
     /// Tell the desktop to re-read its config. Called *after* `apply`
     /// succeeds and *after* the store commits. Must be best-effort: a

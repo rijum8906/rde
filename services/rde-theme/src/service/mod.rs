@@ -16,13 +16,13 @@ use std::{
     },
     time::Duration,
 };
-use tokio::sync::{RwLock, broadcast};
+use tokio::sync::{Mutex, RwLock, broadcast};
 use tracing::{debug, error, info, warn};
 
 use crate::{
     backend::{
-        AdapterRegistry, KDE_COLOR_SCHEME_NAME, compute_color_roles, detect::SessionEnv,
-        resolvers::ResolverRegistry,
+        AdapterRegistry, compute_color_roles, detect::SessionEnv, qt::QT_ADAPTER_NAME,
+        resolvers::ResolverRegistry, unique_theme_name,
     },
     domain::{
         identity::{ThemeId, VariantId},
@@ -73,7 +73,10 @@ pub struct ThemeService {
     pub resolved_theme: RwLock<ResolvedTheme>,
 
     /// Toolkit adapters rendered on every publication.
-    pub adapter_registry: AdapterRegistry,
+    ///
+    /// Guarded by a lock because a publication hands every adapter the unique
+    /// theme name of its generation before rendering it.
+    pub adapter_registry: RwLock<AdapterRegistry>,
 
     /// Palette resolvers known to this build.
     pub resolver_registry: ResolverRegistry,
@@ -85,6 +88,9 @@ pub struct ThemeService {
     settings_path: PathBuf,
     themes_dir: PathBuf,
     generation: AtomicU32,
+
+    /// Serializes publication transactions.
+    publish_guard: Mutex<()>,
 
     theme_changed_tx: broadcast::Sender<ResolvedTheme>,
     reloaded_tx: broadcast::Sender<()>,
@@ -172,22 +178,32 @@ impl ThemeService {
             warn!(error = %err, "Failed to write initial published theme cache; in-memory state remains authoritative");
         }
 
-        // Step 5: Establish the in-memory publication state.
+        // Step 5: Establish the in-memory publication state. The startup
+        // transaction is generation 1, so it names every artifact `...-v1`.
+        let generation = 1;
         let mut theme_settings = settings;
         theme_settings.active_theme = active_theme;
 
-        // Step 6: Render and atomically write every adapter output.
-        Self::apply_adapters(&adapter_registry, &resolved);
+        // Step 6: Render and atomically write every adapter output, deleting the
+        // artifacts a previous run of the daemon left behind under the same name.
+        let adapter_registry = RwLock::new(adapter_registry);
+        let applied = Self::apply_adapters(&adapter_registry, &resolved, generation).await;
 
-        // Step 7: Shell out to KDE if applicable.
-        Self::maybe_apply_kde();
+        // Step 7: Detect the session environment once for the whole service.
+        let session_env = SessionEnv::detect();
+
+        // Step 8: Shell out to KDE if the Qt adapter installed the scheme.
+        if applied.contains(&QT_ADAPTER_NAME) {
+            let scheme_name = unique_theme_name(&resolved.theme_id, &resolved.variant, generation);
+            Self::maybe_apply_kde(&session_env, &scheme_name);
+        }
 
         // Broadcast channels (capacity 32)
         let (theme_changed_tx, _) = broadcast::channel(32);
         let (reloaded_tx, _) = broadcast::channel(32);
         let (theme_list_changed_tx, _) = broadcast::channel(32);
 
-        // Step 8: Invariant Step C: Emit signal after files are durable.
+        // Step 9: Invariant Step C: Emit signal after files are durable.
         let _ = theme_changed_tx.send(resolved.clone());
 
         info!("ThemeService startup transaction completed successfully");
@@ -200,11 +216,12 @@ impl ThemeService {
             resolved_theme: RwLock::new(resolved),
             adapter_registry,
             resolver_registry: ResolverRegistry::build(),
-            session_env: SessionEnv::detect(),
+            session_env,
             cache_path,
             settings_path,
             themes_dir,
-            generation: AtomicU32::new(1),
+            generation: AtomicU32::new(generation),
+            publish_guard: Mutex::new(()),
             theme_changed_tx,
             reloaded_tx,
             theme_list_changed_tx,
@@ -327,15 +344,34 @@ impl ThemeService {
     /// # Parameters
     /// - `adapter_registry`: adapters to render, keyed by identifier
     /// - `resolved`: palette handed to every adapter
+    /// - `generation`: publication generation the rendered artifacts belong to
+    ///
+    /// # Returns
+    /// The name of every adapter that rendered successfully, so the caller can
+    /// decide which desktop-specific notification to run afterwards.
     ///
     /// # Error Handling
     /// Failures are logged per adapter: one unavailable toolkit must never stop
     /// the remaining surfaces from being themed.
-    fn apply_adapters(adapter_registry: &AdapterRegistry, resolved: &ResolvedTheme) {
-        for adapter in adapter_registry.adapters.values() {
+    async fn apply_adapters(
+        adapter_registry: &RwLock<AdapterRegistry>,
+        resolved: &ResolvedTheme,
+        generation: u32,
+    ) -> Vec<&'static str> {
+        // Step 1: Name every artifact after the theme, the variant, and the
+        // generation, so a regenerated palette never collides with the artifact
+        // the desktop is currently reading.
+        let theme_name = unique_theme_name(&resolved.theme_id, &resolved.variant, generation);
+
+        let mut registry = adapter_registry.write().await;
+        let mut applied = Vec::new();
+
+        for adapter in registry.adapters.values_mut() {
+            adapter.set_unique_theme_name(theme_name.clone());
+
             match adapter.render(resolved) {
                 Ok(output) => {
-                    // Step 1: Write every rendered file atomically so consumers
+                    // Step 2: Write every rendered file atomically so consumers
                     // never observe a partially themed file.
                     for (file_path, bytes) in output.files {
                         if let Err(err) = write_atomic(&file_path, &bytes) {
@@ -343,32 +379,88 @@ impl ThemeService {
                         }
                     }
 
-                    // Step 2: Export the environment the adapter needs in child
+                    // Step 3: Delete the artifacts of earlier generations, now
+                    // that their replacements are durable on disk.
+                    for superseded in output.removals {
+                        Self::remove_superseded(&superseded);
+                    }
+
+                    // Step 4: Export the environment the adapter needs in child
                     // processes (for example `QT_QPA_PLATFORMTHEME`).
                     for (key, value) in output.env {
                         unsafe {
                             std::env::set_var(&key, &value);
                         }
                     }
+
+                    applied.push(adapter.name());
                 }
                 Err(err) => {
                     warn!(adapter = %adapter.name(), error = %err, "Adapter render failure");
                 }
             }
         }
+
+        applied
     }
 
-    /// Shells out to `plasma-apply-colorscheme` if the session is KDE Plasma.
-    fn maybe_apply_kde() {
-        let is_kde = std::env::var("XDG_CURRENT_DESKTOP")
-            .map(|v| v.to_uppercase().contains("KDE"))
-            .unwrap_or(false);
+    /// Deletes an artifact that the current generation supersedes.
+    ///
+    /// # Parameters
+    /// - `path`: file the adapter reported as superseded
+    ///
+    /// # Behavior
+    /// A file that is already gone counts as success: a previous publication or
+    /// the user may have removed it. Any other failure is logged and ignored,
+    /// because a stale file must never abort a publication.
+    fn remove_superseded(path: &Path) {
+        match std::fs::remove_file(path) {
+            Ok(()) => debug!(path = %path.display(), "Deleted superseded adapter output"),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => {
+                warn!(path = %path.display(), error = %err, "Failed to delete superseded adapter output")
+            }
+        }
+    }
 
-        if is_kde {
-            debug!("Running on KDE; invoking plasma-apply-colorscheme");
-            let _ = std::process::Command::new("plasma-apply-colorscheme")
-                .arg(KDE_COLOR_SCHEME_NAME)
-                .status();
+    /// Hands the freshly installed color scheme to KDE Plasma.
+    ///
+    /// # Parameters
+    /// - `session_env`: session detected at startup
+    /// - `scheme_name`: unique name of the scheme the Qt adapter installed
+    ///
+    /// # Behavior
+    /// Plasma keeps the scheme it loaded, so a regeneration stays invisible until
+    /// `plasma-apply-colorscheme` points it at the new name. The command is
+    /// best-effort: a missing binary or a failed apply is logged, never fatal,
+    /// because the files are already on disk for the next launch.
+    fn maybe_apply_kde(session_env: &SessionEnv, scheme_name: &str) {
+        if !session_env.is_kde() {
+            debug!(
+                scheme = scheme_name,
+                "Not a KDE session; skipping plasma-apply-colorscheme"
+            );
+            return;
+        }
+
+        debug!(
+            scheme = scheme_name,
+            "Running on KDE; invoking plasma-apply-colorscheme"
+        );
+
+        match std::process::Command::new("plasma-apply-colorscheme")
+            .arg(scheme_name)
+            .status()
+        {
+            Ok(status) if status.success() => {
+                info!(scheme = scheme_name, "Applied KDE color scheme")
+            }
+            Ok(status) => {
+                warn!(scheme = scheme_name, status = ?status, "plasma-apply-colorscheme failed")
+            }
+            Err(err) => {
+                warn!(scheme = scheme_name, error = %err, "Failed to run plasma-apply-colorscheme")
+            }
         }
     }
 
@@ -727,6 +819,11 @@ impl ThemeService {
     /// Returns [`ThemeError::Serialization`] only when the cache payload cannot
     /// be encoded; adapter failures are logged and do not abort publication.
     async fn publish_transaction(&self, resolved: ResolvedTheme) -> Result<(), ThemeError> {
+        // Step 0: Serialize publications. Two requests must never interleave
+        // their renders, deletions, and desktop notifications, or the desktop
+        // could end up applying a generation whose scheme was already deleted.
+        let _publication = self.publish_guard.lock().await;
+
         // Step 1: Invariant Step A: Write the published theme cache atomically first.
         if let Err(err) = Self::write_current_json(&self.cache_path, &resolved) {
             warn!(error = %err, "Failed to write published theme cache; proceeding with in-memory state");
@@ -734,13 +831,17 @@ impl ThemeService {
 
         // Step 2: Invariant Step B: Publish the palette and bump the generation.
         *self.resolved_theme.write().await = resolved.clone();
-        self.generation.fetch_add(1, Ordering::SeqCst);
+        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
 
-        // Step 3: Render and atomically write adapter outputs.
-        Self::apply_adapters(&self.adapter_registry, &resolved);
+        // Step 3: Render and atomically write adapter outputs under the name of
+        // the new generation, deleting the artifacts of the previous one.
+        let applied = Self::apply_adapters(&self.adapter_registry, &resolved, generation).await;
 
-        // Step 4: Shell out to KDE if applicable.
-        Self::maybe_apply_kde();
+        // Step 4: Shell out to KDE if the Qt adapter installed the new scheme.
+        if applied.contains(&QT_ADAPTER_NAME) {
+            let scheme_name = unique_theme_name(&resolved.theme_id, &resolved.variant, generation);
+            Self::maybe_apply_kde(&self.session_env, &scheme_name);
+        }
 
         // Step 5: Invariant Step C: Emit ThemeChanged signal.
         let _ = self.theme_changed_tx.send(resolved);
@@ -756,6 +857,18 @@ impl ThemeService {
         });
     }
 
+    /// Returns whether a filesystem event should trigger a theme reload.
+    ///
+    /// # Parameters
+    /// - `kind`: kind of the filesystem event reported by `notify`
+    ///
+    /// # Returns
+    /// `false` for [`notify::EventKind::Access`] events, because the service's
+    /// own reads would otherwise reload the theme in an endless loop.
+    fn is_reload_trigger(kind: &notify::EventKind) -> bool {
+        !matches!(kind, notify::EventKind::Access(_))
+    }
+
     /// Internal debounced watch loop using `notify`.
     async fn watch_loop(&self) {
         use notify::{Event, RecursiveMode, Watcher};
@@ -765,7 +878,12 @@ impl ThemeService {
         let mut watcher =
             match notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
                 if let Ok(event) = res {
-                    let _ = tx.blocking_send(event);
+                    // Step 1: Ignore pure read notifications. Reloading reads
+                    // `themes.toml` and the settings file, so reacting to our own
+                    // reads would keep triggering reloads forever.
+                    if Self::is_reload_trigger(&event.kind) {
+                        let _ = tx.blocking_send(event);
+                    }
                 }
             }) {
                 Ok(w) => w,
@@ -799,11 +917,14 @@ impl ThemeService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{
-        identity::VariantId,
-        manifest::{ContrastLevel, RelativePath, ThemeMode, VariantDescriptor},
-        registry::{ThemeEntry, ThemeLocation, ThemeRegistry, ThemeSource},
-        resolved::{Color, ColorSeeds, Motion, Shape, Typography, VariantKind},
+    use crate::{
+        backend::QtAdapter,
+        domain::{
+            identity::{AdapterId, VariantId},
+            manifest::{ContrastLevel, RelativePath, ThemeMode, VariantDescriptor},
+            registry::{ThemeEntry, ThemeLocation, ThemeRegistry, ThemeSource},
+            resolved::{Color, ColorSeeds, Motion, Shape, Typography, VariantKind},
+        },
     };
     use async_trait::async_trait;
     use std::collections::BTreeMap;
@@ -1290,5 +1411,82 @@ mod tests {
 
         service.set_active(theme_b).await.unwrap();
         verify_task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn publication_installs_a_new_kde_color_scheme_per_generation() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_home = temp.path().join("config");
+        let data_home = temp.path().join("data");
+        let schemes = crate::backend::qt::color_schemes_dir(&data_home);
+        std::fs::create_dir_all(&schemes).unwrap();
+
+        // A scheme an earlier generation left behind and one the user installed.
+        std::fs::write(schemes.join("rde-dynamic-dark-v0.colors"), "stale").unwrap();
+        std::fs::write(schemes.join("Breeze.colors"), "user installed").unwrap();
+
+        let mut registry = AdapterRegistry::default();
+        registry.adapters.insert(
+            AdapterId::new(QT_ADAPTER_NAME).unwrap(),
+            Box::new(QtAdapter::new(config_home, data_home)),
+        );
+
+        let service = ThemeService::startup(
+            Arc::new(FakeRepo::new()),
+            registry,
+            temp.path().join("current.json"),
+            temp.path().join("settings.toml"),
+            temp.path().join("themes"),
+        )
+        .await
+        .unwrap();
+
+        // Step 1: Startup is generation 1, so it installs the `v1` scheme named
+        // after the theme and variant, and deletes the leftover of the last run.
+        let first_dark = schemes.join("rde-dynamic-dark-v1.colors");
+        let first_scheme = std::fs::read_to_string(&first_dark).expect("startup scheme");
+        assert!(
+            first_scheme.contains("Name=rde-dynamic-dark-v1"),
+            "{first_scheme}"
+        );
+        assert!(!schemes.join("rde-dynamic-dark-v0.colors").exists());
+        assert!(schemes.join("Breeze.colors").exists());
+
+        // Step 2: Another variant is published under its own name and does not
+        // disturb the scheme of the variant that stays on disk.
+        service.set_mode(ThemeMode::Light).await.unwrap();
+        let light = schemes.join("rde-dynamic-light-v2.colors");
+        assert!(light.exists(), "the light variant gets its own scheme");
+        assert!(first_dark.exists(), "the dark scheme is still installed");
+
+        // Step 3: Regenerating the dark variant installs generation 3 and deletes
+        // the superseded scheme of generation 1.
+        service.set_mode(ThemeMode::Dark).await.unwrap();
+        let second_dark = schemes.join("rde-dynamic-dark-v3.colors");
+        assert!(
+            second_dark.exists(),
+            "a regenerated variant installs a new scheme"
+        );
+        assert!(
+            !first_dark.exists(),
+            "the superseded scheme of the same variant is deleted"
+        );
+        assert!(light.exists(), "the scheme of the other variant survives");
+    }
+
+    #[test]
+    fn reload_ignores_read_events() {
+        // Our own reads of `themes.toml` must never queue another reload.
+        assert!(!ThemeService::is_reload_trigger(
+            &notify::EventKind::Access(notify::event::AccessKind::Any)
+        ));
+
+        // Writes and creates are the changes the service reacts to.
+        assert!(ThemeService::is_reload_trigger(&notify::EventKind::Modify(
+            notify::event::ModifyKind::Any
+        )));
+        assert!(ThemeService::is_reload_trigger(&notify::EventKind::Create(
+            notify::event::CreateKind::Any
+        )));
     }
 }

@@ -5,7 +5,6 @@
 //! Backends are pure string/byte builders that return paths and payloads.
 //! File writes are performed exclusively by the application layer.
 
-use rde_core::fs::rde_service_data_dir;
 use std::{collections::HashMap, path::PathBuf};
 use thiserror::Error;
 
@@ -20,12 +19,14 @@ pub mod resolvers;
 
 pub use gtk::GtkEmitter;
 pub use material::{FALLBACK_SEED_COLOR, MATERIAL_ALGORITHM_VERSION, compute_color_roles};
-pub use qt::{KDE_COLOR_SCHEME_NAME, QtEmitter};
+pub use qt::{KDE_COLOR_SCHEME_NAME, QtAdapter};
 
 use crate::{
-    constants::SERVICE_NAME,
-    domain::{ResolvedTheme, identity::AdapterId},
-    paths::{xdg_cache_home, xdg_config_home},
+    domain::{
+        ResolvedTheme,
+        identity::{AdapterId, ThemeId, VariantId},
+    },
+    paths::{xdg_cache_home, xdg_config_home, xdg_data_home},
 };
 
 /// Errors produced during backend rendering.
@@ -59,11 +60,34 @@ pub struct BackendOutput {
 
     /// Environment variables to set in the daemon and child processes.
     pub env: Vec<(String, String)>,
+
+    /// Outputs of earlier generations this payload supersedes.
+    ///
+    /// The application layer deletes them only after `files` is durable, so a
+    /// regenerated palette always replaces the previous one instead of
+    /// accumulating one artifact per publication. Adapters must list paths they
+    /// generated themselves; user-owned files are never listed.
+    pub removals: Vec<PathBuf>,
+}
+
+/// Builds the unique, generation-scoped name shared by every themed surface.
+///
+/// # Parameters
+/// - `theme_id`: identifier of the published theme
+/// - `variant_id`: identifier of the published variant
+/// - `generation`: publication generation the name belongs to
+///
+/// # Returns
+/// `"<theme>-<variant>-v<generation>"`, for example `rde-dynamic-dark-v7`. Both
+/// identifiers already satisfy the `[a-z0-9-]` grammar, so the result is a safe
+/// file stem and a safe `plasma-apply-colorscheme` argument.
+#[must_use]
+pub fn unique_theme_name(theme_id: &ThemeId, variant_id: &VariantId, generation: u32) -> String {
+    format!("{theme_id}-{variant_id}-v{generation}")
 }
 
 /// A toolkit or environment emitter that renders a [`ResolvedTheme`].
 pub trait Adapter: Send + Sync {
-    /// Unique name of the backend adapter (e.g. `"gtk"`, `"qt"`).
     fn name(&self) -> &'static str;
 
     /// Renders configuration files and environment definitions for the theme.
@@ -75,7 +99,8 @@ pub trait Adapter: Send + Sync {
     /// Returns [`BackendError`] if rendering fails.
     fn render(&self, theme: &ResolvedTheme) -> Result<BackendOutput, BackendError>;
 
-    fn config_paths(&self) -> HashMap<String, PathBuf>;
+    fn set_unique_theme_name(&mut self, theme_name: String);
+    fn unique_theme_name(&self) -> String;
 }
 
 #[derive(Default)]
@@ -87,21 +112,68 @@ impl AdapterRegistry {
     pub fn build() -> Self {
         let mut adapters: HashMap<AdapterId, Box<dyn Adapter>> = HashMap::new();
 
-        let config_home = xdg_config_home().join("rde/theme/");
-        let data_home = rde_service_data_dir(SERVICE_NAME).unwrap();
+        // KDE reads `kdeglobals` from the XDG config root and looks color schemes
+        // up under `color-schemes/` in the XDG data home, so the Qt adapter
+        // targets those roots instead of the rde theme subdirectories.
+        let config_home = xdg_config_home();
+        let data_home = xdg_data_home();
         let cache_dir = xdg_cache_home().join("rde/theme");
 
-        // Qt
-        let qt = QtEmitter::new(config_home, data_home);
-        adapters.insert(AdapterId::new(qt.name().to_string()).unwrap(), Box::new(qt));
-
-        // Gtk
+        // Step 1: Register each adapter under its identifier. An identifier that
+        // fails the grammar cannot be produced by this build's constants, so a
+        // malformed one is skipped with a log instead of panicking the service.
+        let qt = QtAdapter::new(config_home, data_home);
         let gtk = GtkEmitter::new(cache_dir);
-        adapters.insert(
-            AdapterId::new(gtk.name().to_string()).unwrap(),
-            Box::new(gtk),
-        );
+
+        for adapter in [Box::new(qt) as Box<dyn Adapter>, Box::new(gtk)] {
+            match AdapterId::new(adapter.name()) {
+                Ok(id) => {
+                    adapters.insert(id, adapter);
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        adapter = %adapter.name(),
+                        error = %err,
+                        "Skipping adapter with an invalid identifier"
+                    );
+                }
+            }
+        }
 
         Self { adapters }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unique_theme_name_carries_theme_variant_and_generation() {
+        let ocean = ThemeId::new("ocean").unwrap();
+        let contrast = VariantId::new("dark-high-contrast").unwrap();
+        assert_eq!(
+            unique_theme_name(&ocean, &contrast, 12),
+            "ocean-dark-high-contrast-v12"
+        );
+
+        let dynamic = ThemeId::builtin_dynamic();
+        let light = VariantId::new("light").unwrap();
+        assert_eq!(
+            unique_theme_name(&dynamic, &light, 1),
+            "rde-dynamic-light-v1"
+        );
+    }
+
+    #[test]
+    fn unique_theme_name_changes_with_every_generation() {
+        let theme = ThemeId::new("ocean").unwrap();
+        let variant = VariantId::new("dark").unwrap();
+
+        // A regeneration must never reuse the name the desktop already loaded.
+        assert_ne!(
+            unique_theme_name(&theme, &variant, 4),
+            unique_theme_name(&theme, &variant, 5)
+        );
     }
 }

@@ -9,27 +9,32 @@ use crate::{
     domain::resolved::ResolvedTheme,
 };
 pub use css::render_gtk_css;
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 pub const GTK_ADAPTER_NAME: &str = "gtk";
+pub const GTK_THEME_NAME: &str = "rde-gtk-m3";
 
 /// Backend adapter that writes GTK CSS color definitions.
 #[derive(Debug, Clone)]
 pub struct GtkEmitter {
     cache_dir: PathBuf,
+    gtk_theme_name: String,
 }
 
 impl GtkEmitter {
     /// Constructs a new [`GtkEmitter`] targeting the given theme cache directory.
     #[must_use]
     pub fn new(cache_dir: PathBuf) -> Self {
-        Self { cache_dir }
+        Self {
+            cache_dir,
+            gtk_theme_name: GTK_THEME_NAME.to_string(),
+        }
     }
 }
 
 impl Adapter for GtkEmitter {
     fn name(&self) -> &'static str {
-        "gtk"
+        GTK_ADAPTER_NAME
     }
 
     fn render(&self, theme: &ResolvedTheme) -> Result<BackendOutput, BackendError> {
@@ -42,11 +47,17 @@ impl Adapter for GtkEmitter {
         Ok(BackendOutput {
             files: vec![(target_file, css.into_bytes())],
             env,
+            // GTK reads the single `gtk.css` override in place, so a publication
+            // supersedes no other file.
+            removals: Vec::new(),
         })
     }
 
-    fn config_paths(&self) -> HashMap<String, PathBuf> {
-        // TODO: add required paths
-        HashMap::new()
+    fn set_unique_theme_name(&mut self, theme_name: String) {
+        self.gtk_theme_name = theme_name
+    }
+
+    fn unique_theme_name(&self) -> String {
+        self.gtk_theme_name.clone()
     }
 }
