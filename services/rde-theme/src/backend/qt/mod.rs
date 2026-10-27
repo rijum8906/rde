@@ -180,6 +180,7 @@ impl Adapter for QtAdapter {
     fn render(&self, theme: &ResolvedTheme) -> Result<BackendOutput, BackendError> {
         let mut files = Vec::new();
         let mut removals = Vec::new();
+        let mut env: Vec<(String, String)> = Vec::new();
 
         for tool in QtTool::ALL {
             // Step 1: Leave tools that are not installed untouched.
@@ -204,11 +205,14 @@ impl Adapter for QtAdapter {
 
             // Step 4: Report the palettes of older generations for deletion.
             removals.extend(self.stale_palettes(tool));
+
+            // QT_QPA_PLATFORMTHEME=qt6ct or qt5ct
+            env.push(("QT_QPA_PLATFORMTHEME".into(), tool.name().into()));
         }
 
         Ok(BackendOutput {
             files,
-            env: Vec::new(),
+            env,
             removals,
         })
     }
