@@ -36,7 +36,6 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
   }
 
   Widget _buildContent(BuildContext context, ThemeState state) {
-    final theme = Theme.of(context);
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(32),
@@ -81,12 +80,6 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Live Preview',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
                         const SizedBox(height: 12),
                         PreviewCard(state: state),
                       ],
