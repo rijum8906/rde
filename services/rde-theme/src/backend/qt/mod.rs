@@ -1,380 +1,153 @@
-//! # Qt and KDE Theme Integration
+//! # Qt Platform Theme Integration
 //!
-//! Generates the `kdeglobals` color groups and the `RdeM3` Plasma color scheme
-//! from semantic [`ColorRoles`].
+//! Writes Material 3 palettes for qt5ct and qt6ct and selects them in each
+//! tool's configuration when the platform theme is installed.
 
-use std::{
-    collections::HashSet,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use crate::{
     backend::{Adapter, BackendError, BackendOutput},
-    domain::{
-        ThemeId, VariantId,
-        resolved::{Color, ColorRoles, ResolvedTheme},
-    },
+    domain::resolved::{Color, ColorRoles, ResolvedTheme},
 };
 
 pub const QT_ADAPTER_NAME: &str = "qt";
-pub const KDE_GLOBALS_PATH_KEY: &str = "kde_globals";
-pub const KDE_COLOR_SCHEME_PATH_KEY: &str = "kde_color_scheme";
 
-/// Directory inside the XDG data home where Plasma looks up color schemes.
-pub const KDE_COLOR_SCHEMES_DIR: &str = "color-schemes";
+/// Name of the palette the service installs before the first publication.
+///
+/// Every publication replaces it with the generation-scoped name built by
+/// [`crate::backend::unique_theme_name`], so a regenerated palette lands at a
+/// new path and qt5ct/qt6ct reload it instead of keeping the old one.
+pub const QT_PALETTE_NAME: &str = "RdeM3";
 
-/// File extension of a Plasma color scheme.
-pub const KDE_COLOR_SCHEME_EXTENSION: &str = "colors";
+/// Subdirectory of a qt5ct/qt6ct config directory that holds palettes.
+const QTCT_COLORS_DIR: &str = "colors";
 
+/// File extension of both qt5ct/qt6ct palettes and their config files.
+const QTCT_EXTENSION: &str = "conf";
+
+/// Section of a qt5ct/qt6ct palette file.
+const QTCT_COLOR_SCHEME_SECTION: &str = "ColorScheme";
+
+/// Section of a qt5ct/qt6ct config file that selects the palette.
+const QTCT_CONFIG_SECTION: &str = "Appearance";
+
+/// One of the two supported Qt configuration tools.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum QtThemeBackend {
-    Kde,
-    LxQt,
-    Deepin,
-    Qt6Ct,
-    InProcess, // only the caller's own process, no file
-    None,
+enum QtTool {
+    Qt5,
+    Qt6,
 }
 
-/// Name of the KDE color scheme the service installs and applies.
+impl QtTool {
+    /// Both tools, in write order.
+    const ALL: [QtTool; 2] = [QtTool::Qt5, QtTool::Qt6];
+
+    /// Directory name below the XDG config home, which doubles as the config
+    /// file stem (`qt5ct/qt5ct.conf`).
+    fn name(self) -> &'static str {
+        match self {
+            QtTool::Qt5 => "qt5ct",
+            QtTool::Qt6 => "qt6ct",
+        }
+    }
+}
+
+/// Adapter emitting qt5ct and qt6ct palettes and their tool configs.
 ///
-/// This is only the placeholder used before the first publication; every
-/// publication replaces it with the generation-scoped name built by
-/// [`crate::backend::unique_theme_name`].
-pub const KDE_COLOR_SCHEME_NAME: &str = "RdeM3";
-
-/// Sections of `kdeglobals` the service owns, in write order.
-const OWNED_SECTIONS: [&str; 6] = [
-    "Colors:Window",
-    "Colors:View",
-    "Colors:Button",
-    "Colors:Selection",
-    "Colors:Tooltip",
-    "General",
-];
-
-/// Formats a [`Color`] into decimal RGB `r,g,b` for KDE configurations.
-fn to_kde_rgb(color: &Color) -> String {
-    let clean = color.as_str().trim_start_matches('#');
-    if let Ok(val) = u32::from_str_radix(clean, 16) {
-        let r = (val >> 16) & 0xFF;
-        let g = (val >> 8) & 0xFF;
-        let b = val & 0xFF;
-        format!("{r},{g},{b}")
-    } else {
-        "0,0,0".to_string()
-    }
-}
-
-/// One configuration entry the service owns.
-struct OwnedEntry {
-    section: &'static str,
-    key: &'static str,
-    value: String,
-}
-
-/// Builds the entries the service writes into `kdeglobals` and the color scheme.
-fn owned_entries(colors: &ColorRoles) -> Vec<OwnedEntry> {
-    let surface = to_kde_rgb(&colors.surface);
-    let on_surface = to_kde_rgb(&colors.on_surface);
-    let primary = to_kde_rgb(&colors.primary);
-    let on_primary = to_kde_rgb(&colors.on_primary);
-    let surface_container = to_kde_rgb(&colors.surface_container);
-    let surface_container_highest = to_kde_rgb(&colors.surface_container_highest);
-
-    vec![
-        OwnedEntry {
-            section: "Colors:Window",
-            key: "BackgroundNormal",
-            value: surface.clone(),
-        },
-        OwnedEntry {
-            section: "Colors:Window",
-            key: "ForegroundNormal",
-            value: on_surface.clone(),
-        },
-        OwnedEntry {
-            section: "Colors:View",
-            key: "BackgroundNormal",
-            value: surface.clone(),
-        },
-        OwnedEntry {
-            section: "Colors:View",
-            key: "ForegroundNormal",
-            value: on_surface.clone(),
-        },
-        OwnedEntry {
-            section: "Colors:Button",
-            key: "BackgroundNormal",
-            value: surface_container,
-        },
-        OwnedEntry {
-            section: "Colors:Button",
-            key: "ForegroundNormal",
-            value: on_surface.clone(),
-        },
-        OwnedEntry {
-            section: "Colors:Selection",
-            key: "BackgroundNormal",
-            value: primary.clone(),
-        },
-        OwnedEntry {
-            section: "Colors:Selection",
-            key: "ForegroundNormal",
-            value: on_primary,
-        },
-        OwnedEntry {
-            section: "Colors:Tooltip",
-            key: "BackgroundNormal",
-            value: surface_container_highest,
-        },
-        OwnedEntry {
-            section: "Colors:Tooltip",
-            key: "ForegroundNormal",
-            value: on_surface,
-        },
-        OwnedEntry {
-            section: "General",
-            key: "AccentColor",
-            value: primary,
-        },
-    ]
-}
-
-/// Generates a complete `kdeglobals` document from [`ColorRoles`].
-#[must_use]
-pub fn render_kdeglobals(colors: &ColorRoles) -> String {
-    let entries = owned_entries(colors);
-    let mut out = String::from("; Generated by rde-theme; do not edit.\n");
-
-    for section in OWNED_SECTIONS {
-        out.push_str(&format!("\n[{section}]\n"));
-        for entry in entries.iter().filter(|entry| entry.section == section) {
-            out.push_str(&format!("{}={}\n", entry.key, entry.value));
-        }
-    }
-
-    out
-}
-
-/// Builds the unique color scheme name for one publication generation.
-///
-/// The name is shared with every other themed surface (see
-/// [`crate::backend::unique_theme_name`]), so a regenerated palette installs
-/// under a **new** name instead of overwriting the scheme Plasma currently
-/// reads. That is what makes the scheme follow a regeneration that only changes
-/// colors.
-#[must_use]
-pub fn kde_color_scheme_name(
-    theme_id: &ThemeId,
-    variant_id: &VariantId,
-    generation: u32,
-) -> String {
-    crate::backend::unique_theme_name(theme_id, variant_id, generation)
-}
-
-/// Generates the `RdeM3` Plasma color scheme that `plasma-apply-colorscheme` reads.
-#[must_use]
-pub fn render_color_scheme(color_roles: &ColorRoles, kde_color_scheme_name: &str) -> String {
-    let entries = owned_entries(color_roles);
-    let mut out = String::from("; Generated by rde-theme; do not edit.\n");
-
-    // Step 1: Identity of the scheme, which Plasma shows in System Settings.
-    out.push_str("\n[General]\n");
-    out.push_str(&format!("Name={kde_color_scheme_name}\n"));
-    out.push_str(&format!("ColorScheme={kde_color_scheme_name}\n"));
-    out.push_str("shadeSortColumn=true\n");
-    for entry in entries.iter().filter(|entry| entry.section == "General") {
-        out.push_str(&format!("{}={}\n", entry.key, entry.value));
-    }
-
-    // Step 2: Every color group the scheme overrides.
-    for section in OWNED_SECTIONS
-        .iter()
-        .filter(|section| **section != "General")
-    {
-        out.push_str(&format!("\n[{section}]\n"));
-        for entry in entries.iter().filter(|entry| entry.section == *section) {
-            out.push_str(&format!("{}={}\n", entry.key, entry.value));
-        }
-    }
-
-    out
-}
-
-/// Replaces the service-owned keys in an existing `kdeglobals` document.
-///
-/// Everything the service does not own (styles, fonts, icons, comments, and
-/// unrelated keys) is preserved, so updating the theme never resets the user's
-/// KDE configuration. Missing sections and keys are appended.
-#[must_use]
-pub fn merge_kdeglobals(existing: &str, colors: &ColorRoles) -> String {
-    let entries = owned_entries(colors);
-    let mut lines: Vec<String> = existing.lines().map(str::to_string).collect();
-    let mut written: HashSet<(&'static str, &'static str)> = HashSet::new();
-
-    // Step 1: Replace values that already exist inside their owned section.
-    for span in section_spans(&lines) {
-        if !OWNED_SECTIONS.contains(&span.header.as_str()) {
-            continue;
-        }
-        for line in lines
-            .iter_mut()
-            .take(span.end_index)
-            .skip(span.header_index + 1)
-        {
-            let trimmed = line.trim().to_string();
-            if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with('#') {
-                continue;
-            }
-            let Some((key, _)) = trimmed.split_once('=') else {
-                continue;
-            };
-            let key = key.trim();
-            if let Some(entry) = entries
-                .iter()
-                .find(|entry| entry.section == span.header.as_str() && entry.key == key)
-            {
-                *line = format!("{}={}", entry.key, entry.value);
-                written.insert((entry.section, entry.key));
-            }
-        }
-    }
-
-    // Step 2: Insert missing keys into sections that already exist. Spans are
-    // recomputed after every insertion because indices shift.
-    loop {
-        let spans = section_spans(&lines);
-        let missing = entries.iter().find(|entry| {
-            !written.contains(&(entry.section, entry.key))
-                && spans.iter().any(|span| span.header == entry.section)
-        });
-
-        let Some(entry) = missing else {
-            break;
-        };
-        let span = spans
-            .iter()
-            .find(|span| span.header == entry.section)
-            .map(|span| span.end_index)
-            .unwrap_or(lines.len());
-        lines.insert(span, format!("{}={}", entry.key, entry.value));
-        written.insert((entry.section, entry.key));
-    }
-
-    // Step 3: Append whole sections the document did not have yet.
-    for section in OWNED_SECTIONS {
-        if lines
-            .iter()
-            .any(|line| line.trim() == format!("[{section}]"))
-        {
-            continue;
-        }
-        if lines.last().is_some_and(|line| !line.trim().is_empty()) {
-            lines.push(String::new());
-        }
-        lines.push(format!("[{section}]"));
-        for entry in entries.iter().filter(|entry| entry.section == section) {
-            lines.push(format!("{}={}", entry.key, entry.value));
-        }
-    }
-
-    let mut out = lines.join("\n");
-    out.push('\n');
-    out
-}
-
-/// Facts about one `[Section]` in an INI document.
-struct SectionSpan {
-    /// Section name without the brackets.
-    header: String,
-
-    /// Index of the `[Section]` line.
-    header_index: usize,
-
-    /// Index of the next section header, or the line count for the last section.
-    end_index: usize,
-}
-
-/// Locates every section in an INI document.
-fn section_spans(lines: &[String]) -> Vec<SectionSpan> {
-    let mut spans: Vec<SectionSpan> = Vec::new();
-
-    for (index, line) in lines.iter().enumerate() {
-        let trimmed = line.trim();
-        if trimmed.len() > 2 && trimmed.starts_with('[') && trimmed.ends_with(']') {
-            spans.push(SectionSpan {
-                header: trimmed[1..trimmed.len() - 1].to_string(),
-                header_index: index,
-                end_index: lines.len(),
-            });
-        }
-    }
-
-    for index in 0..spans.len().saturating_sub(1) {
-        spans[index].end_index = spans[index + 1].header_index;
-    }
-
-    spans
-}
-
-/// Backend adapter emitting the KDE color scheme and config fragments.
+/// A tool is only touched when it is installed: either its platform theme
+/// plugin was detected or its config directory already exists, which means the
+/// user has run it at least once.
 #[derive(Debug, Clone)]
 pub struct QtAdapter {
     config_home: PathBuf,
-    data_home: PathBuf,
-    kde_color_scheme_name: String,
+    palette_name: String,
+    qt5ct: bool,
+    qt6ct: bool,
 }
 
 impl QtAdapter {
-    /// Constructs a new [`QtEmitter`].
+    /// Constructs the adapter and detects the installed Qt configuration tools.
     ///
     /// # Parameters
-    /// - `config_home`: XDG config home (`~/.config` by default). KDE applications
-    ///   read colors from `kdeglobals` here.
-    /// - `data_home`: XDG data home (`~/.local/share` by default). The scheme is
-    ///   installed under `color-schemes/`, where Plasma looks it up.
+    /// - `config_home`: XDG config home (`~/.config` by default)
     #[must_use]
-    pub fn new(config_home: PathBuf, data_home: PathBuf) -> Self {
+    pub fn new(config_home: PathBuf) -> Self {
+        // Step 1: The platform theme plugin proves the tool exists.
+        let (qt5ct_plugin, qt6ct_plugin) = crate::backend::detect::qtct_plugins();
+
+        // Step 2: An existing config directory also counts. It covers Qt builds
+        // whose plugin lives outside the probed paths and tools that were run
+        // with a different Qt version.
+        let qt5ct = qt5ct_plugin || config_home.join(QtTool::Qt5.name()).is_dir();
+        let qt6ct = qt6ct_plugin || config_home.join(QtTool::Qt6.name()).is_dir();
+
+        Self::with_targets(config_home, qt5ct, qt6ct)
+    }
+
+    /// Constructs the adapter with explicit tool availability.
+    ///
+    /// Used by [`QtAdapter::new`] after detection and by tests that need a
+    /// deterministic target set.
+    ///
+    /// # Parameters
+    /// - `config_home`: XDG config home
+    /// - `qt5ct`: whether qt5ct is installed
+    /// - `qt6ct`: whether qt6ct is installed
+    #[must_use]
+    pub fn with_targets(config_home: PathBuf, qt5ct: bool, qt6ct: bool) -> Self {
         Self {
             config_home,
-            data_home,
-            kde_color_scheme_name: KDE_COLOR_SCHEME_NAME.to_string(),
+            palette_name: QT_PALETTE_NAME.to_string(),
+            qt5ct,
+            qt6ct,
         }
     }
 
-    /// Path of the `kdeglobals` file KDE applications read.
-    #[must_use]
-    pub fn kdeglobals_path(&self) -> PathBuf {
-        self.config_home.join("kdeglobals")
+    /// Whether the adapter should write for [tool].
+    fn is_enabled(&self, tool: QtTool) -> bool {
+        match tool {
+            QtTool::Qt5 => self.qt5ct,
+            QtTool::Qt6 => self.qt6ct,
+        }
     }
 
-    /// Path of the `color scheme` scheme installed for Plasma.
-    #[must_use]
-    pub fn color_scheme_path(&self) -> PathBuf {
-        color_scheme_path(&self.data_home, self.kde_color_scheme_name.clone())
+    /// Config directory of [tool] (`~/.config/qt5ct` or `~/.config/qt6ct`).
+    fn tool_dir(&self, tool: QtTool) -> PathBuf {
+        self.config_home.join(tool.name())
     }
 
-    /// Lists the color schemes generated for the same theme and variant by an
-    /// earlier publication generation.
+    /// Config file of [tool] (`qt5ct.conf` or `qt6ct.conf`).
+    fn config_path(&self, tool: QtTool) -> PathBuf {
+        self.tool_dir(tool)
+            .join(format!("{}.{QTCT_EXTENSION}", tool.name()))
+    }
+
+    /// Palette file installed for [tool] in the current generation.
+    fn palette_path(&self, tool: QtTool) -> PathBuf {
+        self.tool_dir(tool)
+            .join(QTCT_COLORS_DIR)
+            .join(format!("{}.{QTCT_EXTENSION}", self.palette_name))
+    }
+
+    /// Lists palettes generated for the same theme and variant by an earlier
+    /// publication generation.
     ///
     /// # Returns
-    /// Absolute paths of superseded `<theme>-<variant>-v<generation>.colors`
-    /// files. The scheme of the current generation, schemes of other variants,
-    /// and every scheme the user installed are excluded, so the caller can
-    /// delete the result unconditionally.
-    #[must_use]
-    pub fn stale_color_schemes(&self) -> Vec<PathBuf> {
+    /// Absolute paths of superseded `<theme>-<variant>-v<generation>.conf`
+    /// files. Palettes the user installed and the palette of the current
+    /// generation are excluded, so the caller can delete the result
+    /// unconditionally.
+    fn stale_palettes(&self, tool: QtTool) -> Vec<PathBuf> {
         // Step 1: Split the generation off the current name. `rsplit_once` takes
         // the last `-v`, so theme and variant ids containing `-v` stay intact.
-        let Some((prefix, _)) = self.kde_color_scheme_name.rsplit_once("-v") else {
+        let Some((prefix, _)) = self.palette_name.rsplit_once("-v") else {
             return Vec::new();
         };
         let generated = format!("{prefix}-v");
-        let current = self.color_scheme_path();
+        let current = self.palette_path(tool);
 
-        // Step 2: A missing directory simply means nothing was generated yet.
-        let Ok(entries) = std::fs::read_dir(color_schemes_dir(&self.data_home)) else {
+        // Step 2: A missing colors directory means nothing was generated yet.
+        let Ok(entries) = std::fs::read_dir(self.tool_dir(tool).join(QTCT_COLORS_DIR)) else {
             return Vec::new();
         };
 
@@ -384,7 +157,7 @@ impl QtAdapter {
             .map(|entry| entry.path())
             .filter(|path| {
                 if path == &current
-                    || path.extension().and_then(|ext| ext.to_str()) != Some("colors")
+                    || path.extension().and_then(|ext| ext.to_str()) != Some(QTCT_EXTENSION)
                 {
                     return false;
                 }
@@ -399,63 +172,218 @@ impl QtAdapter {
     }
 }
 
-pub fn kdeglobals_path(config_home: impl AsRef<Path>) -> PathBuf {
-    config_home.as_ref().to_path_buf().join("kdeglobals")
-}
-
-/// Directory Plasma searches for installed color schemes.
-pub fn color_schemes_dir(data_home: impl AsRef<Path>) -> PathBuf {
-    data_home.as_ref().to_path_buf().join(KDE_COLOR_SCHEMES_DIR)
-}
-
-pub fn color_scheme_path(data_home: impl AsRef<Path>, kde_color_scheme_name: String) -> PathBuf {
-    color_schemes_dir(data_home).join(format!(
-        "{kde_color_scheme_name}.{KDE_COLOR_SCHEME_EXTENSION}"
-    ))
-}
-
 impl Adapter for QtAdapter {
     fn name(&self) -> &'static str {
         QT_ADAPTER_NAME
     }
 
     fn render(&self, theme: &ResolvedTheme) -> Result<BackendOutput, BackendError> {
-        // Step 1: Merge into the real kdeglobals so the user's other settings
-        // survive a theme change. A missing or empty file is generated whole.
-        let globals_path = self.kdeglobals_path();
-        let existing = read_optional(&globals_path);
-        let globals = if existing.trim().is_empty() {
-            render_kdeglobals(&theme.colors)
-        } else {
-            merge_kdeglobals(&existing, &theme.colors)
-        };
+        let mut files = Vec::new();
+        let mut removals = Vec::new();
 
-        // Step 2: Install the scheme Plasma applies at startup and on change.
-        // The name carries the generation, so the desktop can tell a regenerated
-        // palette apart from the one it already applied.
-        let scheme = render_color_scheme(&theme.colors, &self.kde_color_scheme_name);
+        for tool in QtTool::ALL {
+            // Step 1: Leave tools that are not installed untouched.
+            if !self.is_enabled(tool) {
+                continue;
+            }
 
-        // Step 3: Report the scheme of the previous generation for deletion. The
-        // caller removes it only after the new scheme is durable on disk.
-        let removals = self.stale_color_schemes();
+            // Step 2: Install the palette under the generation-scoped name.
+            let palette_path = self.palette_path(tool);
+            files.push((
+                palette_path.clone(),
+                render_qtct_palette(&theme.colors).into_bytes(),
+            ));
+
+            // Step 3: Point the tool at it, preserving the user's other settings.
+            let config_path = self.config_path(tool);
+            let existing = read_optional(&config_path);
+            files.push((
+                config_path,
+                merge_qtct_config(&existing, &palette_path).into_bytes(),
+            ));
+
+            // Step 4: Report the palettes of older generations for deletion.
+            removals.extend(self.stale_palettes(tool));
+        }
 
         Ok(BackendOutput {
-            files: vec![
-                (globals_path, globals.into_bytes()),
-                (self.color_scheme_path(), scheme.into_bytes()),
-            ],
+            files,
             env: Vec::new(),
             removals,
         })
     }
 
     fn set_unique_theme_name(&mut self, theme_name: String) {
-        self.kde_color_scheme_name = theme_name
+        self.palette_name = theme_name
     }
 
     fn unique_theme_name(&self) -> String {
-        self.kde_color_scheme_name.clone()
+        self.palette_name.clone()
     }
+}
+
+/// Renders a qt5ct/qt6ct palette from [`ColorRoles`].
+///
+/// The three color groups are serialized in Qt's `QPalette::ColorRole` order,
+/// including the unused `NoRole` slot and the Qt 6.6 `Accent` role, because both
+/// tools index the list by role value.
+fn render_qtct_palette(colors: &ColorRoles) -> String {
+    let active = active_palette(colors);
+    let disabled = disabled_palette(colors);
+
+    let mut out = String::from("; Generated by rde-theme; do not edit.\n");
+    out.push_str(&format!("\n[{QTCT_COLOR_SCHEME_SECTION}]\n"));
+    out.push_str(&format!("active_colors={}\n", format_palette(&active)));
+    // Active and inactive share colors; Qt styles resolve inactive roles from
+    // the active group unless the user changes them.
+    out.push_str(&format!("inactive_colors={}\n", format_palette(&active)));
+    out.push_str(&format!("disabled_colors={}\n", format_palette(&disabled)));
+
+    out
+}
+
+/// The 22 QPalette role colors of the active group, in Qt serialization order.
+fn active_palette(colors: &ColorRoles) -> [&Color; 22] {
+    [
+        &colors.on_surface,               // WindowText
+        &colors.surface_container,        // Button
+        &colors.surface_container_high,   // Light
+        &colors.surface_container,        // Midlight
+        &colors.surface_container_lowest, // Dark
+        &colors.outline_variant,          // Mid
+        &colors.on_surface,               // Text
+        &colors.on_surface,               // BrightText
+        &colors.on_surface,               // ButtonText
+        &colors.surface_container_lowest, // Base
+        &colors.surface,                  // Window
+        &colors.shadow,                   // Shadow
+        &colors.primary,                  // Highlight
+        &colors.on_primary,               // HighlightedText
+        &colors.primary,                  // Link
+        &colors.tertiary,                 // LinkVisited
+        &colors.surface_container_low,    // AlternateBase
+        &colors.surface,                  // NoRole (ignored by Qt)
+        &colors.inverse_surface,          // ToolTipBase
+        &colors.inverse_on_surface,       // ToolTipText
+        &colors.on_surface_variant,       // PlaceholderText
+        &colors.primary,                  // Accent (Qt 6.6+)
+    ]
+}
+
+/// The 22 QPalette role colors of the disabled group.
+///
+/// Disabled widgets keep the surfaces but move text, links, and placeholders to
+/// outline tones so they read as unavailable.
+fn disabled_palette(colors: &ColorRoles) -> [&Color; 22] {
+    [
+        &colors.outline,                  // WindowText
+        &colors.surface_container,        // Button
+        &colors.surface_container_high,   // Light
+        &colors.surface_container,        // Midlight
+        &colors.surface_container_lowest, // Dark
+        &colors.outline_variant,          // Mid
+        &colors.outline,                  // Text
+        &colors.outline,                  // BrightText
+        &colors.outline,                  // ButtonText
+        &colors.surface_container_lowest, // Base
+        &colors.surface,                  // Window
+        &colors.shadow,                   // Shadow
+        &colors.primary,                  // Highlight
+        &colors.on_primary,               // HighlightedText
+        &colors.outline,                  // Link
+        &colors.outline,                  // LinkVisited
+        &colors.surface_container_low,    // AlternateBase
+        &colors.surface,                  // NoRole (ignored by Qt)
+        &colors.inverse_surface,          // ToolTipBase
+        &colors.outline,                  // ToolTipText
+        &colors.outline_variant,          // PlaceholderText
+        &colors.primary,                  // Accent (Qt 6.6+)
+    ]
+}
+
+/// Joins one group's colors as `#aarrggbb` values.
+fn format_palette(palette: &[&Color]) -> String {
+    palette
+        .iter()
+        .map(|color| qtct_color(color))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Formats a [`Color`] as the opaque `#aarrggbb` value qt5ct/qt6ct expect.
+fn qtct_color(color: &Color) -> String {
+    format!("#ff{}", color.as_str().trim_start_matches('#'))
+}
+
+/// Updates the palette selection in a qt5ct/qt6ct config document.
+///
+/// Everything else (style, icons, fonts, comments) is preserved, so switching
+/// palettes never resets the user's tool configuration.
+fn merge_qtct_config(existing: &str, palette_path: &Path) -> String {
+    let entries = [
+        ("color_scheme_path", palette_path.display().to_string()),
+        ("custom_palette", "true".to_string()),
+    ];
+    let mut lines: Vec<String> = existing.lines().map(str::to_string).collect();
+    let mut written = [false; 2];
+
+    let header = lines
+        .iter()
+        .position(|line| line.trim() == format!("[{QTCT_CONFIG_SECTION}]"));
+
+    match header {
+        // Step 1: Replace the owned keys inside an existing [Appearance] group.
+        Some(header_index) => {
+            let section_end = lines[header_index + 1..]
+                .iter()
+                .position(|line| is_section_header(line))
+                .map_or(lines.len(), |offset| header_index + 1 + offset);
+
+            for line in lines.iter_mut().take(section_end).skip(header_index + 1) {
+                let trimmed = line.trim().to_string();
+                let Some((key, _)) = trimmed.split_once('=') else {
+                    continue;
+                };
+                let key = key.trim();
+                for (index, (entry_key, entry_value)) in entries.iter().enumerate() {
+                    if key == *entry_key {
+                        *line = format!("{entry_key}={entry_value}");
+                        written[index] = true;
+                    }
+                }
+            }
+
+            // Step 2: Append the keys the section was missing.
+            let mut inserted = 0;
+            for (index, (entry_key, entry_value)) in entries.iter().enumerate() {
+                if written[index] {
+                    continue;
+                }
+                lines.insert(section_end + inserted, format!("{entry_key}={entry_value}"));
+                inserted += 1;
+            }
+        }
+        // Step 3: Append the whole group when the tool has no config yet.
+        None => {
+            if lines.last().is_some_and(|line| !line.trim().is_empty()) {
+                lines.push(String::new());
+            }
+            lines.push(format!("[{QTCT_CONFIG_SECTION}]"));
+            for (key, value) in entries {
+                lines.push(format!("{key}={value}"));
+            }
+        }
+    }
+
+    let mut out = lines.join("\n");
+    out.push('\n');
+    out
+}
+
+/// Whether [line] is an INI section header.
+fn is_section_header(line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed.len() > 2 && trimmed.starts_with('[') && trimmed.ends_with(']')
 }
 
 /// Reads a file, treating "missing" and "unreadable" as empty content.
@@ -468,8 +396,6 @@ mod tests {
     use super::*;
     use crate::backend::material::compute_color_roles;
     use crate::domain::{ColorSeeds, ContrastLevel, ThemeMode};
-
-    static KDE_COLOR_SCHEM_NAME: &str = "RdeM3";
 
     /// Builds a deterministic palette for the assertions below.
     fn roles() -> ColorRoles {
@@ -494,153 +420,164 @@ mod tests {
         }
     }
 
-    #[test]
-    fn renders_every_owned_group() {
-        let content = render_kdeglobals(&roles());
-
-        for section in OWNED_SECTIONS {
-            assert!(
-                content.contains(&format!("[{section}]")),
-                "missing section {section}: {content}"
-            );
-        }
-        assert!(content.contains("BackgroundNormal="), "{content}");
-        assert!(content.contains("AccentColor="), "{content}");
+    /// Returns the comma-separated values of one group line.
+    fn group_values<'a>(palette: &'a str, key: &str) -> Vec<&'a str> {
+        palette
+            .lines()
+            .find_map(|line| line.strip_prefix(&format!("{key}=")))
+            .unwrap_or_else(|| panic!("missing {key}: {palette}"))
+            .split(", ")
+            .collect()
     }
 
     #[test]
-    fn color_scheme_carries_its_identity() {
-        let content = render_color_scheme(&roles(), KDE_COLOR_SCHEM_NAME);
-
-        assert!(content.contains("Name=RdeM3"), "{content}");
-        assert!(content.contains("ColorScheme=RdeM3"), "{content}");
-        assert!(content.contains("[Colors:Selection]"), "{content}");
-    }
-
-    #[test]
-    fn merge_preserves_unrelated_settings_and_comments() {
-        let existing = "; my comment\n[General]\nAccentColor=1,2,3\nFont=Noto Sans\n\n\
-            [Colors:Window]\nBackgroundNormal=9,9,9\nInactiveText=8,8,8\n\n\
-            [KDE]\nLookAndFeelPackage=org.kde.breeze\n";
-
-        let merged = merge_kdeglobals(existing, &roles());
-
-        assert!(merged.contains("; my comment"), "{merged}");
-        assert!(merged.contains("Font=Noto Sans"), "{merged}");
-        assert!(merged.contains("InactiveText=8,8,8"), "{merged}");
-        assert!(
-            merged.contains("LookAndFeelPackage=org.kde.breeze"),
-            "{merged}"
-        );
-        assert!(!merged.contains("AccentColor=1,2,3"), "{merged}");
-        assert!(!merged.contains("BackgroundNormal=9,9,9"), "{merged}");
-    }
-
-    #[test]
-    fn merge_appends_missing_sections_without_duplicates() {
-        let merged = merge_kdeglobals("[General]\nAccentColor=1,2,3\n", &roles());
-
-        for section in OWNED_SECTIONS {
-            let header = format!("[{section}]");
-            assert_eq!(
-                merged.matches(&header).count(),
-                1,
-                "duplicate {header}: {merged}"
-            );
-        }
-    }
-
-    #[test]
-    fn emitter_targets_the_paths_kde_reads() {
+    fn writes_a_palette_and_config_for_every_installed_tool() {
         let temp = tempfile::tempdir().unwrap();
         let config_home = temp.path().join("config");
-        let data_home = temp.path().join("data");
-        std::fs::create_dir_all(&config_home).unwrap();
+        let mut adapter = QtAdapter::with_targets(config_home.clone(), true, true);
+        adapter.set_unique_theme_name("rde-dynamic-dark-v3".to_string());
 
-        // An existing kdeglobals with a user-owned key must survive.
-        std::fs::write(
-            config_home.join("kdeglobals"),
-            "[KDE]\nLookAndFeelPackage=org.kde.breeze\n",
-        )
-        .unwrap();
+        let output = adapter.render(&theme()).unwrap();
 
-        let resolved_theme = theme();
-        let scheme_name =
-            kde_color_scheme_name(&resolved_theme.theme_id, &resolved_theme.variant, 3);
-        let mut emitter = QtAdapter::new(config_home.clone(), data_home.clone());
-
-        // The service names the scheme after the generation before rendering it.
-        emitter.set_unique_theme_name(scheme_name.clone());
-        let output = emitter.render(&resolved_theme).unwrap();
-
+        let palette = config_home
+            .join("qt5ct")
+            .join("colors")
+            .join("rde-dynamic-dark-v3.conf");
+        let config = config_home.join("qt5ct").join("qt5ct.conf");
         let paths: Vec<_> = output.files.iter().map(|(path, _)| path.clone()).collect();
-        assert!(paths.contains(&config_home.join("kdeglobals")), "{paths:?}");
-        assert_eq!(scheme_name, "rde-dynamic-dark-v3");
+        assert!(paths.contains(&palette), "{paths:?}");
+        assert!(paths.contains(&config), "{paths:?}");
         assert!(
             paths.contains(
-                &data_home
-                    .join("color-schemes")
-                    .join(format!("{scheme_name}.colors"))
+                &config_home
+                    .join("qt6ct")
+                    .join("colors")
+                    .join("rde-dynamic-dark-v3.conf")
             ),
             "{paths:?}"
         );
+        assert!(paths.contains(&config_home.join("qt6ct").join("qt6ct.conf")));
 
-        let globals = output
+        let content = output
             .files
             .iter()
-            .find(|(path, _)| path.ends_with("kdeglobals"))
+            .find(|(path, _)| path == &palette)
+            .map(|(_, bytes)| String::from_utf8_lossy(bytes).into_owned())
+            .unwrap();
+        assert!(content.contains("[ColorScheme]"), "{content}");
+        assert_eq!(group_values(&content, "active_colors").len(), 22);
+        assert_eq!(group_values(&content, "inactive_colors").len(), 22);
+        assert_eq!(group_values(&content, "disabled_colors").len(), 22);
+
+        let config_content = output
+            .files
+            .iter()
+            .find(|(path, _)| path == &config)
             .map(|(_, bytes)| String::from_utf8_lossy(bytes).into_owned())
             .unwrap();
         assert!(
-            globals.contains("LookAndFeelPackage=org.kde.breeze"),
-            "{globals}"
+            config_content.contains("custom_palette=true"),
+            "{config_content}"
         );
-        assert!(globals.contains("[Colors:Window]"), "{globals}");
-
-        // Writing the files exactly as the application layer does must leave a
-        // merged kdeglobals and a discoverable scheme at the KDE paths.
-        for (path, bytes) in &output.files {
-            crate::fs::write_atomic(path, bytes).unwrap();
-        }
-        let on_disk = std::fs::read_to_string(config_home.join("kdeglobals")).unwrap();
-        assert!(on_disk.contains("[Colors:Window]"), "{on_disk}");
-        let scheme = std::fs::read_to_string(
-            data_home
-                .join("color-schemes")
-                .join(format!("{scheme_name}.colors")),
-        )
-        .unwrap();
-        assert!(scheme.contains("Name=rde-dynamic-dark-v3"), "{scheme}");
+        assert!(
+            config_content.contains(&format!("color_scheme_path={}", palette.display())),
+            "{config_content}"
+        );
     }
 
     #[test]
-    fn render_supersedes_only_the_schemes_of_the_same_variant() {
+    fn skips_tools_that_are_not_installed() {
         let temp = tempfile::tempdir().unwrap();
-        let data_home = temp.path().join("data");
-        let schemes = color_schemes_dir(&data_home);
-        std::fs::create_dir_all(&schemes).unwrap();
+        let config_home = temp.path().join("config");
+        let mut adapter = QtAdapter::with_targets(config_home.clone(), false, true);
+        adapter.set_unique_theme_name("rde-dynamic-dark-v3".to_string());
 
-        // A scheme generated for an earlier generation, a scheme the user
-        // installed, and the scheme of the other variant on disk.
-        std::fs::write(schemes.join("rde-dynamic-dark-v6.colors"), "stale").unwrap();
-        std::fs::write(schemes.join("Breeze.colors"), "user installed").unwrap();
-        std::fs::write(schemes.join("rde-dynamic-light-v6.colors"), "other").unwrap();
+        let output = adapter.render(&theme()).unwrap();
 
-        let mut emitter = QtAdapter::new(temp.path().join("config"), data_home);
-        emitter.set_unique_theme_name("rde-dynamic-dark-v7".to_string());
-        let output = emitter.render(&theme()).unwrap();
+        let paths: Vec<_> = output.files.iter().map(|(path, _)| path.clone()).collect();
+        assert_eq!(paths.len(), 2, "{paths:?}");
+        assert!(
+            paths
+                .iter()
+                .all(|path| path.starts_with(config_home.join("qt6ct")))
+        );
+    }
 
-        // Only the superseded scheme of the same theme and variant is reported.
+    #[test]
+    fn config_merge_preserves_unrelated_tool_settings() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_home = temp.path().join("config");
+        let tool_dir = config_home.join("qt6ct");
+        std::fs::create_dir_all(&tool_dir).unwrap();
+        std::fs::write(
+            tool_dir.join("qt6ct.conf"),
+            "; my qt6ct settings\n[Appearance]\nstyle=Fusion\ncustom_palette=false\n\n\
+             [Fonts]\ngeneral=Noto Sans\n",
+        )
+        .unwrap();
+
+        let mut adapter = QtAdapter::with_targets(config_home.clone(), false, true);
+        adapter.set_unique_theme_name("rde-dynamic-dark-v3".to_string());
+        let output = adapter.render(&theme()).unwrap();
+        for (path, bytes) in &output.files {
+            crate::fs::write_atomic(path, bytes).unwrap();
+        }
+
+        let config = std::fs::read_to_string(tool_dir.join("qt6ct.conf")).unwrap();
+        assert!(config.contains("; my qt6ct settings"), "{config}");
+        assert!(config.contains("style=Fusion"), "{config}");
+        assert!(config.contains("[Fonts]"), "{config}");
+        assert!(config.contains("general=Noto Sans"), "{config}");
+        assert!(config.contains("custom_palette=true"), "{config}");
+        assert!(config.contains("color_scheme_path="), "{config}");
+    }
+
+    #[test]
+    fn supersedes_only_the_palettes_of_the_same_variant() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_home = temp.path().join("config");
+        let colors_dir = config_home.join("qt5ct").join("colors");
+        std::fs::create_dir_all(&colors_dir).unwrap();
+
+        // A palette generated for an earlier generation, a user palette, and
+        // the palette of the other variant.
+        std::fs::write(colors_dir.join("rde-dynamic-dark-v1.conf"), "stale").unwrap();
+        std::fs::write(colors_dir.join("Solarized.conf"), "user palette").unwrap();
+        std::fs::write(colors_dir.join("rde-dynamic-light-v1.conf"), "other").unwrap();
+
+        let mut adapter = QtAdapter::with_targets(config_home, true, false);
+        adapter.set_unique_theme_name("rde-dynamic-dark-v2".to_string());
+        let output = adapter.render(&theme()).unwrap();
+
         assert_eq!(
             output.removals,
-            vec![schemes.join("rde-dynamic-dark-v6.colors")]
+            vec![colors_dir.join("rde-dynamic-dark-v1.conf")]
         );
         assert!(
             output
                 .files
                 .iter()
-                .any(|(path, _)| path.ends_with("rde-dynamic-dark-v7.colors")),
+                .any(|(path, _)| path.ends_with("rde-dynamic-dark-v2.conf")),
             "{output:?}"
         );
+    }
+
+    #[test]
+    fn maps_material_roles_onto_qpalette_order() {
+        let colors = roles();
+        let palette = render_qtct_palette(&colors);
+
+        let active = group_values(&palette, "active_colors");
+        assert_eq!(active[0], qtct_color(&colors.on_surface)); // WindowText
+        assert_eq!(active[10], qtct_color(&colors.surface)); // Window
+        assert_eq!(active[12], qtct_color(&colors.primary)); // Highlight
+        assert_eq!(active[15], qtct_color(&colors.tertiary)); // LinkVisited
+        assert_eq!(active[19], qtct_color(&colors.inverse_on_surface)); // ToolTipText
+        assert_eq!(active[20], qtct_color(&colors.on_surface_variant)); // Placeholder
+        assert_eq!(active[21], qtct_color(&colors.primary)); // Accent
+
+        let disabled = group_values(&palette, "disabled_colors");
+        assert_eq!(disabled[0], qtct_color(&colors.outline)); // WindowText
+        assert_eq!(disabled[6], qtct_color(&colors.outline)); // Text
     }
 }

@@ -107,10 +107,10 @@ Implemented in `backend/gtk/`. CSS emission (`backend/gtk/css.rs`) renders every
 
 ### 2. Qt Theme Management Engine (Qt 5 & Qt 6)
 
-Implemented in `backend/qt/` and invoked at startup and after every theme or scheme change.
+Split into `backend/kde/` (Plasma) and `backend/qt/` (qt5ct/qt6ct), both invoked at startup and after every theme or scheme change. Artifact names carry the publication generation, so a regenerated palette never overwrites the file the desktop already loaded.
 
-- **qt5ct / qt6ct Schemes**: Writes `~/.config/qt{5,6}ct/colors/RdeM3.conf` with active, inactive, and disabled color lists in `QPalette::ColorRole` order (21 roles through `PlaceholderText`; qt6ct derives `Accent` from `Highlight` on Qt 6.6+), and activates them through `color_scheme_path` + `custom_palette=true` in the tool configuration.
-- **KDE Integration**: Writes the standalone `~/.local/share/color-schemes/RdeM3.colors` scheme and merges the same `[Colors:Window|View|Button|Selection|Tooltip|Complementary|Header]` and `[WM]` groups into `~/.config/kdeglobals`, selecting `ColorScheme=RdeM3`.
+- **qt5ct / qt6ct Schemes**: When either tool is installed, writes `~/.config/qt{5,6}ct/colors/<theme>-<variant>-v<generation>.conf` with active, inactive, and disabled color lists in `QPalette::ColorRole` serialization order (22 values: every Qt role including the unused `NoRole` slot and the Qt 6.6 `Accent` role; Qt 5 ignores the trailing value). Each tool's config is merged non-destructively with `color_scheme_path` + `custom_palette=true`, and superseded palettes of the same variant are removed.
+- **KDE Integration**: Writes the standalone `~/.local/share/color-schemes/<theme>-<variant>-v<generation>.colors` scheme and merges the `[Colors:Window|View|Button|Selection|Tooltip|Complementary|Header]` and `[WM]` groups into `~/.config/kdeglobals` plus `[General] AccentColor`. The scheme selection itself is left to `plasma-apply-colorscheme`, which skips a scheme that `kdeglobals` already selects.
 - **Palette Mapping**: Maps M3 roles to Qt color roles: `Window` from `surface`, `Base` from `surface_container_lowest`, `Text`/`WindowText` from `on_surface`, `Button` from `surface_container`, bevel roles from the surface container tiers, `Highlight` from `primary`, `HighlightedText` from `on_primary`, links from `primary`/`tertiary`, and tooltips from `inverse_surface`.
 - **Merging and Atomicity**: Existing Qt/KDE configuration is parsed line-by-line so comments, styles, fonts, icons, and unrelated keys survive; files are written atomically and only when their contents change. A failure in one file (for example an unwritable `qt6ct` directory) is reported without preventing the other files or the theme change itself.
 
@@ -147,7 +147,7 @@ Implemented in `backend/qt/` and invoked at startup and after every theme or sch
 4. **Signal Dispatch**:
    - Emits `ThemeChanged`, `ColorSchemeChanged`, `PaletteChanged`, or `InstalledThemesChanged` over the `org.rde.Theme` session D-Bus interface, plus the standard `PropertiesChanged` signal for mutated properties.
 5. **Toolkit Synchronization**:
-   - Writes the Qt/KDE color schemes (`RdeM3.conf`, `RdeM3.colors`, and `kdeglobals`) so Qt applications pick up the palette without a session restart.
+   - Writes the generation-scoped qt5ct/qt6ct palettes, the Plasma color scheme, and `kdeglobals` so Qt and KDE applications pick up the palette without a session restart.
    - GTK (`gtk.css`/`settings.ini`), Fontconfig, and Freedesktop Portal synchronization are planned.
 6. **Supervisor Status**:
    - Responds to `rde-daemon` IPC `HealthCheck` probes.

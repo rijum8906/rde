@@ -21,7 +21,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     backend::{
-        AdapterRegistry, compute_color_roles, detect::SessionEnv, qt::QT_ADAPTER_NAME,
+        AdapterRegistry, compute_color_roles, detect::SessionEnv, kde::KDE_ADAPTER_NAME,
         resolvers::ResolverRegistry, unique_theme_name,
     },
     domain::{
@@ -193,7 +193,7 @@ impl ThemeService {
         let session_env = SessionEnv::detect();
 
         // Step 8: Shell out to KDE if the Qt adapter installed the scheme.
-        if applied.contains(&QT_ADAPTER_NAME) {
+        if applied.contains(&KDE_ADAPTER_NAME) {
             let scheme_name = unique_theme_name(&resolved.theme_id, &resolved.variant, generation);
             Self::maybe_apply_kde(&session_env, &scheme_name);
         }
@@ -838,7 +838,7 @@ impl ThemeService {
         let applied = Self::apply_adapters(&self.adapter_registry, &resolved, generation).await;
 
         // Step 4: Shell out to KDE if the Qt adapter installed the new scheme.
-        if applied.contains(&QT_ADAPTER_NAME) {
+        if applied.contains(&KDE_ADAPTER_NAME) {
             let scheme_name = unique_theme_name(&resolved.theme_id, &resolved.variant, generation);
             Self::maybe_apply_kde(&self.session_env, &scheme_name);
         }
@@ -918,7 +918,7 @@ impl ThemeService {
 mod tests {
     use super::*;
     use crate::{
-        backend::QtAdapter,
+        backend::KdeAdapter,
         domain::{
             identity::{AdapterId, VariantId},
             manifest::{ContrastLevel, RelativePath, ThemeMode, VariantDescriptor},
@@ -1418,7 +1418,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let config_home = temp.path().join("config");
         let data_home = temp.path().join("data");
-        let schemes = crate::backend::qt::color_schemes_dir(&data_home);
+        let schemes = crate::backend::kde::color_schemes_dir(&data_home);
         std::fs::create_dir_all(&schemes).unwrap();
 
         // A scheme an earlier generation left behind and one the user installed.
@@ -1427,8 +1427,8 @@ mod tests {
 
         let mut registry = AdapterRegistry::default();
         registry.adapters.insert(
-            AdapterId::new(QT_ADAPTER_NAME).unwrap(),
-            Box::new(QtAdapter::new(config_home, data_home)),
+            AdapterId::new(KDE_ADAPTER_NAME).unwrap(),
+            Box::new(KdeAdapter::new(config_home, data_home)),
         );
 
         let service = ThemeService::startup(
