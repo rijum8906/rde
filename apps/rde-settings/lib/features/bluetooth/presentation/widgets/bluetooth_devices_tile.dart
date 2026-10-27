@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:rde_settings/features/bluetooth/domain/entities/bluetooth_device.dart';
 import 'package:rde_settings/features/bluetooth/presentation/bloc/bluetooth_bloc.dart';
 import 'package:rde_settings/features/bluetooth/presentation/bloc/bluetooth_event.dart';
-import 'package:rde_settings/features/bluetooth/presentation/utils/bluetooth_device_helpers.dart';
 import 'package:rde_settings/features/bluetooth/presentation/widgets/bluetooth_device_icon.dart';
 import 'package:rde_settings/core/widgets/loading_indicator.dart';
 
@@ -39,13 +38,7 @@ class BluetoothDeviceTile extends StatelessWidget {
                         : FontWeight.w500,
                   ),
                 ),
-                Text(
-                  subtitleForDevice(device),
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
+                _RichSubtitle(device: device),
               ],
             ),
           ),
@@ -55,10 +48,82 @@ class BluetoothDeviceTile extends StatelessWidget {
               padding: EdgeInsets.symmetric(horizontal: 12.0),
               child: RdeLoadingIndicator(size: 20),
             )
-          else if (device.connected)
-            _ConnectedBadge()
           else
-            _DeviceActions(device: device),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (device.connected)
+                  TextButton(
+                    onPressed: () => context.read<BluetoothBloc>().add(
+                      DisconnectDeviceEvent(device.address),
+                    ),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      foregroundColor: colorScheme.error,
+                      overlayColor: colorScheme.error.withValues(alpha: 0.08),
+                    ),
+                    child: const Text('Disconnect'),
+                  )
+                else
+                  FilledButton.tonal(
+                    onPressed: () => context.read<BluetoothBloc>().add(
+                      ConnectDeviceEvent(device.address),
+                    ),
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      textStyle: const TextStyle(fontSize: 12),
+                    ),
+                    child: Text(device.paired ? 'Connect' : 'Connect anyway'),
+                  ),
+                // Shared menu: same items in both states, with "Connect"/"Disconnect"
+                // handled by the primary button above.
+                PopupMenuButton<String>(
+                  tooltip: 'More actions',
+                  icon: const Icon(Icons.more_vert, size: 20),
+                  onSelected: (value) {
+                    final bloc = context.read<BluetoothBloc>();
+                    switch (value) {
+                      case 'pair':
+                        bloc.add(PairDeviceEvent(device.address));
+                      case 'trust':
+                        bloc.add(SetTrustedDeviceEvent(device.address, true));
+                      case 'untrust':
+                        bloc.add(SetTrustedDeviceEvent(device.address, false));
+                      case 'forget':
+                        bloc.add(ForgetDeviceEvent(device.address));
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    if (!device.paired)
+                      const PopupMenuItem(value: 'pair', child: Text('Pair')),
+                    if (device.trusted)
+                      const PopupMenuItem(
+                        value: 'untrust',
+                        child: Text('Remove trust'),
+                      )
+                    else
+                      const PopupMenuItem(
+                        value: 'trust',
+                        child: Text('Trust device'),
+                      ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(value: 'forget', child: Text('Forget')),
+                  ],
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -97,89 +162,45 @@ class _DeviceAvatar extends StatelessWidget {
   }
 }
 
-/// "Connected" pill shown in the trailing slot when the device is active.
-class _ConnectedBadge extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: colorScheme.primary,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.check, size: 14, color: colorScheme.onPrimary),
-          const SizedBox(width: 4),
-          Text(
-            'Connected',
-            style: TextStyle(
-              color: colorScheme.onPrimary,
-              fontWeight: FontWeight.bold,
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The compact trailing action area: one filled-tonal button for the primary
-/// action, plus a menu for pair/trust/forget.
-class _DeviceActions extends StatelessWidget {
-  const _DeviceActions({required this.device});
+class _RichSubtitle extends StatelessWidget {
+  const _RichSubtitle({required this.device});
 
   final BluetoothDevice device;
 
   @override
   Widget build(BuildContext context) {
-    final bloc = context.read<BluetoothBloc>();
-    final isPaired = device.paired;
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall!.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final value = theme.textTheme.bodySmall!.copyWith(
+      color: theme.colorScheme.onSurface,
+      fontWeight: FontWeight.w600,
+      fontSize: (theme.textTheme.bodySmall!.fontSize ?? 12) + 1,
+    );
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        FilledButton.tonal(
-          onPressed: () => bloc.add(ConnectDeviceEvent(device.address)),
-          style: FilledButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            textStyle: const TextStyle(fontSize: 12),
-          ),
-          child: Text(isPaired ? 'Connect' : 'Connect anyway'),
-        ),
-        PopupMenuButton<String>(
-          tooltip: 'More actions',
-          icon: const Icon(Icons.more_vert, size: 20),
-          onSelected: (value) {
-            switch (value) {
-              case 'pair':
-                bloc.add(PairDeviceEvent(device.address));
-              case 'disconnect':
-                bloc.add(DisconnectDeviceEvent(device.address));
-              case 'trust':
-                bloc.add(SetTrustedDeviceEvent(device.address, true));
-              case 'untrust':
-                bloc.add(SetTrustedDeviceEvent(device.address, false));
-              case 'forget':
-                bloc.add(ForgetDeviceEvent(device.address));
-            }
-          },
-          itemBuilder: (context) => [
-            if (!isPaired)
-              const PopupMenuItem(value: 'pair', child: Text('Pair')),
-            if (device.trusted)
-              const PopupMenuItem(value: 'untrust', child: Text('Remove trust'))
-            else
-              const PopupMenuItem(value: 'trust', child: Text('Trust device')),
-            const PopupMenuDivider(),
-            const PopupMenuItem(value: 'forget', child: Text('Forget')),
-          ],
-        ),
-      ],
+    final spans = <InlineSpan>[];
+    void add(String text, TextStyle style) {
+      if (spans.isNotEmpty) spans.add(TextSpan(text: '  •  ', style: muted));
+      spans.add(TextSpan(text: text, style: style));
+    }
+
+    if (device.batteryPercentage != null) {
+      add('${device.batteryPercentage}%', value);
+    }
+    if (device.rssi != null) {
+      add('${device.rssi} dBm', value);
+    }
+
+    // Nothing to show: hide the subtitle line rather than render an empty
+    // Text that takes up vertical space and makes the row look taller than
+    // its siblings.
+    if (spans.isEmpty) return const SizedBox.shrink();
+
+    return Text.rich(
+      TextSpan(children: spans),
+      overflow: TextOverflow.ellipsis,
+      maxLines: 1,
     );
   }
 }
