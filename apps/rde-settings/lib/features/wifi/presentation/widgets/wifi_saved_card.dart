@@ -97,7 +97,7 @@ class _SavedGroup extends StatelessWidget {
         color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(16),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 20),
       child: Column(
         children: [
           for (var i = 0; i < networks.length; i++) ...[
@@ -105,6 +105,7 @@ class _SavedGroup extends StatelessWidget {
               Divider(
                 height: 1,
                 indent: 64,
+                endIndent: 20,
                 color: colorScheme.outlineVariant.withValues(alpha: 0.5),
               ),
             WifiSavedTile(

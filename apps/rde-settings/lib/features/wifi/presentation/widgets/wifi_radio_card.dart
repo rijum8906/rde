@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:rde_settings/features/wifi/presentation/bloc/wifi_bloc.dart';
+import 'package:rde_settings/features/wifi/presentation/bloc/wifi_event.dart';
 
 /// Identity card: the adapter name, connection status, the radio switch, and
 /// a small scan spinner in the top-right while a scan is running.
@@ -9,11 +10,7 @@ import 'package:rde_settings/features/wifi/presentation/bloc/wifi_bloc.dart';
 /// right now" signal and lives next to the switch (not replacing it) so the
 /// switch never moves while a scan is in flight.
 class WifiIdentityCard extends StatelessWidget {
-  const WifiIdentityCard({super.key, required this.isScanning});
-
-  /// True while a scan is in progress. Controls the small trailing spinner
-  /// next to the radio switch.
-  final bool isScanning;
+  const WifiIdentityCard({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -52,6 +49,11 @@ class WifiIdentityCard extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+            Switch.adaptive(
+              value: state.isWifiEnabled,
+              onChanged: (value) =>
+                  context.read<WifiBloc>().add(ToggleWifiRadioEvent(value)),
             ),
           ],
         ),

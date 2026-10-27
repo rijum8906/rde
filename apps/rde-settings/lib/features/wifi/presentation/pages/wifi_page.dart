@@ -165,7 +165,7 @@ class _WifiViewState extends State<WifiView> {
                   ],
 
                   if (_section == WifiSection.available) ...[
-                    WifiIdentityCard(isScanning: isLoading),
+                    WifiIdentityCard(),
                     const SizedBox(height: 16),
                     WifiNetworksCard(
                       state: state,

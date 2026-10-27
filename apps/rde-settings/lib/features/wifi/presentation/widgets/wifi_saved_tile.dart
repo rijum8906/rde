@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:rde_settings/core/widgets/loading_indicator.dart';
 import 'package:rde_settings/features/wifi/domain/entities/wifi_network.dart';
 
+/// One saved profile.
+///
+/// Layout mirrors `BluetoothDeviceTile` and `WifiNetworkTile`: a fixed
+/// 40×40 avatar, an `Expanded` label, and a trailing area that switches
+/// between a Connected pill, a spinner, and a Connect button + kebab.
 class WifiSavedTile extends StatelessWidget {
   const WifiSavedTile({
     super.key,
@@ -52,7 +57,7 @@ class WifiSavedTile extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           if (isConnected)
-            _SavedConnectedBadge()
+            const _SavedConnectedBadge()
           else if (isConnecting)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 12.0),
@@ -123,6 +128,8 @@ class _SavedAvatar extends StatelessWidget {
 }
 
 class _SavedConnectedBadge extends StatelessWidget {
+  const _SavedConnectedBadge();
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
