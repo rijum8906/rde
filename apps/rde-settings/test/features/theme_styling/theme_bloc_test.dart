@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
 import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
+import 'package:rde_settings/core/utils/accent_seeds.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_state.dart';
 
@@ -104,32 +105,31 @@ void main() {
     },
   );
 
-  test('changing one seed only repaints that family', () async {
+  test('picking an accent derives and sends all four seeds', () async {
     final repository = FakeThemeRepository();
     final bloc = buildThemeBloc(repository);
 
     bloc.add(const ThemeInitEvent());
     await bloc.stream.firstWhere((state) => state.catalog != null);
 
+    final expected = seedsFromAccent('#B90063');
     final updated = bloc.stream.firstWhere(
-      (state) => state.dynamicSeeds.tertiary == '#B90063',
+      (state) => state.dynamicSeeds == expected,
     );
-    bloc.add(const SetDynamicSeedEvent(DynamicSeedRole.tertiary, '#B90063'));
+    bloc.add(const SetDynamicAccentEvent('#B90063'));
     final state = await updated;
 
-    // The edited family carries the new color while every other family is
-    // resent unchanged: the service requires a non-empty primary, so blanking
-    // out the untouched seeds is no longer how the bloc asks it to keep them.
-    final fallback = DynamicSeeds.fallback;
+    // The accent is the primary seed and every family is newly derived, so the
+    // service receives a complete four-color update.
+    expect(expected.primary, '#B90063');
     expect(
       repository.calls,
       contains(
-        'updateDynamicTheme:${fallback.primary}:${fallback.secondary}:'
-        '#B90063:${fallback.error}',
+        'updateDynamicTheme:${expected.primary}:${expected.secondary}:'
+        '${expected.tertiary}:${expected.error}',
       ),
     );
-    expect(state.dynamicSeeds.primary, DynamicSeeds.fallback.primary);
-    expect(state.dynamicSeeds.tertiary, '#B90063');
+    expect(state.dynamicSeeds, expected);
 
     await bloc.close();
     await repository.dispose();

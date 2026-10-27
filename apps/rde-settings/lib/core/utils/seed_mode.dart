@@ -9,7 +9,7 @@ enum SeedMode {
   ),
   custom(
     'Custom',
-    'Choose your own color for each palette family.',
+    'Pick one accent; the other families are derived from it.',
     Icons.palette_outlined,
   );
 

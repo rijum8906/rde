@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:rde_settings/core/theme/domain/entities/theme_color.dart';
 import 'package:rde_settings/core/utils/seed_colors.dart';
 
-/// Dialog that edits a seed color as a hex string.
+/// Dialog that edits the accent color as a hex string.
 ///
 /// Returns the trimmed hex string via `Navigator.pop` when the user confirms,
 /// or `null` when dismissed. Validation accepts anything
@@ -63,7 +63,7 @@ class _ColorInputDialogState extends State<ColorInputDialog> {
     final previewColor = ThemeColor.parseArgb(_controller.text.trim());
 
     return AlertDialog(
-      title: const Text('Custom Seed Color'),
+      title: const Text('Accent Color'),
       content: SizedBox(
         width: 360,
         child: Column(
@@ -71,8 +71,8 @@ class _ColorInputDialogState extends State<ColorInputDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'This family is regenerated from the color, in both light and '
-              'dark appearances. The other three families keep their seeds.',
+              'Primary, secondary, tertiary, and error are regenerated from '
+              'this color, in both light and dark appearances.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
