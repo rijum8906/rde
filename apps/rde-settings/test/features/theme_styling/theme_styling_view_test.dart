@@ -5,7 +5,7 @@ import 'package:rde_settings/core/theme/bloc/app_theme_bloc.dart';
 import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
-import 'package:rde_settings/features/theme_styling/presentation/pages/theme_styling_page.dart';
+import 'package:rde_settings/features/theme_styling/presentation/views/theme_styling_view.dart';
 
 import 'theme_test_harness.dart';
 

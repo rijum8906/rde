@@ -117,9 +117,17 @@ void main() {
     bloc.add(const SetDynamicSeedEvent(DynamicSeedRole.tertiary, '#B90063'));
     final state = await updated;
 
-    // Only the tertiary argument carries the new color; the service keeps the
-    // stored primary, secondary, and error seeds.
-    expect(repository.calls, contains('updateDynamicTheme:::#B90063:'));
+    // The edited family carries the new color while every other family is
+    // resent unchanged: the service requires a non-empty primary, so blanking
+    // out the untouched seeds is no longer how the bloc asks it to keep them.
+    final fallback = DynamicSeeds.fallback;
+    expect(
+      repository.calls,
+      contains(
+        'updateDynamicTheme:${fallback.primary}:${fallback.secondary}:'
+        '#B90063:${fallback.error}',
+      ),
+    );
     expect(state.dynamicSeeds.primary, DynamicSeeds.fallback.primary);
     expect(state.dynamicSeeds.tertiary, '#B90063');
 

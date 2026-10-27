@@ -163,15 +163,42 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
       return;
     }
 
-    // Step 1: Send only the role that changed; the service keeps the rest.
     emit(state.copyWith(isBusy: true, clearError: true));
+
+    // Normalize the incoming value the same way the service will.
     final seed = ThemeColor.tryParse(event.seed)?.value ?? event.seed.trim();
+
+    // Primary is mandatory in org.rde.Theme. Always carry the current primary
+    // through unchanged when another family is being edited, and only override
+    // it when the user is actually editing primary.
+    final current = state.dynamicSeeds;
+    final primary = event.role == DynamicSeedRole.primary
+        ? seed
+        : current.seedFor(DynamicSeedRole.primary);
+
+    // Sanity guard: never publish an empty primary upstream.
+    if (ThemeColor.tryParse(primary) == null) {
+      emit(
+        state.copyWith(
+          isBusy: false,
+          errorMessage: 'Primary seed is invalid; refusing to update.',
+        ),
+      );
+      return;
+    }
+
     final failure = _failureOf(
       await updateDynamicTheme(
-        primary: event.role == DynamicSeedRole.primary ? seed : '',
-        secondary: event.role == DynamicSeedRole.secondary ? seed : '',
-        tertiary: event.role == DynamicSeedRole.tertiary ? seed : '',
-        error: event.role == DynamicSeedRole.error ? seed : '',
+        primary: primary,
+        secondary: event.role == DynamicSeedRole.secondary
+            ? seed
+            : current.seedFor(DynamicSeedRole.secondary),
+        tertiary: event.role == DynamicSeedRole.tertiary
+            ? seed
+            : current.seedFor(DynamicSeedRole.tertiary),
+        error: event.role == DynamicSeedRole.error
+            ? seed
+            : current.seedFor(DynamicSeedRole.error),
       ),
     );
     if (failure != null) {
@@ -179,8 +206,6 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
       return;
     }
 
-    // Step 2: Mirror the accepted seed and re-read the catalog, so the controls
-    // and the published payload agree.
     emit(
       state.copyWith(
         dynamicSeeds: state.dynamicSeeds.withSeed(event.role, seed),
