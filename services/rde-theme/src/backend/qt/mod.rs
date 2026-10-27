@@ -243,59 +243,81 @@ fn render_qtct_palette(colors: &ColorRoles) -> String {
 }
 
 /// The 22 QPalette role colors of the active group, in Qt serialization order.
+///
+/// Role mapping rationale:
+/// - `Window`/`WindowText` — the app background and its primary text.
+/// - `Base`/`Text` — input fields, list views, editor backgrounds.
+///   Material's `surface_container_low` (not `_lowest`) is the role
+///   designed for "the surface you interact with," so it reads as a
+///   field rather than a recessed void.
+/// - `Button`/`ButtonText` — a filled tonal button, using Material's
+///   `secondary_container`/`on_secondary_container` pair. Using `primary`
+///   here would make every button a FAB; using `surface_container` would
+///   make it look like a label.
+/// - `Highlight`/`HighlightedText` — a selection highlight, using
+///   `primary_container`/`on_primary_container` so selections are visible
+///   but not overwhelming. `primary` is reserved for the Accent slot.
+/// - `ToolTipBase`/`ToolTipText` — a raised surface, not an inverse one.
+///   Qt tooltips are info popups, not snackbars.
+/// - `Shadow` — an actual shadow, mode-aware.
+/// - `Link`/`LinkVisited` — `primary` and a darkened `primary`, so a
+///   visited link reads as "link, but visited" rather than a new hue.
 fn active_palette(colors: &ColorRoles) -> [&Color; 22] {
     [
-        &colors.on_surface,               // WindowText
-        &colors.surface_container,        // Button
-        &colors.surface_container_high,   // Light
-        &colors.surface_container,        // Midlight
-        &colors.surface_container_lowest, // Dark
-        &colors.outline_variant,          // Mid
-        &colors.on_surface,               // Text
-        &colors.on_surface,               // BrightText
-        &colors.on_surface,               // ButtonText
-        &colors.surface_container_lowest, // Base
-        &colors.surface,                  // Window
-        &colors.shadow,                   // Shadow
-        &colors.primary,                  // Highlight
-        &colors.on_primary,               // HighlightedText
-        &colors.primary,                  // Link
-        &colors.tertiary,                 // LinkVisited
-        &colors.surface_container_low,    // AlternateBase
-        &colors.surface,                  // NoRole (ignored by Qt)
-        &colors.inverse_surface,          // ToolTipBase
-        &colors.inverse_on_surface,       // ToolTipText
-        &colors.on_surface_variant,       // PlaceholderText
-        &colors.primary,                  // Accent (Qt 6.6+)
+        &colors.on_surface,                // WindowText
+        &colors.secondary_container,       // Button
+        &colors.surface_container_high,    // Light
+        &colors.surface_container,         // Midlight
+        &colors.surface_container_lowest,  // Dark
+        &colors.outline_variant,           // Mid
+        &colors.on_surface,                // Text
+        &colors.on_surface,                // BrightText
+        &colors.on_secondary_container,    // ButtonText
+        &colors.surface_container_low,     // Base
+        &colors.surface,                   // Window
+        &colors.shadow,                    // Shadow
+        &colors.primary_container,         // Highlight
+        &colors.on_primary_container,      // HighlightedText
+        &colors.primary,                   // Link
+        &colors.on_primary_container,      // LinkVisited
+        &colors.surface_container_low,     // AlternateBase
+        &colors.surface,                   // NoRole (ignored by Qt)
+        &colors.surface_container_highest, // ToolTipBase
+        &colors.on_surface,                // ToolTipText
+        &colors.on_surface_variant,        // PlaceholderText
+        &colors.primary,                   // Accent (Qt 6.6+)
     ]
 }
 
 /// The 22 QPalette role colors of the disabled group.
 ///
-/// Disabled widgets keep the surfaces but move text, links, and placeholders to
-/// outline tones so they read as unavailable.
+/// Surfaces stay the same as the active group (the widget is still there);
+/// text roles move to `on_surface_variant` (Material's "muted text"); link
+/// roles move to `outline` (the "unavailable" role). Shadow and Highlight
+/// keep their active values so a disabled widget's focus ring and
+/// drop shadow still read as "part of the same widget."
 fn disabled_palette(colors: &ColorRoles) -> [&Color; 22] {
     [
-        &colors.outline,                  // WindowText
+        &colors.on_surface_variant,       // WindowText
         &colors.surface_container,        // Button
         &colors.surface_container_high,   // Light
         &colors.surface_container,        // Midlight
         &colors.surface_container_lowest, // Dark
         &colors.outline_variant,          // Mid
-        &colors.outline,                  // Text
-        &colors.outline,                  // BrightText
-        &colors.outline,                  // ButtonText
-        &colors.surface_container_lowest, // Base
+        &colors.on_surface_variant,       // Text
+        &colors.on_surface_variant,       // BrightText
+        &colors.on_surface_variant,       // ButtonText
+        &colors.surface_container_low,    // Base
         &colors.surface,                  // Window
         &colors.shadow,                   // Shadow
-        &colors.primary,                  // Highlight
-        &colors.on_primary,               // HighlightedText
+        &colors.primary_container,        // Highlight
+        &colors.on_primary_container,     // HighlightedText
         &colors.outline,                  // Link
         &colors.outline,                  // LinkVisited
         &colors.surface_container_low,    // AlternateBase
         &colors.surface,                  // NoRole (ignored by Qt)
-        &colors.inverse_surface,          // ToolTipBase
-        &colors.outline,                  // ToolTipText
+        &colors.surface_container_high,   // ToolTipBase
+        &colors.on_surface_variant,       // ToolTipText
         &colors.outline_variant,          // PlaceholderText
         &colors.primary,                  // Accent (Qt 6.6+)
     ]
