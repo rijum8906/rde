@@ -45,3 +45,11 @@ class ForgetSavedNetworkEvent extends WifiEvent {
   final String ssid;
   const ForgetSavedNetworkEvent(this.ssid);
 }
+
+/// NetworkManager reported a change the page has to show.
+///
+/// The daemon sends no payload of interest: the handler reads the radio,
+/// association, scan, and profile state back from it.
+class WifiServiceChangedEvent extends WifiEvent {
+  const WifiServiceChangedEvent();
+}

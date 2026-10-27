@@ -17,6 +17,13 @@ class WifiState {
   /// Network whose saved-profile connection failed and that needs a password.
   final String? passwordPromptSsid;
 
+  /// Network the user just connected to through this page.
+  ///
+  /// Only an explicit connect sets it, so opening the page on an already
+  /// connected network, or seeing a live NetworkManager update, shows no
+  /// notification. Every read of the daemon state clears it again.
+  final String? connectedNoticeSsid;
+
   const WifiState({
     required this.status,
     required this.isWifiEnabled,
@@ -26,6 +33,7 @@ class WifiState {
     this.connectingSsid,
     this.errorMessage,
     this.passwordPromptSsid,
+    this.connectedNoticeSsid,
   });
 
   factory WifiState.initial() {
@@ -46,6 +54,7 @@ class WifiState {
     Object? connectingSsid = _unset,
     Object? errorMessage = _unset,
     Object? passwordPromptSsid = _unset,
+    Object? connectedNoticeSsid = _unset,
   }) {
     return WifiState(
       status: status ?? this.status,
@@ -64,6 +73,9 @@ class WifiState {
       passwordPromptSsid: identical(passwordPromptSsid, _unset)
           ? this.passwordPromptSsid
           : passwordPromptSsid as String?,
+      connectedNoticeSsid: identical(connectedNoticeSsid, _unset)
+          ? this.connectedNoticeSsid
+          : connectedNoticeSsid as String?,
     );
   }
 }

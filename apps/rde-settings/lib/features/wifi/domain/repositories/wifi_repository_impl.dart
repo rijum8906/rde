@@ -10,6 +10,11 @@ class WifiRepositoryImpl implements WifiRepository {
   WifiRepositoryImpl(this._wifiDatasource);
 
   @override
+  Stream<void> watchChanges() {
+    return _wifiDatasource.watchChanges();
+  }
+
+  @override
   Future<Either<Failure, List<WifiNetwork>>> scanNetworks() async {
     final res = await _wifiDatasource.scanNetworks();
     return res.mapLeft((error) => Failure(error.message));

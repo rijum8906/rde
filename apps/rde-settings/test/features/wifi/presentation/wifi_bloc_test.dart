@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:rde_settings/core/errors/rde_error.dart';
@@ -12,6 +14,12 @@ class _FakeWifiRepository implements WifiRepository {
   bool failConnect = false;
   String? currentSsid;
   String? lastPassword;
+
+  /// Stands in for the NetworkManager signal stream.
+  final StreamController<void> changes = StreamController<void>.broadcast();
+
+  /// Pretends the daemon pushed a change the page has to show.
+  void notifyChange() => changes.add(null);
 
   final List<WifiNetwork> networks = [
     WifiNetwork(ssid: 'Home', security: 'WPA2', strength: '80%'),
@@ -90,6 +98,9 @@ class _FakeWifiRepository implements WifiRepository {
   Future<Either<Failure, void>> setWifiEnabled(bool enabled) async {
     return const Right(null);
   }
+
+  @override
+  Stream<void> watchChanges() => changes.stream;
 }
 
 void main() {
@@ -132,6 +143,59 @@ void main() {
     expect(state.passwordPromptSsid, isNull);
     expect(state.errorMessage, 'The saved password is outdated.');
     expect(repository.lastPassword, 'wrong');
+
+    await bloc.close();
+  });
+
+  test('a successful connection raises the connect notice', () async {
+    final repository = _FakeWifiRepository();
+    final bloc = WifiBloc(wifiRepository: repository);
+
+    bloc.add(const WifiInitEvent());
+    await bloc.stream.firstWhere((state) => state.status == WifiStatus.success);
+
+    final connected = bloc.stream.firstWhere(
+      (state) => state.connectedSsid == 'Home',
+    );
+    bloc.add(const ConnectToNetworkEvent('Home'));
+    final state = await connected;
+
+    expect(state.connectedNoticeSsid, 'Home');
+
+    await bloc.close();
+  });
+
+  test('opening the page on a connected network raises no notice', () async {
+    final repository = _FakeWifiRepository()..currentSsid = 'Home';
+    final bloc = WifiBloc(wifiRepository: repository);
+
+    bloc.add(const WifiInitEvent());
+    final state = await bloc.stream.firstWhere(
+      (candidate) => candidate.status == WifiStatus.success,
+    );
+
+    expect(state.connectedSsid, 'Home');
+    expect(state.connectedNoticeSsid, isNull);
+
+    await bloc.close();
+  });
+
+  test('a NetworkManager signal refreshes the page without a notice', () async {
+    final repository = _FakeWifiRepository();
+    final bloc = WifiBloc(wifiRepository: repository);
+
+    bloc.add(const WifiInitEvent());
+    await bloc.stream.firstWhere((state) => state.status == WifiStatus.success);
+
+    // Another client joins the network, then the daemon reports it.
+    repository.currentSsid = 'Cafe';
+    final refreshed = bloc.stream.firstWhere(
+      (state) => state.connectedSsid == 'Cafe',
+    );
+    repository.notifyChange();
+    final state = await refreshed;
+
+    expect(state.connectedNoticeSsid, isNull);
 
     await bloc.close();
   });

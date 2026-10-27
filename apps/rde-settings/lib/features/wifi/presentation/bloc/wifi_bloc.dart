@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:rde_settings/core/errors/rde_error.dart';
@@ -13,6 +15,12 @@ import 'wifi_state.dart';
 class WifiBloc extends Bloc<WifiEvent, WifiState> {
   final WifiRepository _wifiRepository;
 
+  /// Live updates pushed by NetworkManager while the page is open.
+  late final StreamSubscription<void> _changes;
+
+  /// Collapses a burst of daemon signals into a single refresh.
+  Timer? _changeDebounce;
+
   WifiBloc({required this._wifiRepository}) : super(WifiState.initial()) {
     on<WifiInitEvent>(_onInit);
     on<ScanNetworksEvent>(_onScanNetworks);
@@ -21,6 +29,23 @@ class WifiBloc extends Bloc<WifiEvent, WifiState> {
     on<DismissPasswordPromptEvent>(_onDismissPasswordPrompt);
     on<LoadSavedNetworksEvent>(_onLoadSavedNetworks);
     on<ForgetSavedNetworkEvent>(_onForgetSavedNetwork);
+    on<WifiServiceChangedEvent>(_onServiceChanged);
+
+    // NetworkManager owns the radio, the association, the scan results, and the
+    // saved profiles, and any client can change them. Listening to its signals
+    // keeps the page showing the daemon's state instead of a snapshot taken
+    // when it was opened.
+    _changes = _wifiRepository.watchChanges().listen(
+      (_) => add(const WifiServiceChangedEvent()),
+      onError: (Object _) {},
+    );
+  }
+
+  @override
+  Future<void> close() async {
+    _changeDebounce?.cancel();
+    await _changes.cancel();
+    return super.close();
   }
 
   Future<void> _onInit(WifiInitEvent event, Emitter<WifiState> emit) async {
@@ -49,6 +74,7 @@ class WifiBloc extends Bloc<WifiEvent, WifiState> {
           networks: const [],
           savedNetworks: const [],
           connectedSsid: null,
+          connectedNoticeSsid: null,
         ),
       );
       return;
@@ -63,6 +89,25 @@ class WifiBloc extends Bloc<WifiEvent, WifiState> {
   ) async {
     emit(state.copyWith(status: WifiStatus.loading, errorMessage: null));
     await _refresh(emit);
+  }
+
+  /// Refreshes the page after a daemon signal.
+  ///
+  /// One daemon action produces several signals — a scan alone adds an access
+  /// point per network — so the refresh waits for the burst to settle. The page
+  /// keeps showing its current content until then, and a connect request in
+  /// flight is left alone because it refreshes when it finishes.
+  void _onServiceChanged(
+    WifiServiceChangedEvent event,
+    Emitter<WifiState> emit,
+  ) {
+    _changeDebounce?.cancel();
+    _changeDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (state.connectingSsid != null) {
+        return;
+      }
+      add(const ScanNetworksEvent());
+    });
   }
 
   Future<void> _onToggleWifiRadio(
@@ -90,6 +135,7 @@ class WifiBloc extends Bloc<WifiEvent, WifiState> {
           networks: const [],
           savedNetworks: const [],
           connectedSsid: null,
+          connectedNoticeSsid: null,
         ),
       );
       return;
@@ -134,6 +180,8 @@ class WifiBloc extends Bloc<WifiEvent, WifiState> {
         connectingSsid: null,
         connectedSsid: event.ssid,
         passwordPromptSsid: null,
+        // Only a connection the user asked for raises a notification.
+        connectedNoticeSsid: event.ssid,
       ),
     );
 
@@ -202,6 +250,29 @@ class WifiBloc extends Bloc<WifiEvent, WifiState> {
   /// The read order keeps the page useful on partial failures: a scan failure is
   /// reported, while a missing current network simply means "disconnected".
   Future<void> _refresh(Emitter<WifiState> emit) async {
+    // Step 1: Re-read the radio, because another client can turn it off while
+    // the page is open. A failed read keeps the state the page already shows.
+    var enabled = state.isWifiEnabled;
+    final enabledResult = await _wifiRepository.isWifiEnabled();
+    enabledResult.fold((_) {}, (value) => enabled = value);
+
+    if (!enabled) {
+      emit(
+        state.copyWith(
+          status: WifiStatus.success,
+          isWifiEnabled: false,
+          networks: const [],
+          savedNetworks: const [],
+          connectedSsid: null,
+          connectedNoticeSsid: null,
+          errorMessage: null,
+        ),
+      );
+      return;
+    }
+
+    // Step 2: Read the visible networks, the current association, and the
+    // saved profiles.
     final scanResult = await _wifiRepository.scanNetworks();
     final currentResult = await _wifiRepository.getCurrentNetwork();
     final savedResult = await _wifiRepository.getSavedNetworks();
@@ -239,11 +310,15 @@ class WifiBloc extends Bloc<WifiEvent, WifiState> {
     emit(
       state.copyWith(
         status: WifiStatus.success,
+        isWifiEnabled: enabled,
         networks: list,
         savedNetworks: saved,
         connectedSsid: current?.ssid,
         passwordPromptSsid: null,
         errorMessage: null,
+        // The state read back from the daemon never notifies on its own: a
+        // network that was already connected stays quiet.
+        connectedNoticeSsid: null,
       ),
     );
   }

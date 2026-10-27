@@ -135,8 +135,8 @@ class _WifiViewState extends State<WifiView> {
       listenWhen: (previous, current) =>
           (current.passwordPromptSsid != null &&
               previous.passwordPromptSsid != current.passwordPromptSsid) ||
-          (current.connectedSsid != null &&
-              previous.connectedSsid != current.connectedSsid),
+          (current.connectedNoticeSsid != null &&
+              previous.connectedNoticeSsid != current.connectedNoticeSsid),
       listener: (context, state) {
         // A saved profile failed to activate: ask for a password now.
         final promptSsid = state.passwordPromptSsid;
@@ -153,9 +153,15 @@ class _WifiViewState extends State<WifiView> {
           return;
         }
 
+        // Only a connection the user asked for is announced: a network that was
+        // already connected, or one another client joined, stays quiet.
+        final noticeSsid = state.connectedNoticeSsid;
+        if (noticeSsid == null) {
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Connected to ${state.connectedSsid}'),
+            content: Text('Connected to $noticeSsid'),
             behavior: SnackBarBehavior.floating,
           ),
         );

@@ -9,6 +9,11 @@ class DbusWifiDatasource {
 
   final NetworkManagerProxy _networkManager;
 
+  /// Watches NetworkManager for events that change what the page shows.
+  Stream<void> watchChanges() {
+    return _networkManager.watchChanges();
+  }
+
   /// Requests a scan and returns the visible networks.
   Future<Either<RdeError, List<WifiNetwork>>> scanNetworks() {
     return _networkManager.scanNetworks();

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dbus/dbus.dart';
@@ -117,6 +118,179 @@ class NetworkManagerProxy {
         DBusBoolean(enabled),
       );
     });
+  }
+
+  /// Watches the signals that change what the Wi-Fi page shows.
+  ///
+  /// The page is a live view rather than a snapshot: a radio toggled from a
+  /// terminal, a connection activated by another client, an access point that
+  /// appears or disappears, and a profile that is added or deleted all have to
+  /// reach it without the user pressing Rescan. The daemon sends no single
+  /// "the Wi-Fi state changed" signal, so every watch below is subscribed and
+  /// their events are collapsed into one stream. Events carry no payload,
+  /// because the page reads the authoritative state back from NetworkManager.
+  ///
+  /// # Returns
+  /// A broadcast stream that emits once per relevant NetworkManager signal.
+  ///
+  /// # Errors
+  /// The stream never reports errors: signals are a best-effort live update,
+  /// and a filter the daemon rejects is ignored so the page keeps working.
+  Stream<void> watchChanges() {
+    late final StreamController<void> controller;
+    var rootSubscriptions = <StreamSubscription<DBusSignal>>[];
+    var deviceSubscriptions = <StreamSubscription<DBusSignal>>[];
+    var cancelled = false;
+
+    // Step 1: Publish one event to every listener, tolerating late arrivals.
+    void emit() {
+      if (!cancelled && controller.hasListener) {
+        controller.add(null);
+      }
+    }
+
+    // Step 2: Subscribe to one signal of one object. A rejected signal filter
+    // is swallowed so a single unsupported signal cannot break the live view.
+    StreamSubscription<DBusSignal> subscribe(
+      DBusObjectPath path,
+      String signalInterface,
+      String name, {
+      DBusSignature? signature,
+      void Function()? onSignal,
+    }) {
+      final object = DBusRemoteObject(client, name: serviceName, path: path);
+      return DBusRemoteObjectSignalStream(
+        object: object,
+        interface: signalInterface,
+        name: name,
+        signature: signature,
+      ).listen(
+        (_) {
+          onSignal?.call();
+          emit();
+        },
+        onError: (Object _) {
+          // Live updates are best effort; user actions still refresh the page.
+        },
+      );
+    }
+
+    // Step 3: Wi-Fi devices come and go, so their subscriptions are rebuilt
+    // whenever the daemon reports a device was added or removed.
+    Future<void> subscribeDevices() async {
+      for (final subscription in deviceSubscriptions) {
+        await subscription.cancel();
+      }
+      deviceSubscriptions = [];
+      if (cancelled) {
+        return;
+      }
+
+      final result = await devices();
+      final paths = result.fold((_) => const <String>[], (value) => value);
+      if (cancelled) {
+        return;
+      }
+
+      for (final path in paths) {
+        final devicePath = DBusObjectPath(path);
+
+        // Any device property change reports association state, while the two
+        // access point signals report the scan results behind the list.
+        deviceSubscriptions.add(
+          subscribe(
+            devicePath,
+            propertiesInterface,
+            'PropertiesChanged',
+            signature: DBusSignature('sa{sv}as'),
+          ),
+        );
+        deviceSubscriptions.add(
+          subscribe(
+            devicePath,
+            wirelessInterface,
+            'AccessPointAdded',
+            signature: DBusSignature('o'),
+          ),
+        );
+        deviceSubscriptions.add(
+          subscribe(
+            devicePath,
+            wirelessInterface,
+            'AccessPointRemoved',
+            signature: DBusSignature('o'),
+          ),
+        );
+      }
+    }
+
+    // Step 4: Keep the watches alive for exactly as long as the page listens.
+    controller = StreamController<void>.broadcast(
+      onListen: () async {
+        // Step 4a: The root object carries the radio state and the list of
+        // active connections, and reports adapters as they are plugged in.
+        rootSubscriptions.add(
+          subscribe(
+            nmObjectPath,
+            propertiesInterface,
+            'PropertiesChanged',
+            signature: DBusSignature('sa{sv}as'),
+          ),
+        );
+        rootSubscriptions.add(
+          subscribe(
+            nmObjectPath,
+            nmInterface,
+            'DeviceAdded',
+            signature: DBusSignature('o'),
+            onSignal: () => unawaited(subscribeDevices()),
+          ),
+        );
+        rootSubscriptions.add(
+          subscribe(
+            nmObjectPath,
+            nmInterface,
+            'DeviceRemoved',
+            signature: DBusSignature('o'),
+            onSignal: () => unawaited(subscribeDevices()),
+          ),
+        );
+
+        // Step 4b: The settings registry reports saved profiles being added
+        // and removed, including by other clients.
+        rootSubscriptions.add(
+          subscribe(
+            settingsPath,
+            settingsInterface,
+            'ConnectionAdded',
+            signature: DBusSignature('o'),
+          ),
+        );
+        rootSubscriptions.add(
+          subscribe(
+            settingsPath,
+            settingsInterface,
+            'ConnectionRemoved',
+            signature: DBusSignature('o'),
+          ),
+        );
+
+        // Step 4c: Finally watch the adapters themselves.
+        await subscribeDevices();
+      },
+      onCancel: () async {
+        cancelled = true;
+        for (final subscription in rootSubscriptions) {
+          await subscription.cancel();
+        }
+        rootSubscriptions = [];
+        for (final subscription in deviceSubscriptions) {
+          await subscription.cancel();
+        }
+        deviceSubscriptions = [];
+      },
+    );
+    return controller.stream;
   }
 
   /// Requests a scan and returns the visible access points.
