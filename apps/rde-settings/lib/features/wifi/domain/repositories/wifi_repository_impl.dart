@@ -42,15 +42,15 @@ class WifiRepositoryImpl implements WifiRepository {
   }
 
   @override
-  Future<Either<Failure, WifiNetwork>> getCurrentNetwork() async {
-    return Right(
-      WifiNetwork(ssid: 'RDE-Net', security: 'WPA2/WPA3', strength: '95%'),
-    );
+  Future<Either<Failure, WifiNetwork?>> getCurrentNetwork() async {
+    final res = await _wifiDatasource.getCurrentNetwork();
+    return res.mapLeft((error) => Failure(error.message));
   }
 
   @override
   Future<Either<Failure, int>> getNetworkPriority(WifiNetwork network) async {
-    return const Right(0);
+    final res = await _wifiDatasource.getNetworkPriority(network.ssid);
+    return res.mapLeft((error) => Failure(error.message));
   }
 
   @override
@@ -64,6 +64,22 @@ class WifiRepositoryImpl implements WifiRepository {
     WifiNetwork network,
     int priority,
   ) async {
-    return const Right(null);
+    final res = await _wifiDatasource.setNetworkPriority(
+      network.ssid,
+      priority,
+    );
+    return res.mapLeft((error) => Failure(error.message));
+  }
+
+  @override
+  Future<Either<Failure, bool>> isWifiEnabled() async {
+    final res = await _wifiDatasource.getEnabled();
+    return res.mapLeft((error) => Failure(error.message));
+  }
+
+  @override
+  Future<Either<Failure, void>> setWifiEnabled(bool enabled) async {
+    final res = await _wifiDatasource.setEnabled(enabled);
+    return res.mapLeft((error) => Failure(error.message));
   }
 }

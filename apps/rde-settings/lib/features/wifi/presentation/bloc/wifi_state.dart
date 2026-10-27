@@ -3,6 +3,9 @@ import 'package:rde_settings/features/wifi/domain/entities/wifi_network.dart';
 enum WifiStatus { initial, loading, success, failure }
 
 class WifiState {
+  /// Sentinel that distinguishes "keep the value" from "set it to null".
+  static const Object _unset = Object();
+
   final WifiStatus status;
   final bool isWifiEnabled;
   final List<WifiNetwork> networks;
@@ -10,6 +13,9 @@ class WifiState {
   final String? connectedSsid;
   final String? connectingSsid;
   final String? errorMessage;
+
+  /// Network whose saved-profile connection failed and that needs a password.
+  final String? passwordPromptSsid;
 
   const WifiState({
     required this.status,
@@ -19,6 +25,7 @@ class WifiState {
     this.connectedSsid,
     this.connectingSsid,
     this.errorMessage,
+    this.passwordPromptSsid,
   });
 
   factory WifiState.initial() {
@@ -27,7 +34,6 @@ class WifiState {
       isWifiEnabled: true,
       networks: [],
       savedNetworks: [],
-      connectedSsid: 'RDE-Net',
     );
   }
 
@@ -36,18 +42,28 @@ class WifiState {
     bool? isWifiEnabled,
     List<WifiNetwork>? networks,
     List<WifiNetwork>? savedNetworks,
-    String? connectedSsid,
-    String? connectingSsid,
-    String? errorMessage,
+    Object? connectedSsid = _unset,
+    Object? connectingSsid = _unset,
+    Object? errorMessage = _unset,
+    Object? passwordPromptSsid = _unset,
   }) {
     return WifiState(
       status: status ?? this.status,
       isWifiEnabled: isWifiEnabled ?? this.isWifiEnabled,
       networks: networks ?? this.networks,
       savedNetworks: savedNetworks ?? this.savedNetworks,
-      connectedSsid: connectedSsid,
-      connectingSsid: connectingSsid,
-      errorMessage: errorMessage ?? this.errorMessage,
+      connectedSsid: identical(connectedSsid, _unset)
+          ? this.connectedSsid
+          : connectedSsid as String?,
+      connectingSsid: identical(connectingSsid, _unset)
+          ? this.connectingSsid
+          : connectingSsid as String?,
+      errorMessage: identical(errorMessage, _unset)
+          ? this.errorMessage
+          : errorMessage as String?,
+      passwordPromptSsid: identical(passwordPromptSsid, _unset)
+          ? this.passwordPromptSsid
+          : passwordPromptSsid as String?,
     );
   }
 }
