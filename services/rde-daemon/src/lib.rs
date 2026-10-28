@@ -33,5 +33,6 @@
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 pub mod app;
+pub mod backend;
 pub mod handler;
 pub mod ipc;
