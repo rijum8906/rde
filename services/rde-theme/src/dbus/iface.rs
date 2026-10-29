@@ -6,11 +6,7 @@
 //! compatibility across toolkit consumers (C/GTK, Flutter, Qt, Shell scripts).
 
 use std::{collections::HashMap, sync::Arc};
-use zbus::{
-    interface,
-    object_server::SignalEmitter,
-    zvariant::{OwnedValue, Value},
-};
+use zbus::{OwnedVariant, Variant, interface, object_server::SignalEmitter};
 
 use crate::{
     domain::{
@@ -320,14 +316,14 @@ impl PortalSettingsInterface {
 #[interface(name = "org.freedesktop.portal.Settings")]
 impl PortalSettingsInterface {
     /// Returns the active color-scheme setting (1 = Dark, 2 = Light).
-    pub async fn read(&self, namespace: &str, key: &str) -> zbus::fdo::Result<OwnedValue> {
+    pub async fn read(&self, namespace: &str, key: &str) -> zbus::fdo::Result<OwnedVariant> {
         if namespace == "org.freedesktop.appearance" && key == "color-scheme" {
             let state = self.service.current_state().await;
             let code: u32 = match state.mode {
                 ThemeMode::Dark => 1,
                 ThemeMode::Light => 2,
             };
-            Ok(OwnedValue::from(code))
+            Ok(OwnedVariant::from(code))
         } else {
             Err(zbus::fdo::Error::Failed("Key not found".into()))
         }
@@ -337,7 +333,7 @@ impl PortalSettingsInterface {
     pub async fn read_all(
         &self,
         namespaces: Vec<String>,
-    ) -> zbus::fdo::Result<HashMap<String, HashMap<String, OwnedValue>>> {
+    ) -> zbus::fdo::Result<HashMap<String, HashMap<String, OwnedVariant>>> {
         let mut result = HashMap::new();
         if namespaces.contains(&"org.freedesktop.appearance".to_string()) || namespaces.is_empty() {
             let state = self.service.current_state().await;
@@ -346,7 +342,7 @@ impl PortalSettingsInterface {
                 ThemeMode::Light => 2,
             };
             let mut appearance_map = HashMap::new();
-            appearance_map.insert("color-scheme".to_string(), OwnedValue::from(code));
+            appearance_map.insert("color-scheme".to_string(), OwnedVariant::from(code));
             result.insert("org.freedesktop.appearance".to_string(), appearance_map);
         }
         Ok(result)
@@ -358,7 +354,7 @@ impl PortalSettingsInterface {
         signal_ctxt: &SignalEmitter<'_>,
         namespace: &str,
         key: &str,
-        value: Value<'_>,
+        value: Variant<'_>,
     ) -> zbus::Result<()>;
 }
 
@@ -389,7 +385,7 @@ pub fn spawn_dbus_signal_broadcaster(connection: zbus::Connection, service: Arc<
                     &portal_emitter,
                     "org.freedesktop.appearance",
                     "color-scheme",
-                    Value::U32(code),
+                    Variant::U32(code),
                 )
                 .await;
             }

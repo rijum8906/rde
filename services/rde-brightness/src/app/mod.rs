@@ -164,9 +164,9 @@ impl App {
 
         // Step 2: Publish the object and own the well-known name. `name()`
         // acquires the name as part of `build()`, so no second request is needed.
-        let connection = zbus::connection::Builder::session()?
-            .name(DBUS_SERVICE_NAME)?
-            .serve_at(DBUS_OBJECT_PATH, interface)?
+        let connection = zbus::connection::Builder::session()
+            .name(DBUS_SERVICE_NAME)
+            .serve_at(DBUS_OBJECT_PATH, interface)
             .build()
             .await?;
 

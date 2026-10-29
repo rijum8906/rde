@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 use std::{fmt, ops::Deref};
 use thiserror::Error;
-use zbus::zvariant::Type;
+use zbus::{Basic, Type};
 
 /// Validation errors for theme and variant identifiers.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -179,6 +179,11 @@ impl From<ThemeId> for String {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Type)]
 #[serde(try_from = "String", into = "String")]
 pub struct VariantId(String);
+
+impl Basic for VariantId {
+    const SIGNATURE_CHAR: char = String::SIGNATURE_CHAR;
+    const SIGNATURE_STR: &'static str = String::SIGNATURE_STR;
+}
 
 impl VariantId {
     /// Conventional variant name for standard light mode.

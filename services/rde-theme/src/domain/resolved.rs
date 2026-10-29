@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use std::{fmt, ops::Deref};
 use thiserror::Error;
-use zbus::zvariant::{Optional, Type};
+use zbus::{Optional, zvariant::Type};
 
 use crate::domain::identity::{ThemeId, VariantId};
 

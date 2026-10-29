@@ -130,13 +130,9 @@ impl App {
         let portal = PortalSettingsInterface::new(self.service.clone());
 
         let connection = zbus::connection::Builder::session()
-            .map_err(RdeError::Dbus)?
             .name(DBUS_SERVICE_NAME)
-            .map_err(RdeError::Dbus)?
             .serve_at(THEME_OBJECT_PATH, iface)
-            .map_err(RdeError::Dbus)?
             .serve_at(PORTAL_OBJECT_PATH, portal)
-            .map_err(RdeError::Dbus)?
             .build()
             .await
             .map_err(RdeError::Dbus)?;
