@@ -1,14 +1,7 @@
 import 'package:core/core.dart';
 import 'package:flutter/material.dart';
 
-/// # Launcher States
-///
-/// Placeholders shared by the launcher while the catalog loads, matches
-/// nothing, or fails to load.
-
-/// Shown while the installed application catalog is being indexed.
 class LauncherLoading extends StatelessWidget {
-  /// Creates the loading placeholder.
   const LauncherLoading({super.key});
 
   @override
@@ -18,11 +11,11 @@ class LauncherLoading extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const RdeLoadingIndicator(size: 46),
-          const SizedBox(height: 18),
+          const RdeLoadingIndicator(size: 42),
+          const SizedBox(height: 16),
           Text(
             'Indexing your applications…',
-            style: Theme.of(context).textTheme.bodyMedium
+            style: Theme.of(context).textTheme.bodySmall
                 ?.copyWith(color: colors.onSurfaceVariant),
           ),
         ],
@@ -31,16 +24,7 @@ class LauncherLoading extends StatelessWidget {
   }
 }
 
-/// Shown when there is nothing to list or discovery failed.
 class LauncherMessage extends StatelessWidget {
-  /// Creates the message placeholder.
-  ///
-  /// # Parameters
-  /// - [icon]: leading glyph.
-  /// - [title]: short headline.
-  /// - [message]: supporting line.
-  /// - [actionLabel]: optional recovery action label.
-  /// - [onAction]: optional recovery action callback.
   const LauncherMessage({
     required this.icon,
     required this.title,
@@ -50,19 +34,10 @@ class LauncherMessage extends StatelessWidget {
     super.key,
   });
 
-  /// Leading glyph.
   final IconData icon;
-
-  /// Short headline.
   final String title;
-
-  /// Supporting line.
   final String message;
-
-  /// Optional recovery action label.
   final String? actionLabel;
-
-  /// Optional recovery action callback.
   final VoidCallback? onAction;
 
   @override
@@ -70,17 +45,15 @@ class LauncherMessage extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
-    // Step 1: Reveal the placeholder once when it replaces the list, so an
-    // empty search does not snap into place.
     return Center(
       child: TweenAnimationBuilder<double>(
         tween: Tween(begin: 0, end: 1),
-        duration: const Duration(milliseconds: 260),
+        duration: const Duration(milliseconds: 220),
         curve: Curves.easeOutCubic,
         builder: (context, value, child) => Opacity(
           opacity: value,
           child: Transform.translate(
-            offset: Offset(0, 10 * (1 - value)),
+            offset: Offset(0, 8 * (1 - value)),
             child: child,
           ),
         ),
@@ -88,18 +61,18 @@ class LauncherMessage extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 62,
-              height: 62,
+              width: 56,
+              height: 56,
               decoration: BoxDecoration(
                 color: colors.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(18),
                 border: Border.all(
                   color: colors.outlineVariant.withValues(alpha: 0.5),
                 ),
               ),
-              child: Icon(icon, size: 28, color: colors.onSurfaceVariant),
+              child: Icon(icon, size: 26, color: colors.onSurfaceVariant),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             Text(
               title,
               textAlign: TextAlign.center,
@@ -107,9 +80,9 @@ class LauncherMessage extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 4),
             SizedBox(
-              width: 300,
+              width: 280,
               child: Text(
                 message,
                 textAlign: TextAlign.center,

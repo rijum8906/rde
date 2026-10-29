@@ -97,18 +97,7 @@ class DesktopApplicationRepository implements ApplicationRepository {
 
   @override
   Future<void> launch(DesktopApplication application) async {
-    // Step 1: Use the desktop ID, not the Exec string, so GTK applies the
-    // desktop-entry rules for field codes, environment, and terminal apps.
-    final result = await Process.run('gtk-launch', [application.id]);
-    if (result.exitCode != 0) {
-      final details = result.stderr.toString().trim();
-      throw ProcessException(
-        'gtk-launch',
-        [application.id],
-        details.isEmpty ? 'Application launch failed' : details,
-        result.exitCode,
-      );
-    }
+    Process.run('gio', ['launch', application.desktopFile]);
   }
 
   Future<Map<String, String>?> _readDesktopEntry(File file) async {

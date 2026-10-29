@@ -1,17 +1,12 @@
 import 'package:core/theme.dart';
 import 'package:flutter/material.dart';
 
-/// # Launcher Search Field
+/// The launcher's primary input.
 ///
-/// Large, focus-aware search field that makes the entry point of the launcher
-/// the visually dominant element.
+/// A large, rounded search field with a focus halo. The field is the anchor
+/// of the launcher: everything else (header, results, footer) is arranged
+/// around it, so its visual weight matches its role.
 class LauncherSearchField extends StatefulWidget {
-  /// Creates the search field.
-  ///
-  /// # Parameters
-  /// - [controller]: text controller owned by the page.
-  /// - [focusNode]: focus node that also receives launcher navigation keys.
-  /// - [onChanged]: called with every edited query.
   const LauncherSearchField({
     required this.controller,
     required this.focusNode,
@@ -19,13 +14,8 @@ class LauncherSearchField extends StatefulWidget {
     super.key,
   });
 
-  /// Text controller owned by the page.
   final TextEditingController controller;
-
-  /// Focus node that also receives launcher navigation keys.
   final FocusNode focusNode;
-
-  /// Called with every edited query.
   final ValueChanged<String> onChanged;
 
   @override
@@ -38,9 +28,6 @@ class _LauncherSearchFieldState extends State<LauncherSearchField> {
   @override
   void initState() {
     super.initState();
-
-    // Step 1: Track focus so the field can grow a colored halo while the user
-    // types, without reserving the halo while the window is idle.
     widget.focusNode.addListener(_handleFocusChange);
     _focused = widget.focusNode.hasFocus;
   }
@@ -52,9 +39,7 @@ class _LauncherSearchFieldState extends State<LauncherSearchField> {
   }
 
   void _handleFocusChange() {
-    if (!mounted || widget.focusNode.hasFocus == _focused) {
-      return;
-    }
+    if (!mounted || widget.focusNode.hasFocus == _focused) return;
     setState(() => _focused = widget.focusNode.hasFocus);
   }
 
@@ -68,26 +53,24 @@ class _LauncherSearchFieldState extends State<LauncherSearchField> {
       duration: motion.short,
       curve: motion.standard,
       decoration: BoxDecoration(
-        color: _focused
-            ? colors.surfaceContainerHigh
-            : colors.surfaceContainerHigh.withValues(alpha: 0.62),
-        borderRadius: BorderRadius.circular(18),
+        color: colors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: _focused
-              ? colors.primary.withValues(alpha: 0.85)
+              ? colors.primary.withValues(alpha: 0.7)
               : colors.outlineVariant.withValues(alpha: 0.5),
-          width: _focused ? 1.6 : 1,
+          width: _focused ? 1.5 : 1,
         ),
         boxShadow: _focused
             ? [
                 BoxShadow(
-                  color: colors.primary.withValues(alpha: 0.18),
-                  blurRadius: 22,
-                  spreadRadius: 1,
-                  offset: const Offset(0, 6),
+                  color: colors.primary.withValues(alpha: 0.20),
+                  blurRadius: 28,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 8),
                 ),
               ]
-            : const [],
+            : null,
       ),
       child: TextField(
         controller: widget.controller,
@@ -96,62 +79,30 @@ class _LauncherSearchFieldState extends State<LauncherSearchField> {
         onChanged: widget.onChanged,
         textInputAction: TextInputAction.search,
         cursorColor: colors.primary,
-        style: theme.textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w500,
-          letterSpacing: -0.2,
+        style: theme.textTheme.titleLarge?.copyWith(
+          fontWeight: FontWeight.w400,
+          letterSpacing: -0.3,
         ),
         decoration: InputDecoration(
           hintText: 'Search applications…',
-          hintStyle: theme.textTheme.titleMedium?.copyWith(
-            color: colors.onSurfaceVariant.withValues(alpha: 0.72),
+          hintStyle: theme.textTheme.titleLarge?.copyWith(
+            color: colors.onSurfaceVariant.withValues(alpha: 0.6),
             fontWeight: FontWeight.w400,
+            letterSpacing: -0.3,
           ),
           prefixIcon: Padding(
-            padding: const EdgeInsets.only(left: 6, right: 2),
-            child: AnimatedSwitcher(
-              duration: motion.short,
-              child: Icon(
-                _focused ? Icons.search_rounded : Icons.search_outlined,
-                key: ValueKey(_focused),
-                color: _focused ? colors.primary : colors.onSurfaceVariant,
-                size: 23,
-              ),
+            padding: const EdgeInsets.only(left: 18, right: 10),
+            child: Icon(
+              Icons.search_rounded,
+              color: _focused ? colors.primary : colors.onSurfaceVariant,
+              size: 24,
             ),
-          ),
-          suffixIcon: const Padding(
-            padding: EdgeInsets.only(right: 10),
-            child: _EscapeHint(),
           ),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(vertical: 20),
-        ),
-      ),
-    );
-  }
-}
-
-/// Compact `esc` keycap shown while the search field is empty.
-class _EscapeHint extends StatelessWidget {
-  const _EscapeHint();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: colors.outlineVariant),
-      ),
-      child: Text(
-        'esc',
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: colors.onSurfaceVariant,
-          fontWeight: FontWeight.w600,
         ),
       ),
     );

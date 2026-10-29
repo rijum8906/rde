@@ -1,17 +1,7 @@
 import 'package:core/theme.dart';
 import 'package:flutter/material.dart';
 
-/// # Category Filter Bar
-///
-/// Horizontal set of animated category chips that narrows the application list
-/// without typing, keeping the launcher useful for browsing.
 class CategoryFilterBar extends StatelessWidget {
-  /// Creates the category filter bar.
-  ///
-  /// # Parameters
-  /// - [categories]: display labels available in the loaded catalog.
-  /// - [selected]: active label, or an empty string for every category.
-  /// - [onSelected]: called with the tapped label.
   const CategoryFilterBar({
     required this.categories,
     required this.selected,
@@ -19,28 +9,21 @@ class CategoryFilterBar extends StatelessWidget {
     super.key,
   });
 
-  /// Display labels available in the loaded catalog.
   final List<String> categories;
-
-  /// Active label, or an empty string for every category.
   final String selected;
-
-  /// Called with the tapped label.
   final ValueChanged<String> onSelected;
 
   @override
   Widget build(BuildContext context) {
-    if (categories.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    if (categories.isEmpty) return const SizedBox.shrink();
 
     return SizedBox(
-      height: 34,
+      height: 30,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         itemCount: categories.length + 1,
-        separatorBuilder: (context, index) => const SizedBox(width: 7),
+        separatorBuilder: (context, index) => const SizedBox(width: 6),
         itemBuilder: (context, index) {
           final label = index == 0 ? '' : categories[index - 1];
           return _CategoryChip(
@@ -54,7 +37,6 @@ class CategoryFilterBar extends StatelessWidget {
   }
 }
 
-/// Pill-shaped filter chip with an animated selection fill.
 class _CategoryChip extends StatelessWidget {
   const _CategoryChip({
     required this.label,
@@ -68,7 +50,8 @@ class _CategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final motion = RdeThemeMotion.of(context);
 
     return MouseRegion(
@@ -78,30 +61,25 @@ class _CategoryChip extends StatelessWidget {
         child: AnimatedContainer(
           duration: motion.short,
           curve: motion.standard,
-          padding: const EdgeInsets.symmetric(horizontal: 13),
+          padding: const EdgeInsets.symmetric(horizontal: 11),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: selected ? colors.primary : colors.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(20),
+            color: selected
+                ? colors.secondaryContainer
+                : colors.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(15),
             border: Border.all(
               color: selected
-                  ? colors.primary
-                  : colors.outlineVariant.withValues(alpha: 0.55),
+                  ? colors.secondary.withValues(alpha: 0.4)
+                  : colors.outlineVariant.withValues(alpha: 0.4),
             ),
-            boxShadow: selected
-                ? [
-                    BoxShadow(
-                      color: colors.primary.withValues(alpha: 0.28),
-                      blurRadius: 12,
-                      offset: const Offset(0, 3),
-                    ),
-                  ]
-                : const [],
           ),
           child: AnimatedDefaultTextStyle(
             duration: motion.short,
-            style: Theme.of(context).textTheme.labelMedium!.copyWith(
-              color: selected ? colors.onPrimary : colors.onSurfaceVariant,
+            style: theme.textTheme.labelSmall!.copyWith(
+              color: selected
+                  ? colors.onSecondaryContainer
+                  : colors.onSurfaceVariant,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             ),
             child: Text(label),

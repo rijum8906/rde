@@ -1,26 +1,13 @@
 import 'package:flutter/material.dart';
 
-/// # Launcher Footer
-///
-/// Shows the match summary and the keyboard affordances available on the
-/// launcher surface.
 class LauncherFooter extends StatelessWidget {
-  /// Creates the launcher footer.
-  ///
-  /// # Parameters
-  /// - [resultCount]: number of matches currently listed.
-  /// - [hasQuery]: whether a search query or category filter is active, which
-  ///   makes Escape clear the filters instead of closing the launcher.
   const LauncherFooter({
     required this.resultCount,
     required this.hasQuery,
     super.key,
   });
 
-  /// Number of matches currently listed.
   final int resultCount;
-
-  /// Whether a search query or category filter is active.
   final bool hasQuery;
 
   @override
@@ -30,55 +17,62 @@ class LauncherFooter extends StatelessWidget {
 
     return Row(
       children: [
-        Icon(Icons.apps_rounded, size: 14, color: colors.onSurfaceVariant),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            resultCount == 1 ? '1 application' : '$resultCount applications',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: colors.onSurfaceVariant,
-            ),
+        Text(
+          resultCount == 1 ? '1 result' : '$resultCount results',
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: colors.onSurfaceVariant,
           ),
         ),
-        const _KeyCap(label: '↑↓'),
-        const SizedBox(width: 5),
-        Text('navigate', style: theme.textTheme.labelSmall),
-        const SizedBox(width: 10),
-        const _KeyCap(label: '↵'),
-        const SizedBox(width: 5),
-        Text('launch', style: theme.textTheme.labelSmall),
-        const SizedBox(width: 10),
-        const _KeyCap(label: 'esc'),
-        const SizedBox(width: 5),
-        Text(hasQuery ? 'clear' : 'close', style: theme.textTheme.labelSmall),
+        const Spacer(),
+        _Shortcut(keys: '↑↓', action: 'navigate'),
+        const SizedBox(width: 14),
+        _Shortcut(keys: '↵', action: 'launch'),
+        const SizedBox(width: 14),
+        _Shortcut(keys: 'esc', action: hasQuery ? 'clear' : 'close'),
       ],
     );
   }
 }
 
-/// Small keycap that documents a launcher shortcut.
-class _KeyCap extends StatelessWidget {
-  const _KeyCap({required this.label});
+class _Shortcut extends StatelessWidget {
+  const _Shortcut({required this.keys, required this.action});
 
-  final String label;
+  final String keys;
+  final String action;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: colors.outlineVariant),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: colors.onSurfaceVariant,
-          fontWeight: FontWeight.w600,
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+          decoration: BoxDecoration(
+            color: colors.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: colors.outlineVariant.withValues(alpha: 0.6),
+            ),
+          ),
+          child: Text(
+            keys,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: colors.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+              fontSize: 10,
+            ),
+          ),
         ),
-      ),
+        const SizedBox(width: 4),
+        Text(
+          action,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: colors.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 }
