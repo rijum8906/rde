@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use std::{collections::BTreeMap, path::PathBuf};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use crate::{
     backend::material::compute_color_roles,
@@ -227,7 +227,7 @@ impl ThemeRepository for DiskThemeRepository {
         // Recovery Policy:
         // 1. If themes.toml is missing: rebuild and save.
         if !path.exists() {
-            info!(path = %path.display(), "themes.toml missing; rebuilding registry from disk");
+            debug!(path = %path.display(), "themes.toml missing; rebuilding registry from disk");
             return self.rebuild_registry().await;
         }
 
