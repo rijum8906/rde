@@ -248,83 +248,74 @@ fn render_qtct_palette(colors: &ColorRoles) -> String {
 
 /// The 22 QPalette role colors of the active group, in Qt serialization order.
 ///
-/// Every accent family gets one distinct job, so a Qt app shows the whole
-/// Material scheme instead of a wash of `primary` tones:
-/// - `secondary` — filled tonal buttons (`Button`/`ButtonText`) and the bright
-///   text Qt draws on them. Using `primary` here would make every button a FAB;
-///   using `surface_container` would make it look like a label.
-/// - `primary` — selection (`Highlight`/`HighlightedText`, on the container pair
-///   so a selection is visible without shouting) and hyperlinks (`Link`).
-/// - `tertiary` — visited links (`LinkVisited`), so a visited link is a
-///   different hue from `Link` instead of a darker shade of the same one.
-/// - Neutral surface tiers — `Window` from `surface`, `Base` from
-///   `surface_container_low`, and `AlternateBase` one tier up from `Base`, so
-///   alternating list/table rows stay visible instead of collapsing into the
-///   field background. `Light`/`Midlight`/`Dark`/`Mid` are the Qt bevel steps.
-/// - `ToolTipBase`/`ToolTipText` — `inverse_surface`/`inverse_on_surface`,
-///   Material's tooltip popup: it separates itself from the window by inverting
-///   rather than by a saturated tint, which reads as deliberate in both modes.
-/// - `PlaceholderText` uses `on_surface_variant`, Material's muted text role.
+/// Every role is fed from the Material surface tier that matches its *job*,
+/// not from the accent family by default. The rule of thumb:
+/// - **Accent roles** (`Highlight`, `Link`, `Accent`) use the primary family.
+/// - **Visited/alternate accent** (`LinkVisited`) uses the tertiary family.
+/// - **Container roles** (`Button`, `ToolTipBase`) use surface tiers so a
+///   dialog of widgets reads as one surface, not a field of colored chips.
+/// - **Bevel roles** (`Light`, `Midlight`, `Dark`, `Mid`) form a monotonic
+///   ladder around `Button`, one surface tier apart, so 3D widgets extrude
+///   instead of collapsing into hard edges.
 fn active_palette(colors: &ColorRoles) -> [&Color; 22] {
     [
-        &colors.on_surface,               // WindowText
-        &colors.secondary_container,      // Button
-        &colors.surface_container_high,   // Light
-        &colors.surface_container,        // Midlight
-        &colors.surface_container_lowest, // Dark
-        &colors.outline_variant,          // Mid
-        &colors.on_surface,               // Text
-        &colors.on_secondary_container,   // BrightText
-        &colors.on_secondary_container,   // ButtonText
-        &colors.surface_container_low,    // Base
-        &colors.surface,                  // Window
-        &colors.shadow,                   // Shadow
-        &colors.primary_container,        // Highlight
-        &colors.on_primary_container,     // HighlightedText
-        &colors.primary,                  // Link
-        &colors.tertiary,                 // LinkVisited
-        &colors.surface_container,        // AlternateBase
-        &colors.surface,                  // NoRole (ignored by Qt)
-        &colors.inverse_surface,          // ToolTipBase
-        &colors.inverse_on_surface,       // ToolTipText
-        &colors.on_surface_variant,       // PlaceholderText
-        &colors.primary,                  // Accent (Qt 6.6+)
+        &colors.on_surface,                // 0  WindowText
+        &colors.surface_container_high,    // 1  Button        (was secondary_container)
+        &colors.surface_container_highest, // 2  Light         (one step lighter than Button)
+        &colors.surface_container_high,    // 3  Midlight      (between Light and Button)
+        &colors.surface_container,         // 4  Dark          (one step darker than Button)
+        &colors.outline_variant,           // 5  Mid           (low-contrast bevel midtone)
+        &colors.on_surface,                // 6  Text
+        &colors.on_surface,                // 7  BrightText    (was on_secondary_container)
+        &colors.on_surface,                // 8  ButtonText    (pairs with Button above)
+        &colors.surface_container_low,     // 9  Base
+        &colors.surface_container,         // 10 Window        (was surface — distinct from Base)
+        &colors.shadow,                    // 11 Shadow
+        &colors.primary_container,         // 12 Highlight
+        &colors.on_primary_container,      // 13 HighlightedText
+        &colors.primary,                   // 14 Link
+        &colors.tertiary,                  // 15 LinkVisited
+        &colors.surface_container,         // 16 AlternateBase (one tier above Base)
+        &colors.surface,                   // 17 NoRole
+        &colors.inverse_surface,           // 18 ToolTipBase
+        &colors.inverse_on_surface,        // 19 ToolTipText
+        &colors.on_surface_variant,        // 20 PlaceholderText
+        &colors.primary,                   // 21 Accent (Qt 6.6+)
     ]
 }
 
 /// The 22 QPalette role colors of the disabled group.
 ///
-/// Surfaces stay the same as the active group (the widget is still there);
-/// text roles move to `on_surface_variant` (Material's "muted text"); links
-/// move to `outline` (the "unavailable" role); the tooltip drops back to a
-/// neutral surface so a disabled popup does not invert or advertise an accent.
-/// Shadow, Highlight, and Accent keep their active values so a disabled
-/// widget's focus ring, selection, and accent still read as "part of the same
-/// widget."
+/// The ladder stays *monotonic* with the active group but every surface drops
+/// one tier and every text role moves to `on_surface_variant` (Material's muted
+/// text). Bevel steps collapse to the same tier so a disabled widget looks
+/// flat, not extruded. Accent roles (`Highlight`, `HighlightedText`, `Accent`)
+/// keep their active values so a disabled widget's focus ring and selection
+/// still read as "the same widget, unavailable".
 fn disabled_palette(colors: &ColorRoles) -> [&Color; 22] {
     [
-        &colors.on_surface_variant,       // WindowText
-        &colors.surface_container,        // Button
-        &colors.surface_container_high,   // Light
-        &colors.surface_container,        // Midlight
-        &colors.surface_container_lowest, // Dark
-        &colors.outline_variant,          // Mid
-        &colors.on_surface_variant,       // Text
-        &colors.on_surface_variant,       // BrightText
-        &colors.on_surface_variant,       // ButtonText
-        &colors.surface_container_low,    // Base
-        &colors.surface,                  // Window
-        &colors.shadow,                   // Shadow
-        &colors.primary_container,        // Highlight
-        &colors.on_primary_container,     // HighlightedText
-        &colors.outline,                  // Link
-        &colors.outline,                  // LinkVisited
-        &colors.surface_container,        // AlternateBase
-        &colors.surface,                  // NoRole (ignored by Qt)
-        &colors.surface_container_high,   // ToolTipBase
-        &colors.on_surface_variant,       // ToolTipText
-        &colors.outline_variant,          // PlaceholderText
-        &colors.primary,                  // Accent (Qt 6.6+)
+        &colors.on_surface_variant,     // 0  WindowText
+        &colors.surface_container,      // 1  Button        (one tier below active Button)
+        &colors.surface_container_high, // 2  Light         (flat — same as active Button)
+        &colors.surface_container,      // 3  Midlight      (flat)
+        &colors.surface_container_low,  // 4  Dark          (one tier below disabled Button)
+        &colors.outline_variant,        // 5  Mid
+        &colors.on_surface_variant,     // 6  Text
+        &colors.on_surface_variant,     // 7  BrightText
+        &colors.on_surface_variant,     // 8  ButtonText
+        &colors.surface_container_low,  // 9  Base
+        &colors.surface_container,      // 10 Window
+        &colors.shadow,                 // 11 Shadow
+        &colors.primary_container,      // 12 Highlight
+        &colors.on_primary_container,   // 13 HighlightedText
+        &colors.outline,                // 14 Link
+        &colors.outline,                // 15 LinkVisited
+        &colors.surface_container,      // 16 AlternateBase
+        &colors.surface,                // 17 NoRole
+        &colors.surface_container_high, // 18 ToolTipBase   (neutral, not inverted)
+        &colors.on_surface_variant,     // 19 ToolTipText
+        &colors.outline_variant,        // 20 PlaceholderText
+        &colors.primary,                // 21 Accent
     ]
 }
 
@@ -596,12 +587,16 @@ mod tests {
 
         let active = group_values(&palette, "active_colors");
         assert_eq!(active[0], qtct_color(&colors.on_surface)); // WindowText
-        assert_eq!(active[1], qtct_color(&colors.secondary_container)); // Button
+        assert_eq!(active[1], qtct_color(&colors.surface_container_high)); // Button
+        assert_eq!(active[2], qtct_color(&colors.surface_container_highest)); // Light
+        assert_eq!(active[3], qtct_color(&colors.surface_container_high)); // Midlight
+        assert_eq!(active[4], qtct_color(&colors.surface_container)); // Dark
+        assert_eq!(active[5], qtct_color(&colors.outline_variant)); // Mid
         assert_eq!(active[6], qtct_color(&colors.on_surface)); // Text
-        assert_eq!(active[7], qtct_color(&colors.on_secondary_container)); // BrightText
-        assert_eq!(active[8], qtct_color(&colors.on_secondary_container)); // ButtonText
+        assert_eq!(active[7], qtct_color(&colors.on_surface)); // BrightText
+        assert_eq!(active[8], qtct_color(&colors.on_surface)); // ButtonText
         assert_eq!(active[9], qtct_color(&colors.surface_container_low)); // Base
-        assert_eq!(active[10], qtct_color(&colors.surface)); // Window
+        assert_eq!(active[10], qtct_color(&colors.surface_container)); // Window
         assert_eq!(active[12], qtct_color(&colors.primary_container)); // Highlight
         assert_eq!(active[13], qtct_color(&colors.on_primary_container)); // HighlightedText
         assert_eq!(active[14], qtct_color(&colors.primary)); // Link
@@ -614,7 +609,15 @@ mod tests {
 
         let disabled = group_values(&palette, "disabled_colors");
         assert_eq!(disabled[0], qtct_color(&colors.on_surface_variant)); // WindowText
+        assert_eq!(disabled[1], qtct_color(&colors.surface_container)); // Button
+        assert_eq!(disabled[2], qtct_color(&colors.surface_container_high)); // Light
+        assert_eq!(disabled[3], qtct_color(&colors.surface_container)); // Midlight
+        assert_eq!(disabled[4], qtct_color(&colors.surface_container_low)); // Dark
         assert_eq!(disabled[6], qtct_color(&colors.on_surface_variant)); // Text
+        assert_eq!(disabled[9], qtct_color(&colors.surface_container_low)); // Base
+        assert_eq!(disabled[10], qtct_color(&colors.surface_container)); // Window
+        assert_eq!(disabled[12], qtct_color(&colors.primary_container)); // Highlight
+        assert_eq!(disabled[13], qtct_color(&colors.on_primary_container)); // HighlightedText
         assert_eq!(disabled[14], qtct_color(&colors.outline)); // Link
         assert_eq!(disabled[15], qtct_color(&colors.outline)); // LinkVisited
         assert_eq!(disabled[16], qtct_color(&colors.surface_container)); // AlternateBase
@@ -624,7 +627,7 @@ mod tests {
     }
 
     #[test]
-    fn every_accent_family_reaches_a_distinct_role() {
+    fn bevel_ladder_separates_surfaces_and_keeps_accents_distinct() {
         // Distinct seeds per family, so a role fed from the wrong family is
         // visible instead of coincidentally matching a primary tone.
         let seeds = ColorSeeds {
@@ -637,22 +640,35 @@ mod tests {
         let palette = render_qtct_palette(&colors);
         let active = group_values(&palette, "active_colors");
 
-        // The three accent families each own a visible role and stay apart.
-        assert_eq!(active[1], qtct_color(&colors.secondary_container)); // Button
+        // Accent roles stay on the accent families and stay apart.
         assert_eq!(active[12], qtct_color(&colors.primary_container)); // Highlight
         assert_eq!(active[14], qtct_color(&colors.primary)); // Link
         assert_eq!(active[15], qtct_color(&colors.tertiary)); // LinkVisited
         assert_eq!(active[21], qtct_color(&colors.primary)); // Accent
-        assert_ne!(colors.primary, colors.secondary);
         assert_ne!(colors.primary, colors.tertiary);
-        assert_ne!(colors.secondary, colors.tertiary);
+
+        // Containers and bevels come from the surface ladder, not the accents.
+        assert_eq!(active[1], qtct_color(&colors.surface_container_high)); // Button
+        assert_eq!(active[2], qtct_color(&colors.surface_container_highest)); // Light
+        assert_eq!(active[4], qtct_color(&colors.surface_container)); // Dark
+
+        // In the dark appearance the ladder runs Light > Button > Dark, so 3D
+        // widgets extrude instead of collapsing into hard edges.
+        // `active` values are `#aarrggbb`; `Color` wants opaque `#rrggbb`.
+        let luminance = |value: &str| {
+            Color::new(&format!("#{}", &value[3..])).map_or(0.0, |color| relative_luminance(&color))
+        };
+        assert!(luminance(active[2]) > luminance(active[1]));
+        assert!(luminance(active[1]) > luminance(active[4]));
+
+        // Base is its own rung, distinct from the window and from the
+        // alternating-row color.
+        assert_ne!(active[9], active[10]);
+        assert_ne!(active[9], active[16]);
 
         // Tooltips invert against the window rather than blending into it.
         assert_eq!(active[18], qtct_color(&colors.inverse_surface));
         assert_ne!(active[18], active[10]);
-
-        // Alternating rows must not collapse into the field background.
-        assert_ne!(active[9], active[16]);
     }
 
     /// Relative luminance of an sRGB color, per WCAG 2.1.
@@ -697,8 +713,8 @@ mod tests {
                 ("WindowText/Window", &colors.on_surface, &colors.surface),
                 (
                     "ButtonText/Button",
-                    &colors.on_secondary_container,
-                    &colors.secondary_container,
+                    &colors.on_surface,
+                    &colors.surface_container_high,
                 ),
                 (
                     "HighlightedText/Highlight",
