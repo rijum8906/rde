@@ -1,5 +1,5 @@
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/audio_io/data/datasources/dbus/mpris_proxy.dart';
 import 'package:rde_settings/features/audio_io/domain/entities/now_playing_media.dart';
 import 'package:rde_settings/features/audio_io/domain/repositories/now_playing_repository.dart';

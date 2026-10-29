@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/battery_health/data/datasources/dbus/power_profiles_proxy.dart';
 import 'package:rde_settings/features/battery_health/data/datasources/dbus/upower_proxy.dart';
 import 'package:rde_settings/features/battery_health/data/datasources/sysfs/battery_temperature_reader.dart';

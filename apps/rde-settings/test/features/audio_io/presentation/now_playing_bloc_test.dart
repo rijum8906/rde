@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/audio_io/domain/entities/now_playing_media.dart';
 import 'package:rde_settings/features/audio_io/domain/repositories/now_playing_repository.dart';
 import 'package:rde_settings/features/audio_io/domain/use_cases/read_now_playing.dart';

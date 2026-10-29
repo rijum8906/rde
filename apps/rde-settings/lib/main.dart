@@ -6,9 +6,8 @@ import 'package:rde_settings/core/navigation/router.dart';
 import 'package:rde_settings/core/theme/bloc/app_theme_bloc.dart';
 import 'package:rde_settings/core/theme/bloc/app_theme_event.dart';
 import 'package:rde_settings/core/theme/bloc/app_theme_state.dart';
-import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
+import 'package:core/theme.dart';
 import 'package:rde_settings/core/theme/system_theme_sync.dart';
-import 'package:rde_settings/core/theme/theme_cache.dart';
 
 // Global bloc for dynamic UI customization
 final appThemeBloc = AppThemeBloc();

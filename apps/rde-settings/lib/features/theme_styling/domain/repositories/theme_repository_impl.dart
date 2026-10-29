@@ -1,8 +1,5 @@
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
-import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
-import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
-import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/theme_styling/data/datasources/dbus_theme_datasource.dart';
 import 'package:rde_settings/features/theme_styling/data/datasources/wallpaper/kde_wallpaper_seed_source.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';

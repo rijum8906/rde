@@ -1,6 +1,7 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <gtk-layer-shell/gtk-layer-shell.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
@@ -40,11 +41,19 @@ static void my_application_activate(GApplication *application)
     gtk_widget_set_visual(GTK_WIDGET(window), visual);
   }
 
-  gtk_window_set_default_size(window, 1920, 340);
+  // Fallback geometry for compositors without layer-shell support. The
+  // compositor drives the real size when the window is a layer surface.
+  gtk_window_set_default_size(window, 1920, 40);
 
-  // gtk-layer-shell requires the toplevel to exist and be realized before the
-  // layer surface is initialized. Showing the Flutter view early causes the
-  // compositor to reject the initial configure sequence and times out.
+  // gtk-layer-shell must be set up *before* the toplevel is realized: it turns
+  // the window into a layer surface while the Wayland surface is created. Doing
+  // this later (e.g. from a plugin) leaves the window a plain toplevel, so the
+  // panel never reserves space and is drawn behind other windows.
+  if (gtk_layer_is_supported())
+  {
+    gtk_layer_init_for_window(window);
+  }
+
   gtk_widget_realize(GTK_WIDGET(window));
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rde_settings/core/utils/accent_seeds.dart';
+import 'package:core/theme.dart';
 
 void main() {
   group('seedsFromAccent', () {

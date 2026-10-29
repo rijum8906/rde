@@ -2,8 +2,7 @@ import 'dart:async';
 
 import 'package:dbus/dbus.dart';
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/dbus/dbus.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/audio_io/data/models/now_playing_media_model.dart';
 import 'package:rde_settings/features/audio_io/domain/entities/now_playing_media.dart';
 

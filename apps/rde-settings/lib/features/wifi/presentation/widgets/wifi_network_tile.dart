@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:rde_settings/core/widgets/loading_indicator.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/wifi/domain/entities/wifi_network.dart';
 import 'package:rde_settings/features/wifi/presentation/bloc/wifi_state.dart';
 import 'package:rde_settings/features/wifi/presentation/utils/wifi_helpers.dart';

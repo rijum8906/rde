@@ -4,7 +4,7 @@ import 'package:rde_settings/features/bluetooth/domain/entities/bluetooth_device
 import 'package:rde_settings/features/bluetooth/presentation/bloc/bluetooth_bloc.dart';
 import 'package:rde_settings/features/bluetooth/presentation/bloc/bluetooth_event.dart';
 import 'package:rde_settings/features/bluetooth/presentation/widgets/bluetooth_device_icon.dart';
-import 'package:rde_settings/core/widgets/loading_indicator.dart';
+import 'package:core/core.dart';
 
 class BluetoothDeviceTile extends StatelessWidget {
   const BluetoothDeviceTile({super.key, required this.device});

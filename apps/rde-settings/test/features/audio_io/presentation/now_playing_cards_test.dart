@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rde_settings/core/widgets/loading_indicator.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/audio_io/domain/entities/now_playing_media.dart';
 import 'package:rde_settings/features/audio_io/presentation/widgets/now_playing_card.dart';
 import 'package:rde_settings/features/audio_io/presentation/widgets/curvy_progress.dart';

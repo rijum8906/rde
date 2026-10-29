@@ -1,5 +1,5 @@
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/battery_health/domain/repositories/battery_health_repository.dart';
 
 /// Sets the system power profile. Valid profiles are `performance`,

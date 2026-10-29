@@ -1,8 +1,7 @@
 import 'dart:io';
 
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
-import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/theme_styling/data/datasources/wallpaper/kde_wallpaper_source.dart';
 import 'package:rde_settings/features/theme_styling/data/datasources/wallpaper/wallpaper_palette_extractor.dart';
 import 'package:rde_settings/features/theme_styling/domain/repositories/wallpaper_seed_source.dart';

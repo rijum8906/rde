@@ -1,4 +1,4 @@
-import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
+import 'package:core/theme.dart';
 
 /// Base class for events handled by the theme bloc.
 abstract class ThemeEvent {

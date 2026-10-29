@@ -1,11 +1,7 @@
 import 'dart:async';
 
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
-import 'package:rde_settings/core/theme/data/datasources/dbus/rde_theme_proxy.dart';
-import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
-import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
-import 'package:rde_settings/core/theme/domain/entities/theme_manifest.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 
 /// Combines the individual `org.rde.Theme` calls into the UI-facing catalog.

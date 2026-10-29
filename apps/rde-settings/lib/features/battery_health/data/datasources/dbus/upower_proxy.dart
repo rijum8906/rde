@@ -2,8 +2,7 @@ import 'dart:async';
 
 import 'package:dbus/dbus.dart';
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/dbus/dbus.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/battery_health/data/models/battery_snapshot_model.dart';
 import 'package:rde_settings/features/battery_health/domain/entities/battery_snapshot.dart';
 

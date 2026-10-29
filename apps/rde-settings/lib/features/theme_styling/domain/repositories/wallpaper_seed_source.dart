@@ -1,6 +1,5 @@
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
-import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
+import 'package:core/core.dart';
 
 /// Resolves the four dynamic seeds from the current desktop wallpaper.
 ///

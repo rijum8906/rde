@@ -1,7 +1,6 @@
 import 'package:dbus/dbus.dart';
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/dbus/dbus.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 
 /// Reads the active wallpaper path from the KDE Plasma shell.
 ///

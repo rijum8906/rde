@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/battery_health/domain/entities/battery_snapshot.dart';
 import 'package:rde_settings/features/battery_health/domain/use_cases/read_battery_health.dart';
 import 'package:rde_settings/features/battery_health/domain/use_cases/set_charge_end_threshold.dart';

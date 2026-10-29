@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:rde_settings/core/theme/data/datasources/dbus/rde_theme_proxy.dart';
+import 'package:core/theme.dart';
 import 'package:rde_settings/features/theme_styling/data/datasources/dbus_theme_datasource.dart';
 import 'package:rde_settings/features/theme_styling/domain/repositories/theme_repository_impl.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/extract_wallpaper_seeds.dart';

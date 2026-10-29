@@ -2,9 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/wifi/domain/entities/wifi_network.dart';
 import 'package:rde_settings/features/wifi/domain/repositories/wifi_repository.dart';
+
 import 'wifi_event.dart';
 import 'wifi_state.dart';
 

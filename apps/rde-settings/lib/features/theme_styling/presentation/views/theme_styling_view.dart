@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 // ...bloc/state/event imports...
-import 'package:rde_settings/core/utils/seed_mode.dart';
+import 'package:core/theme.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_state.dart';
 import 'package:rde_settings/features/theme_styling/presentation/widgets/active_theme_card.dart';
@@ -10,6 +10,7 @@ import 'package:rde_settings/features/theme_styling/presentation/widgets/install
 import 'package:rde_settings/features/theme_styling/presentation/widgets/preview_card.dart';
 import 'package:rde_settings/features/theme_styling/presentation/widgets/theme_error_banner.dart';
 import 'package:rde_settings/features/theme_styling/presentation/widgets/theme_styling_header.dart';
+
 import '../widgets/theme_unavailable_body.dart';
 
 class ThemeStylingView extends StatefulWidget {

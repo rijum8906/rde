@@ -1,15 +1,7 @@
-//! # App Layout Constant
+//! # App Layout
 //!
 //! Shared layout dimensions for the RDE desktop shell.
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal <rijum8906@gmail.com>. All rights reserved.
 
-// Initial height of the RDE shell window.
-const int initialPanelHeight = 40;
+/// Height of the top panel, in logical pixels. The Wayland exclusive zone uses
+/// the same value so maximised windows stop at the panel's bottom edge.
+const int panelHeight = 40;

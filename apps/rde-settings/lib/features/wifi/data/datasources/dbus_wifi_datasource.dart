@@ -1,5 +1,5 @@
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/wifi/data/datasources/dbus/network_manager_proxy.dart';
 import 'package:rde_settings/features/wifi/domain/entities/wifi_network.dart';
 

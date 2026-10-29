@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:rde_settings/core/utils/seed_mode.dart';
+import 'package:core/theme.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_state.dart';
 import 'package:rde_settings/features/theme_styling/presentation/widgets/accent_color_controls.dart';
 import 'package:rde_settings/features/theme_styling/presentation/widgets/wallpaper_seed_controls.dart';

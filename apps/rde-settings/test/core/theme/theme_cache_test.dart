@@ -2,8 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
-import 'package:rde_settings/core/theme/theme_cache.dart';
+import 'package:core/theme.dart';
 
 /// All color roles in the order the service serializes them.
 const List<String> _roleKeys = [

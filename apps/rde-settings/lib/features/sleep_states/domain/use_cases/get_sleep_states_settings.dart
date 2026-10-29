@@ -1,5 +1,5 @@
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/sleep_states/domain/entities/sleep_states_settings.dart';
 import 'package:rde_settings/features/sleep_states/domain/repositories/sleep_states_repository.dart';
 
