@@ -201,12 +201,15 @@ overwrite the desktop cannot notice.
 
 Defaults are `~/.local/share` and `~/.config`; the XDG variables are honored.
 
-- **Material 3 mapping**: the palette is mapped onto Qt's `QPalette` roles
-  (`Window`/`Base`/`Text` from surface roles, `Highlight`/`Accent` from `primary`,
-  tooltips from `inverse_surface`, and so on) in Qt's `WindowText, Button, Light, …`
-  serialization order. 22 values are written per group (including the unused `NoRole`
-  slot and the Qt 6.6 `Accent` role) so every role index lines up; Qt 5 ignores the
-  trailing `Accent` value.
+- **Material 3 mapping**: the palette is mapped onto Qt's `QPalette` roles in its
+  `WindowText, Button, Light, …` serialization order, giving each accent family a
+  distinct job: `Button`/`ButtonText` from `secondary_container`, `Highlight`/
+  `HighlightedText` from `primary_container`, `Link`/`Accent` from `primary`,
+  `LinkVisited` from `tertiary`, and tooltips from `inverse_surface`. Surfaces stay
+  neutral, with `Base` from `surface_container_low` and `AlternateBase` one tier
+  above it so alternating rows remain visible. 22 values are written per group
+  (including the unused `NoRole` slot and the Qt 6.6 `Accent` role) so every role
+  index lines up; Qt 5 ignores the trailing `Accent` value.
 - **Plasma accent**: `kdeglobals [General] AccentColor` is pinned to the theme's
   primary color so Plasma 6 accent-colored widgets follow the theme.
 - **Three color groups**: active and inactive share colors; disabled widgets keep the

@@ -248,58 +248,59 @@ fn render_qtct_palette(colors: &ColorRoles) -> String {
 
 /// The 22 QPalette role colors of the active group, in Qt serialization order.
 ///
-/// Role mapping rationale:
-/// - `Window`/`WindowText` — the app background and its primary text.
-/// - `Base`/`Text` — input fields, list views, editor backgrounds.
-///   Material's `surface_container_low` (not `_lowest`) is the role
-///   designed for "the surface you interact with," so it reads as a
-///   field rather than a recessed void.
-/// - `Button`/`ButtonText` — a filled tonal button, using Material's
-///   `secondary_container`/`on_secondary_container` pair. Using `primary`
-///   here would make every button a FAB; using `surface_container` would
-///   make it look like a label.
-/// - `Highlight`/`HighlightedText` — a selection highlight, using
-///   `primary_container`/`on_primary_container` so selections are visible
-///   but not overwhelming. `primary` is reserved for the Accent slot.
-/// - `ToolTipBase`/`ToolTipText` — a raised surface, not an inverse one.
-///   Qt tooltips are info popups, not snackbars.
-/// - `Shadow` — an actual shadow, mode-aware.
-/// - `Link`/`LinkVisited` — `primary` and a darkened `primary`, so a
-///   visited link reads as "link, but visited" rather than a new hue.
+/// Every accent family gets one distinct job, so a Qt app shows the whole
+/// Material scheme instead of a wash of `primary` tones:
+/// - `secondary` — filled tonal buttons (`Button`/`ButtonText`) and the bright
+///   text Qt draws on them. Using `primary` here would make every button a FAB;
+///   using `surface_container` would make it look like a label.
+/// - `primary` — selection (`Highlight`/`HighlightedText`, on the container pair
+///   so a selection is visible without shouting) and hyperlinks (`Link`).
+/// - `tertiary` — visited links (`LinkVisited`), so a visited link is a
+///   different hue from `Link` instead of a darker shade of the same one.
+/// - Neutral surface tiers — `Window` from `surface`, `Base` from
+///   `surface_container_low`, and `AlternateBase` one tier up from `Base`, so
+///   alternating list/table rows stay visible instead of collapsing into the
+///   field background. `Light`/`Midlight`/`Dark`/`Mid` are the Qt bevel steps.
+/// - `ToolTipBase`/`ToolTipText` — `inverse_surface`/`inverse_on_surface`,
+///   Material's tooltip popup: it separates itself from the window by inverting
+///   rather than by a saturated tint, which reads as deliberate in both modes.
+/// - `PlaceholderText` uses `on_surface_variant`, Material's muted text role.
 fn active_palette(colors: &ColorRoles) -> [&Color; 22] {
     [
-        &colors.on_surface,                // WindowText
-        &colors.secondary_container,       // Button
-        &colors.surface_container_high,    // Light
-        &colors.surface_container,         // Midlight
-        &colors.surface_container_lowest,  // Dark
-        &colors.outline_variant,           // Mid
-        &colors.on_surface,                // Text
-        &colors.on_surface,                // BrightText
-        &colors.on_secondary_container,    // ButtonText
-        &colors.surface_container_low,     // Base
-        &colors.surface,                   // Window
-        &colors.shadow,                    // Shadow
-        &colors.primary_container,         // Highlight
-        &colors.on_primary_container,      // HighlightedText
-        &colors.primary,                   // Link
-        &colors.on_primary_container,      // LinkVisited
-        &colors.surface_container_low,     // AlternateBase
-        &colors.surface,                   // NoRole (ignored by Qt)
-        &colors.surface_container_highest, // ToolTipBase
-        &colors.on_surface,                // ToolTipText
-        &colors.on_surface_variant,        // PlaceholderText
-        &colors.primary,                   // Accent (Qt 6.6+)
+        &colors.on_surface,               // WindowText
+        &colors.secondary_container,      // Button
+        &colors.surface_container_high,   // Light
+        &colors.surface_container,        // Midlight
+        &colors.surface_container_lowest, // Dark
+        &colors.outline_variant,          // Mid
+        &colors.on_surface,               // Text
+        &colors.on_secondary_container,   // BrightText
+        &colors.on_secondary_container,   // ButtonText
+        &colors.surface_container_low,    // Base
+        &colors.surface,                  // Window
+        &colors.shadow,                   // Shadow
+        &colors.primary_container,        // Highlight
+        &colors.on_primary_container,     // HighlightedText
+        &colors.primary,                  // Link
+        &colors.tertiary,                 // LinkVisited
+        &colors.surface_container,        // AlternateBase
+        &colors.surface,                  // NoRole (ignored by Qt)
+        &colors.inverse_surface,          // ToolTipBase
+        &colors.inverse_on_surface,       // ToolTipText
+        &colors.on_surface_variant,       // PlaceholderText
+        &colors.primary,                  // Accent (Qt 6.6+)
     ]
 }
 
 /// The 22 QPalette role colors of the disabled group.
 ///
 /// Surfaces stay the same as the active group (the widget is still there);
-/// text roles move to `on_surface_variant` (Material's "muted text"); link
-/// roles move to `outline` (the "unavailable" role). Shadow and Highlight
-/// keep their active values so a disabled widget's focus ring and
-/// drop shadow still read as "part of the same widget."
+/// text roles move to `on_surface_variant` (Material's "muted text"); links
+/// move to `outline` (the "unavailable" role); the tooltip drops back to a
+/// neutral surface so a disabled popup does not invert or advertise an accent.
+/// Shadow, Highlight, and Accent keep their active values so a disabled
+/// widget's focus ring, selection, and accent still read as "part of the same
+/// widget."
 fn disabled_palette(colors: &ColorRoles) -> [&Color; 22] {
     [
         &colors.on_surface_variant,       // WindowText
@@ -318,7 +319,7 @@ fn disabled_palette(colors: &ColorRoles) -> [&Color; 22] {
         &colors.on_primary_container,     // HighlightedText
         &colors.outline,                  // Link
         &colors.outline,                  // LinkVisited
-        &colors.surface_container_low,    // AlternateBase
+        &colors.surface_container,        // AlternateBase
         &colors.surface,                  // NoRole (ignored by Qt)
         &colors.surface_container_high,   // ToolTipBase
         &colors.on_surface_variant,       // ToolTipText
@@ -595,15 +596,134 @@ mod tests {
 
         let active = group_values(&palette, "active_colors");
         assert_eq!(active[0], qtct_color(&colors.on_surface)); // WindowText
+        assert_eq!(active[1], qtct_color(&colors.secondary_container)); // Button
+        assert_eq!(active[6], qtct_color(&colors.on_surface)); // Text
+        assert_eq!(active[7], qtct_color(&colors.on_secondary_container)); // BrightText
+        assert_eq!(active[8], qtct_color(&colors.on_secondary_container)); // ButtonText
+        assert_eq!(active[9], qtct_color(&colors.surface_container_low)); // Base
         assert_eq!(active[10], qtct_color(&colors.surface)); // Window
-        assert_eq!(active[12], qtct_color(&colors.primary)); // Highlight
+        assert_eq!(active[12], qtct_color(&colors.primary_container)); // Highlight
+        assert_eq!(active[13], qtct_color(&colors.on_primary_container)); // HighlightedText
+        assert_eq!(active[14], qtct_color(&colors.primary)); // Link
         assert_eq!(active[15], qtct_color(&colors.tertiary)); // LinkVisited
+        assert_eq!(active[16], qtct_color(&colors.surface_container)); // AlternateBase
+        assert_eq!(active[18], qtct_color(&colors.inverse_surface)); // ToolTipBase
         assert_eq!(active[19], qtct_color(&colors.inverse_on_surface)); // ToolTipText
         assert_eq!(active[20], qtct_color(&colors.on_surface_variant)); // Placeholder
         assert_eq!(active[21], qtct_color(&colors.primary)); // Accent
 
         let disabled = group_values(&palette, "disabled_colors");
-        assert_eq!(disabled[0], qtct_color(&colors.outline)); // WindowText
-        assert_eq!(disabled[6], qtct_color(&colors.outline)); // Text
+        assert_eq!(disabled[0], qtct_color(&colors.on_surface_variant)); // WindowText
+        assert_eq!(disabled[6], qtct_color(&colors.on_surface_variant)); // Text
+        assert_eq!(disabled[14], qtct_color(&colors.outline)); // Link
+        assert_eq!(disabled[15], qtct_color(&colors.outline)); // LinkVisited
+        assert_eq!(disabled[16], qtct_color(&colors.surface_container)); // AlternateBase
+        assert_eq!(disabled[18], qtct_color(&colors.surface_container_high)); // ToolTipBase
+        assert_eq!(disabled[19], qtct_color(&colors.on_surface_variant)); // ToolTipText
+        assert_eq!(disabled[20], qtct_color(&colors.outline_variant)); // Placeholder
+    }
+
+    #[test]
+    fn every_accent_family_reaches_a_distinct_role() {
+        // Distinct seeds per family, so a role fed from the wrong family is
+        // visible instead of coincidentally matching a primary tone.
+        let seeds = ColorSeeds {
+            primary: Color::new("#4285f4").unwrap(),
+            secondary: Color::new("#2f8f6f").unwrap(),
+            tertiary: Color::new("#c26a3a").unwrap(),
+            error: Color::new("#ba1a1a").unwrap(),
+        };
+        let colors = compute_color_roles(&seeds, ThemeMode::Dark, ContrastLevel::Normal);
+        let palette = render_qtct_palette(&colors);
+        let active = group_values(&palette, "active_colors");
+
+        // The three accent families each own a visible role and stay apart.
+        assert_eq!(active[1], qtct_color(&colors.secondary_container)); // Button
+        assert_eq!(active[12], qtct_color(&colors.primary_container)); // Highlight
+        assert_eq!(active[14], qtct_color(&colors.primary)); // Link
+        assert_eq!(active[15], qtct_color(&colors.tertiary)); // LinkVisited
+        assert_eq!(active[21], qtct_color(&colors.primary)); // Accent
+        assert_ne!(colors.primary, colors.secondary);
+        assert_ne!(colors.primary, colors.tertiary);
+        assert_ne!(colors.secondary, colors.tertiary);
+
+        // Tooltips invert against the window rather than blending into it.
+        assert_eq!(active[18], qtct_color(&colors.inverse_surface));
+        assert_ne!(active[18], active[10]);
+
+        // Alternating rows must not collapse into the field background.
+        assert_ne!(active[9], active[16]);
+    }
+
+    /// Relative luminance of an sRGB color, per WCAG 2.1.
+    fn relative_luminance(color: &Color) -> f64 {
+        let rgb = color.as_str().trim_start_matches('#');
+        let channel = |offset: usize| -> f64 {
+            let value = u8::from_str_radix(&rgb[offset..offset + 2], 16).unwrap_or(0);
+            let srgb = f64::from(value) / 255.0;
+            if srgb <= 0.039_28 {
+                srgb / 12.92
+            } else {
+                ((srgb + 0.055) / 1.055).powf(2.4)
+            }
+        };
+
+        0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4)
+    }
+
+    /// WCAG 2.1 contrast ratio between two opaque colors.
+    fn contrast_ratio(foreground: &Color, background: &Color) -> f64 {
+        let a = relative_luminance(foreground);
+        let b = relative_luminance(background);
+        let (lighter, darker) = if a >= b { (a, b) } else { (b, a) };
+        (lighter + 0.05) / (darker + 0.05)
+    }
+
+    #[test]
+    fn semantic_text_stays_readable_on_its_background() {
+        let seeds = ColorSeeds::uniform(&Color::new("#6750a4").unwrap());
+
+        for (mode, contrast) in [
+            (ThemeMode::Dark, ContrastLevel::Normal),
+            (ThemeMode::Light, ContrastLevel::Normal),
+            (ThemeMode::Dark, ContrastLevel::High),
+            (ThemeMode::Light, ContrastLevel::High),
+        ] {
+            let colors = compute_color_roles(&seeds, mode, contrast);
+
+            // Window text, button text, selected text, and tooltip text must all
+            // clear WCAG AA for body text on their own background.
+            for (label, foreground, background) in [
+                ("WindowText/Window", &colors.on_surface, &colors.surface),
+                (
+                    "ButtonText/Button",
+                    &colors.on_secondary_container,
+                    &colors.secondary_container,
+                ),
+                (
+                    "HighlightedText/Highlight",
+                    &colors.on_primary_container,
+                    &colors.primary_container,
+                ),
+                (
+                    "ToolTipText/ToolTipBase",
+                    &colors.inverse_on_surface,
+                    &colors.inverse_surface,
+                ),
+                (
+                    "PlaceholderText/Base",
+                    &colors.on_surface_variant,
+                    &colors.surface_container_low,
+                ),
+            ] {
+                let ratio = contrast_ratio(foreground, background);
+                assert!(
+                    ratio >= 4.5,
+                    "{label} in {mode:?}/{contrast:?} is only {ratio:.2}:1 ({} on {})",
+                    foreground.as_str(),
+                    background.as_str()
+                );
+            }
+        }
     }
 }
