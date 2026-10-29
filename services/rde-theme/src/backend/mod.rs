@@ -125,8 +125,8 @@ impl AdapterRegistry {
         // fails the grammar cannot be produced by this build's constants, so a
         // malformed one is skipped with a log instead of panicking the service.
         let kde = KdeAdapter::new(config_home.clone(), data_home);
-        let qt = QtAdapter::new(config_home);
-        let gtk = GtkEmitter::new(cache_dir);
+        let qt = QtAdapter::new(config_home.clone());
+        let gtk = GtkEmitter::new(config_home, cache_dir);
 
         for adapter in [
             Box::new(kde) as Box<dyn Adapter>,

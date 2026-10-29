@@ -72,7 +72,7 @@ impl App {
         .with_system_themes(paths.system_themes_dir().to_path_buf());
 
         // Step 4: Register the toolkit adapters
-        let gtk_emitter = GtkEmitter::new(paths.cache_theme_dir().to_path_buf());
+        let gtk_emitter = GtkEmitter::new(xdg_config_home(), paths.cache_theme_dir().to_path_buf());
         // KDE reads `kdeglobals` from the XDG config root and looks color schemes
         // up under `color-schemes/` in the XDG data home, so the KDE adapter
         // targets those directories instead of the rde theme subdirectories.
