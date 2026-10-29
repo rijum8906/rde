@@ -10,7 +10,6 @@ members = [
     "services/rde-notification",
     "services/rde-theme",
     "services/rde-volume",
-    "services/rde-wifi",
 ]
 
 [workspace.package]
