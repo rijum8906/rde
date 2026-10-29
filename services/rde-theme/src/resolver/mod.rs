@@ -1,4 +1,9 @@
-// domain/resolvers/mod.rs
+//! # Theme Resolvers
+//!
+//! Turns a set of seed colors into a [`ResolvedTheme`] with a pluggable
+//! algorithm, and keeps every algorithm named in a registry so a manifest can
+//! select one without the service knowing which implementation runs.
+
 pub mod rdtr;
 
 use std::collections::HashMap;
@@ -11,7 +16,7 @@ use crate::{
 /// An algorithm that turns four seeds into a resolved palette.
 ///
 /// Pure: no IO, no global state, deterministic. Implementations live in
-/// `domain/resolvers/<name>.rs` — one file per algorithm.
+/// `resolver/<name>.rs` — one file per algorithm.
 pub trait Resolver: Send + Sync {
     fn id(&self) -> ResolverId;
     fn resolve(&self, seeds: &ColorSeeds, mode: ThemeMode) -> Result<ResolvedTheme, ThemeError>;

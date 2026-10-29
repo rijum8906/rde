@@ -9,7 +9,6 @@ mod mapping;
 mod scheme;
 
 use crate::{
-    adapter::material::compute_color_roles,
     domain::{
         identity::{ThemeId, VariantId},
         manifest::{ContrastLevel, ThemeMode},
@@ -17,6 +16,7 @@ use crate::{
             Color, ColorRoles, ColorSeeds, Motion, ResolvedTheme, Shape, Typography, VariantKind,
         },
     },
+    material::compute_color_roles,
 };
 
 /// Scheme name the test fixtures render under.

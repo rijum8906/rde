@@ -9,7 +9,6 @@ mod css;
 mod settings;
 
 use crate::{
-    adapter::material::compute_color_roles,
     domain::{
         identity::{ThemeId, VariantId},
         manifest::{ContrastLevel, ThemeMode},
@@ -17,6 +16,7 @@ use crate::{
             Color, ColorRoles, ColorSeeds, Motion, ResolvedTheme, Shape, Typography, VariantKind,
         },
     },
+    material::compute_color_roles,
 };
 
 /// Builds a deterministic palette for the assertions below.

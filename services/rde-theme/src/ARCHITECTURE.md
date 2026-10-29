@@ -17,7 +17,7 @@ It bridges modern **Material 3 (M3)** design principles with Linux desktop toolk
 
 ## 🎨 Material 3 Design System Engine
 
-`rde-theme` uses Google's Material 3 design system to construct harmonious color schemes from four seed colors (primary, secondary, tertiary, error). The engine lives in `adapter/material/` behind the `Adapter` trait and emits the toolkit-neutral `domain::palette::Palette`, so storage, D-Bus, and toolkit writers never depend on Material types.
+`rde-theme` uses Google's Material 3 design system to construct harmonious color schemes from four seed colors (primary, secondary, tertiary, error). The engine lives in `material/` behind the `resolver::Resolver` trait and produces the toolkit-neutral `domain::resolved::ResolvedTheme`, so storage, D-Bus, resolvers, and toolkit writers never depend on Material types.
 
 ### 1. Color Role Mapping Schema
 

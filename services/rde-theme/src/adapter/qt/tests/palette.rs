@@ -6,11 +6,11 @@
 use super::super::palette::{qtct_color, render_qtct_palette};
 use super::{group_values, relative_luminance, roles};
 use crate::{
-    adapter::material::compute_color_roles,
     domain::{
         manifest::{ContrastLevel, ThemeMode},
         resolved::{Color, ColorSeeds},
     },
+    material::compute_color_roles,
 };
 
 #[test]

@@ -66,7 +66,7 @@ impl QtAdapter {
     #[must_use]
     pub fn new(config_home: PathBuf) -> Self {
         // Step 1: The platform theme plugin proves the tool exists.
-        let (qt5ct_plugin, qt6ct_plugin) = crate::adapter::detect::qtct_plugins();
+        let (qt5ct_plugin, qt6ct_plugin) = crate::detect::qtct_plugins();
 
         // Step 2: An existing config directory also counts. It covers Qt builds
         // whose plugin lives outside the probed paths and tools that were run

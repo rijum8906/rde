@@ -7,7 +7,6 @@ use std::{collections::BTreeMap, path::PathBuf};
 use tracing::{debug, warn};
 
 use crate::{
-    adapter::material::compute_color_roles,
     domain::{
         identity::{ThemeId, VariantId},
         manifest::{BUILTIN_DYNAMIC_VARIANT_DIR, ThemeManifest, VariantDescriptor},
@@ -19,6 +18,7 @@ use crate::{
         settings::ThemeSettings,
     },
     fs::write_atomic,
+    material::compute_color_roles,
     theme_store::{ThemeError, ThemeRepository},
 };
 

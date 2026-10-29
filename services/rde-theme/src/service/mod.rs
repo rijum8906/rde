@@ -20,10 +20,8 @@ use tokio::sync::{Mutex, RwLock, broadcast};
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    adapter::{
-        AdapterRegistry, compute_color_roles, detect::SessionEnv, kde::KDE_ADAPTER_NAME,
-        resolvers::ResolverRegistry, unique_theme_name,
-    },
+    adapter::{AdapterRegistry, kde::KDE_ADAPTER_NAME, unique_theme_name},
+    detect::SessionEnv,
     domain::{
         identity::{ThemeId, VariantId},
         manifest::{ContrastLevel, ThemeManifest, ThemeMode},
@@ -35,7 +33,9 @@ use crate::{
         settings::{DynamicThemeUpdate, ThemeSettings},
     },
     fs::write_atomic,
+    material::compute_color_roles,
     paths::ThemePaths,
+    resolver::ResolverRegistry,
     theme_store::{DiskThemeRepository, ThemeError, ThemeRepository},
 };
 
@@ -1045,7 +1045,7 @@ mod tests {
             // mirroring the disk repository's seed handling.
             let settings = self.settings.lock().unwrap().clone();
             let seeds = settings.dynamic.color_seeds();
-            let colors = crate::adapter::material::compute_color_roles(
+            let colors = crate::material::compute_color_roles(
                 &seeds,
                 ThemeMode::Dark,
                 ContrastLevel::Normal,
@@ -1072,7 +1072,7 @@ mod tests {
     }
 
     fn sample_resolved(theme_id: &ThemeId, variant_id: &VariantId) -> ResolvedTheme {
-        let colors = crate::adapter::material::compute_color_roles(
+        let colors = crate::material::compute_color_roles(
             &ColorSeeds::uniform(&Color::new("#123456").unwrap()),
             ThemeMode::Dark,
             ContrastLevel::Normal,
@@ -1304,7 +1304,7 @@ mod tests {
         assert_eq!(received.kind, VariantKind::Dynamic);
         assert_eq!(
             received.colors,
-            crate::adapter::material::compute_color_roles(
+            crate::material::compute_color_roles(
                 &ColorSeeds {
                     primary: Color::new("#006a6a").unwrap(),
                     secondary: Color::new("#6750a4").unwrap(),

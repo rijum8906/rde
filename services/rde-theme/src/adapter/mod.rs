@@ -1,6 +1,9 @@
-//! # Toolkit Adapters and Color Schemes
+//! # Toolkit Adapters
 //!
-//! Provides the [`Adapter`] trait and toolkit adapters (GTK, Qt/KDE, Material 3).
+//! Provides the [`Adapter`] trait and the toolkit adapters that implement it:
+//! GTK, Qt (qt5ct/qt6ct), and KDE (Plasma). Palette computation lives in
+//! [`crate::material`] and theme resolution in [`crate::resolver`]; an adapter
+//! only turns an already-resolved theme into toolkit files.
 //!
 //! Adapters are pure string/byte builders that return paths and payloads.
 //! File writes are performed exclusively by the application layer.
@@ -8,17 +11,12 @@
 use std::{collections::HashMap, path::PathBuf};
 use thiserror::Error;
 
-pub mod detect;
 pub mod gtk;
 pub mod kde;
-pub mod material;
 pub mod qt;
-pub mod resolver;
-pub mod resolvers;
 
 pub use gtk::GtkEmitter;
 pub use kde::{KDE_COLOR_SCHEME_NAME, KdeAdapter};
-pub use material::{FALLBACK_SEED_COLOR, MATERIAL_ALGORITHM_VERSION, compute_color_roles};
 pub use qt::QtAdapter;
 
 use crate::{

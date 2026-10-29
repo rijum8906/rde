@@ -22,12 +22,14 @@ bus as `org.rde.Theme`.
   - [`domain/palette.rs`](src/domain/palette.rs): semantic color roles (`primary`, `surface`, ...).
   - [`domain/theme_config.rs`](src/domain/theme_config.rs): the `themes.toml` registry model.
   - [`domain/color.rs`](src/domain/color.rs): hex color parsing and formatting.
-- **`adapter/`**: palette engines and toolkit output.
-  - [`adapter/mod.rs`](src/adapter/mod.rs): `Adapter` trait every toolkit adapter implements.
-  - [`adapter/material/`](src/adapter/material/mod.rs): Material 3 seed and scheme computation.
+- **`adapter/`**: toolkit output. Only the toolkit surfaces live here.
+  - [`adapter/mod.rs`](src/adapter/mod.rs): `Adapter` trait, registry, and shared artifact naming.
   - [`adapter/kde/`](src/adapter/kde/mod.rs): writes `kdeglobals` and the Plasma color scheme.
   - [`adapter/qt/`](src/adapter/qt/mod.rs): writes qt5ct/qt6ct palettes and tool configs.
-  - [`adapter/gtk/`](src/adapter/gtk/mod.rs): renders GTK CSS `@define-color` overrides.
+  - [`adapter/gtk/`](src/adapter/gtk/mod.rs): renders GTK CSS `@define-color` overrides and `settings.ini`.
+- **`material/`**: Material 3 palette engine (seed colors → semantic color roles).
+- **`resolver/`**: `Resolver` trait, its registry, and the resolver algorithms.
+- **`detect/`**: session and toolkit detection used by the service and the adapters.
 - **`dbus/`**: `org.rde.Theme` interface at `/org/rde/Theme`.
 
 ## Theme Database

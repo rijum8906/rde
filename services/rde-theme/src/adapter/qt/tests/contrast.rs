@@ -5,11 +5,11 @@
 
 use super::contrast_ratio;
 use crate::{
-    adapter::material::compute_color_roles,
     domain::{
         manifest::{ContrastLevel, ThemeMode},
         resolved::{Color, ColorSeeds},
     },
+    material::compute_color_roles,
 };
 
 #[test]

@@ -5,14 +5,12 @@
 
 use super::{KDE_COLOR_SCHEM_NAME, relative_luminance, roles, section};
 use crate::{
-    adapter::{
-        kde::{color::to_kde_rgb, render_color_scheme},
-        material::compute_color_roles,
-    },
+    adapter::kde::{color::to_kde_rgb, render_color_scheme},
     domain::{
         manifest::{ContrastLevel, ThemeMode},
         resolved::{Color, ColorSeeds},
     },
+    material::compute_color_roles,
 };
 
 #[test]

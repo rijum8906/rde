@@ -1,10 +1,15 @@
-pub(super) mod gtk;
-pub(super) mod qt;
+//! # Session and Toolkit Detection
+//!
+//! Detects the desktop session and the installed toolkit configuration tools,
+//! so the service only writes the surfaces present on this machine.
+
+mod gtk;
+mod qt;
 
 use std::{env, path::PathBuf};
 
 use crate::{
-    adapter::detect::{gtk::GtkEnv, qt::QtEnv},
+    detect::{gtk::GtkEnv, qt::QtEnv},
     paths::{xdg_config_home, xdg_data_home},
 };
 

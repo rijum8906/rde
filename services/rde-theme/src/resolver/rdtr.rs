@@ -1,11 +1,12 @@
 //! RDE Default Theme Resolver.
 
 use crate::{
-    adapter::{compute_color_roles, resolvers::Resolver},
     domain::{
         ContrastLevel, Motion, ResolvedTheme, Shape, ThemeId, Typography, VariantId, VariantKind,
         identity::ResolverId,
     },
+    material::compute_color_roles,
+    resolver::Resolver,
 };
 
 #[derive(Debug, Default)]
