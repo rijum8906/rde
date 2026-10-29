@@ -4,8 +4,8 @@
 //! a machine-owned factual registry, user-owned settings, generated Material 3
 //! palettes, toolkit adapters, and D-Bus publication under `org.rde.Theme`.
 
+pub mod adapter;
 pub mod app;
-pub mod backend;
 pub mod constants;
 pub mod dbus;
 pub mod domain;

@@ -24,7 +24,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use crate::{
-    backend::{AdapterRegistry, GtkEmitter, KdeAdapter, QtAdapter},
+    adapter::{AdapterRegistry, GtkEmitter, KdeAdapter, QtAdapter},
     constants::{DBUS_SERVICE_NAME, SERVICE_NAME, SHUTDOWN_TIMEOUT},
     dbus::{
         PORTAL_OBJECT_PATH, PortalSettingsInterface, THEME_OBJECT_PATH, ThemeInterface,
@@ -82,7 +82,7 @@ impl App {
 
         let mut adapter_registry = AdapterRegistry::default();
         for adapter in [
-            Box::new(gtk_emitter) as Box<dyn crate::backend::Adapter>,
+            Box::new(gtk_emitter) as Box<dyn crate::adapter::Adapter>,
             Box::new(kde_emitter),
             Box::new(qt_emitter),
         ] {

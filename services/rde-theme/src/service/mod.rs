@@ -20,7 +20,7 @@ use tokio::sync::{Mutex, RwLock, broadcast};
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    backend::{
+    adapter::{
         AdapterRegistry, compute_color_roles, detect::SessionEnv, kde::KDE_ADAPTER_NAME,
         resolvers::ResolverRegistry, unique_theme_name,
     },
@@ -949,7 +949,7 @@ impl ThemeService {
 mod tests {
     use super::*;
     use crate::{
-        backend::KdeAdapter,
+        adapter::KdeAdapter,
         domain::{
             identity::{AdapterId, VariantId},
             manifest::{ContrastLevel, RelativePath, ThemeMode, VariantDescriptor},
@@ -1045,7 +1045,7 @@ mod tests {
             // mirroring the disk repository's seed handling.
             let settings = self.settings.lock().unwrap().clone();
             let seeds = settings.dynamic.color_seeds();
-            let colors = crate::backend::material::compute_color_roles(
+            let colors = crate::adapter::material::compute_color_roles(
                 &seeds,
                 ThemeMode::Dark,
                 ContrastLevel::Normal,
@@ -1072,7 +1072,7 @@ mod tests {
     }
 
     fn sample_resolved(theme_id: &ThemeId, variant_id: &VariantId) -> ResolvedTheme {
-        let colors = crate::backend::material::compute_color_roles(
+        let colors = crate::adapter::material::compute_color_roles(
             &ColorSeeds::uniform(&Color::new("#123456").unwrap()),
             ThemeMode::Dark,
             ContrastLevel::Normal,
@@ -1304,7 +1304,7 @@ mod tests {
         assert_eq!(received.kind, VariantKind::Dynamic);
         assert_eq!(
             received.colors,
-            crate::backend::material::compute_color_roles(
+            crate::adapter::material::compute_color_roles(
                 &ColorSeeds {
                     primary: Color::new("#006a6a").unwrap(),
                     secondary: Color::new("#6750a4").unwrap(),
@@ -1449,7 +1449,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let config_home = temp.path().join("config");
         let data_home = temp.path().join("data");
-        let schemes = crate::backend::kde::color_schemes_dir(&data_home);
+        let schemes = crate::adapter::kde::color_schemes_dir(&data_home);
         std::fs::create_dir_all(&schemes).unwrap();
 
         // A scheme an earlier generation left behind and one the user installed.

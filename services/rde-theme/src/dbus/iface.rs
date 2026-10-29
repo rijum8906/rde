@@ -416,7 +416,7 @@ pub fn spawn_dbus_signal_broadcaster(connection: zbus::Connection, service: Arc<
 mod tests {
     use super::*;
     use crate::{
-        backend::AdapterRegistry, service::ThemeService, theme_store::DiskThemeRepository,
+        adapter::AdapterRegistry, service::ThemeService, theme_store::DiskThemeRepository,
     };
     use zbus::object_server::Interface;
 

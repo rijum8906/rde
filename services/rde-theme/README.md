@@ -22,12 +22,12 @@ bus as `org.rde.Theme`.
   - [`domain/palette.rs`](src/domain/palette.rs): semantic color roles (`primary`, `surface`, ...).
   - [`domain/theme_config.rs`](src/domain/theme_config.rs): the `themes.toml` registry model.
   - [`domain/color.rs`](src/domain/color.rs): hex color parsing and formatting.
-- **`backend/`**: palette engines and toolkit output.
-  - [`backend/mod.rs`](src/backend/mod.rs): `ThemeBackend` trait that resolves manifests into palettes.
-  - [`backend/material/`](src/backend/material/mod.rs): Material 3 seed and scheme computation.
-  - [`backend/kde/`](src/backend/kde/mod.rs): writes `kdeglobals` and the Plasma color scheme.
-  - [`backend/qt/`](src/backend/qt/mod.rs): writes qt5ct/qt6ct palettes and tool configs.
-  - [`backend/gtk/`](src/backend/gtk/mod.rs): renders GTK CSS `@define-color` overrides.
+- **`adapter/`**: palette engines and toolkit output.
+  - [`adapter/mod.rs`](src/adapter/mod.rs): `Adapter` trait every toolkit adapter implements.
+  - [`adapter/material/`](src/adapter/material/mod.rs): Material 3 seed and scheme computation.
+  - [`adapter/kde/`](src/adapter/kde/mod.rs): writes `kdeglobals` and the Plasma color scheme.
+  - [`adapter/qt/`](src/adapter/qt/mod.rs): writes qt5ct/qt6ct palettes and tool configs.
+  - [`adapter/gtk/`](src/adapter/gtk/mod.rs): renders GTK CSS `@define-color` overrides.
 - **`dbus/`**: `org.rde.Theme` interface at `/org/rde/Theme`.
 
 ## Theme Database
