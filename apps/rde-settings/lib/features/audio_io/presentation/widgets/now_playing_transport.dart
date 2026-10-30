@@ -13,12 +13,14 @@ class NowPlayingTransport extends StatelessWidget {
     required this.onTogglePlayPause,
     required this.onSkipNext,
     required this.onSkipPrevious,
+    required this.isPlaying,
   });
 
   final NowPlayingMedia media;
   final VoidCallback onTogglePlayPause;
   final VoidCallback onSkipNext;
   final VoidCallback onSkipPrevious;
+  final bool isPlaying;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +42,7 @@ class NowPlayingTransport extends StatelessWidget {
         Expanded(
           child: media.length != null && media.position != null
               ? CurvyProgress(
+                  isPlaying: isPlaying,
                   position: media.position!,
                   length: media.length!,
                   color: Colors.white,

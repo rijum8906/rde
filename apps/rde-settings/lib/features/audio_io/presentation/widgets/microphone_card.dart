@@ -5,7 +5,9 @@ import 'package:rde_settings/features/audio_io/domain/entities/audio_devices.dar
 import 'package:rde_settings/features/audio_io/presentation/bloc/audio_devices_bloc.dart';
 import 'package:rde_settings/features/audio_io/presentation/bloc/audio_devices_event.dart';
 import 'package:rde_settings/features/audio_io/presentation/bloc/audio_devices_state.dart';
-import 'package:rde_settings/features/audio_io/presentation/widgets/scrollable_volume_slider.dart';
+
+import 'audio_device_picker.dart'; // <-- Import the new picker
+import 'scrollable_volume_slider.dart';
 
 class MicrophoneCard extends StatelessWidget {
   const MicrophoneCard({super.key});
@@ -49,7 +51,8 @@ class MicrophoneCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (inputs.isNotEmpty) _InputPicker(inputs: inputs),
+              // Use the new picker
+              if (inputs.isNotEmpty) AudioInputPicker(inputs: inputs),
             ],
           ),
           const SizedBox(height: 32),
@@ -81,6 +84,8 @@ class MicrophoneCard extends StatelessWidget {
     );
   }
 }
+
+// ... (_MicControls stays exactly the same as before)
 
 class _MicControls extends StatelessWidget {
   const _MicControls({
@@ -161,100 +166,6 @@ class _MicControls extends StatelessWidget {
                   ),
                 ),
         ),
-      ],
-    );
-  }
-}
-
-class _InputPicker extends StatelessWidget {
-  const _InputPicker({required this.inputs});
-
-  final List<AudioInput> inputs;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final bloc = context.read<AudioDevicesBloc>();
-
-    final activeInput =
-        inputs.where((i) => i.isDefault).firstOrNull ??
-        (inputs.isNotEmpty ? inputs.first : null);
-
-    if (activeInput == null) return const SizedBox.shrink();
-
-    return MenuAnchor(
-      style: MenuStyle(
-        backgroundColor: WidgetStatePropertyAll(
-          colorScheme.surfaceContainerHigh,
-        ),
-        elevation: const WidgetStatePropertyAll(3),
-        shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        ),
-      ),
-      builder: (context, controller, child) {
-        return FilledButton.tonalIcon(
-          onPressed: () {
-            if (controller.isOpen) {
-              controller.close();
-            } else {
-              controller.open();
-            }
-          },
-          icon: Icon(activeInput.muted ? Icons.mic_off : Icons.mic, size: 18),
-          label: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 150),
-            child: Text(
-              activeInput.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          style: FilledButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-      },
-      menuChildren: [
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Text(
-            'Select Input Device',
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        for (final input in inputs)
-          MenuItemButton(
-            onPressed: input.isDefault
-                ? null
-                : () => bloc.add(SelectAudioInputEvent(input.name)),
-            leadingIcon: Icon(
-              input.isDefault ? Icons.check_circle : Icons.mic,
-              size: 20,
-              color: input.isDefault
-                  ? colorScheme.primary
-                  : colorScheme.onSurfaceVariant,
-            ),
-            child: Text(
-              input.label,
-              style: TextStyle(
-                fontWeight: input.isDefault
-                    ? FontWeight.bold
-                    : FontWeight.normal,
-                color: input.isDefault
-                    ? colorScheme.primary
-                    : colorScheme.onSurface,
-              ),
-            ),
-          ),
       ],
     );
   }

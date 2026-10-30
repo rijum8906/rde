@@ -1,17 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:rde_settings/features/audio_io/domain/entities/now_playing_media.dart';
+import 'package:rde_settings/features/audio_io/presentation/bloc/audio_devices_bloc.dart';
 import 'package:rde_settings/features/audio_io/presentation/widgets/now_playing_card.dart';
 
 /// Slider holding one [NowPlayingCard] per player.
-///
-/// The page opens on the player the bloc prefers - a playing one - and swiping
-/// left or right reaches the others, which is what the card offers when several
-/// players are open at once. With a single player the slider does not scroll
-/// and no dots are shown, so a one-player desktop looks like a plain card.
-///
-/// The cards are laid out at a fixed height ([cardHeight]) because a
-/// `PageView` needs a bounded height; the card keeps every line to one line, so
-/// no page can grow taller than another while swiping.
 class NowPlayingSlider extends StatefulWidget {
   const NowPlayingSlider({
     super.key,
@@ -43,19 +36,7 @@ class _NowPlayingSliderState extends State<NowPlayingSlider> {
     initialPage: widget.activeIndex,
   );
 
-  /// Whether the controller is animating or jumping to a page the bloc picked.
-  ///
-  /// A programmatic move reports every page it passes as a page change, which
-  /// would send the intermediate players back to the bloc and interrupt the
-  /// animation, so those reports are ignored.
   bool _syncing = false;
-
-  /// The in-flight `animateToPage` future, if any.
-  ///
-  /// Guarding with a future (rather than a bare bool) means a second
-  /// `didUpdateWidget` while the first animation is still running does not
-  /// start a competing animation. The next change will start a fresh sync
-  /// after this one settles.
   Future<void>? _syncFuture;
 
   @override
@@ -65,9 +46,6 @@ class _NowPlayingSliderState extends State<NowPlayingSlider> {
     final indexChanged = oldWidget.activeIndex != widget.activeIndex;
     if (!indexChanged) return;
 
-    // A change in list length means the controller's current page may no
-    // longer exist (a player exited), so animating would render the
-    // intermediate page with the wrong content. Jump instead.
     final listChanged = oldWidget.players.length != widget.players.length;
     if (listChanged) {
       _jumpToActivePage();
@@ -78,14 +56,11 @@ class _NowPlayingSliderState extends State<NowPlayingSlider> {
 
   @override
   void dispose() {
-    _syncFuture = null; // drop the reference; the controller disposes the rest
+    _syncFuture = null;
     _controller.dispose();
     super.dispose();
   }
 
-  /// Jumps to the active page without animating. Used when the list length
-  /// changed, because animating would render intermediate pages with content
-  /// that no longer matches the controller's index.
   void _jumpToActivePage() {
     if (!_controller.hasClients) return;
     _syncing = true;
@@ -93,12 +68,6 @@ class _NowPlayingSliderState extends State<NowPlayingSlider> {
     _syncing = false;
   }
 
-  /// Animates to the active page without feeding the intermediate pages back
-  /// as selections.
-  ///
-  /// Re-entrant-safe: a second call while the first animation is running is
-  /// dropped, and the next `didUpdateWidget` after the first settles starts a
-  /// fresh sync if `activeIndex` is still out of date.
   Future<void> _syncToActivePage() async {
     if (!_controller.hasClients) return;
     if (_syncFuture != null) return;
@@ -122,11 +91,13 @@ class _NowPlayingSliderState extends State<NowPlayingSlider> {
     final players = widget.players;
     final isSlider = players.length > 1;
 
-    // Clamp in case the bloc handed us an index that no longer exists (the
-    // list shrank between the bloc's selection and this build).
     final safeActive = players.isEmpty
         ? 0
         : widget.activeIndex.clamp(0, players.length - 1);
+
+    // Get the current output device label from the AudioDevicesBloc
+    final devices = context.watch<AudioDevicesBloc>().state.devices;
+    final outputDeviceName = devices?.outputLabel;
 
     return Column(
       children: [
@@ -140,8 +111,6 @@ class _NowPlayingSliderState extends State<NowPlayingSlider> {
                 : const NeverScrollableScrollPhysics(),
             onPageChanged: (index) {
               if (_syncing || !isSlider) return;
-              // The list may have shrunk while the animation was running;
-              // silently ignore indices that no longer exist.
               if (index < 0 || index >= players.length) return;
               widget.onSelect(players[index].busName);
             },
@@ -153,6 +122,8 @@ class _NowPlayingSliderState extends State<NowPlayingSlider> {
                 onTogglePlayPause: widget.onTogglePlayPause,
                 onSkipNext: widget.onSkipNext,
                 onSkipPrevious: widget.onSkipPrevious,
+                // Pass the output device name down to the card
+                outputDeviceName: outputDeviceName,
               ),
             ),
           ),
