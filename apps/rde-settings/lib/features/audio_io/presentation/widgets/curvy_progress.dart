@@ -2,29 +2,21 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Android-style curvy progress bar.
-///
-/// The played portion is drawn as a smooth sine wave; the unplayed portion is
-/// a flat line at the same vertical center. A thin white line caps the
-/// transition, matching the Material 3 media-player look. The wave is
-/// deterministic (no randomness), so the shape doesn't jitter between frames.
 class CurvyProgress extends StatelessWidget {
   const CurvyProgress({
     super.key,
     required this.position,
     required this.length,
-    required this.isPlaying,
     required this.color,
     required this.trackColor,
     this.height = 24,
     this.waveAmplitude = 2.5,
-    this.wavelength = 40.0,
+    this.wavelength = 18.0,
     this.strokeWidth = 2.5,
   });
 
   final Duration position;
   final Duration length;
-  final bool isPlaying;
   final Color color;
   final Color trackColor;
   final double height;
@@ -77,56 +69,58 @@ class _CurvyPainter extends CustomPainter {
     final centerY = size.height / 2;
     final playedWidth = size.width * fraction;
 
-    final playedPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    final restPaint = Paint()
+    // 1. Draw the faint background track first (the full width)
+    final trackPaint = Paint()
       ..color = trackColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
 
-    // Unplayed portion: a flat line from the playhead to the end.
-    if (playedWidth < size.width) {
-      canvas.drawLine(
-        Offset(playedWidth, centerY),
-        Offset(size.width, centerY),
-        restPaint,
-      );
-    }
+    canvas.drawLine(
+      Offset(0, centerY),
+      Offset(size.width, centerY),
+      trackPaint,
+    );
 
-    // Played portion: a smooth sine wave, phase-aligned so the curve starts
-    // at the left edge and ends at the playhead with the wave at its
-    // natural vertical position (no visible jump at either end).
+    // 2. Draw the wavy line on top of it
     if (playedWidth > 0) {
+      final playedPaint = Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+
       final path = Path();
       final steps = math.max(2, (playedWidth / 2).ceil());
+
       for (var i = 0; i <= steps; i++) {
         final t = i / steps;
         final x = t * playedWidth;
         final y =
             centerY + math.sin(x / wavelength * 2 * math.pi) * waveAmplitude;
+
         if (i == 0) {
           path.moveTo(x, y);
         } else {
           path.lineTo(x, y);
         }
       }
-      canvas.drawPath(path, playedPaint);
-    }
 
-    // Playhead: a small filled dot where the wave meets the flat line, so
-    // the transition reads as "here" rather than as an abrupt color change.
-    if (fraction > 0 && fraction < 1) {
-      canvas.drawCircle(
-        Offset(playedWidth, centerY),
-        strokeWidth * 0.9,
-        Paint()..color = color,
-      );
+      canvas.drawPath(path, playedPaint);
+
+      // 3. Add the solid circle at the end of the played wave
+      if (fraction > 0 && fraction < 1) {
+        final dotPaint = Paint()
+          ..color = color
+          ..style = PaintingStyle.fill;
+        // Slightly larger than the stroke so it pops
+        canvas.drawCircle(
+          Offset(playedWidth, centerY),
+          strokeWidth * 1.4,
+          dotPaint,
+        );
+      }
     }
   }
 

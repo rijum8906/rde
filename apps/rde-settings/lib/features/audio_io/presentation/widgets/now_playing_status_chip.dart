@@ -15,31 +15,22 @@ class NowPlayingStatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final color = switch (media.status) {
-      MprisPlaybackStatus.playing => Colors.greenAccent.shade200,
-      MprisPlaybackStatus.paused => Colors.amberAccent.shade100,
-      MprisPlaybackStatus.stopped => Colors.white70,
-    };
-
+    // Inside NowPlayingStatusChip build method:
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(20),
+        color: const Color(0xFFFBE0C3), // Peach background
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 6),
+          const Icon(Icons.smartphone, size: 16, color: Colors.black),
+          const SizedBox(width: 8),
           Text(
-            media.statusLabel,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: Colors.white,
+            "This phone", // Or media.statusLabel
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: Colors.black,
               fontWeight: FontWeight.bold,
             ),
           ),
