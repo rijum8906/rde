@@ -21,6 +21,12 @@ class SidebarSection {
 }
 
 class NavigationSidebar extends StatelessWidget {
+  /// Width of the rail with its labels.
+  static const double _expandedWidth = 280;
+
+  /// Width of the icon-only rail.
+  static const double _collapsedWidth = 88;
+
   final String currentPath;
 
   const NavigationSidebar({super.key, required this.currentPath});
@@ -43,6 +49,11 @@ class NavigationSidebar extends StatelessWidget {
           title: 'Bluetooth',
           icon: Icons.bluetooth,
           path: '/bluetooth',
+        ),
+        SidebarItem(
+          title: 'Paired Devices',
+          icon: Icons.bluetooth_connected,
+          path: '/bluetooth/paired',
         ),
         SidebarItem(
           title: 'Network Proxy',
@@ -159,6 +170,10 @@ class NavigationSidebar extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
+    // Step 0: A narrow window collapses the rail to its icons, so the page
+    // keeps the width it needs for its own layout.
+    final collapsed = MediaQuery.sizeOf(context).width < _expandedWidth;
+
     // Step 1: One surface color is used by both the rail and the fade that
     // covers its bottom edge, so the fade stays invisible over the background.
     final sidebarColor = isDark
@@ -166,7 +181,7 @@ class NavigationSidebar extends StatelessWidget {
         : colorScheme.surfaceContainerLowest;
 
     return Container(
-      width: 280,
+      width: collapsed ? _collapsedWidth : _expandedWidth,
       decoration: BoxDecoration(
         color: sidebarColor,
         border: Border(
@@ -179,7 +194,7 @@ class NavigationSidebar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _SidebarHeader(),
+          _SidebarHeader(collapsed: collapsed),
           const Divider(),
           Expanded(
             // Step 2: The rail holds every destination plus a fade over its
@@ -198,7 +213,7 @@ class NavigationSidebar extends StatelessWidget {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (section.title != null) ...[
+                        if (section.title != null && !collapsed) ...[
                           Padding(
                             padding: const EdgeInsets.only(
                               left: 24,
@@ -224,6 +239,7 @@ class NavigationSidebar extends StatelessWidget {
                           return _SidebarItemWidget(
                             item: item,
                             isSelected: isSelected,
+                            collapsed: collapsed,
                             onTap: () {
                               if (!isSelected) {
                                 context.go(item.path);
@@ -265,7 +281,10 @@ class NavigationSidebar extends StatelessWidget {
 }
 
 class _SidebarHeader extends StatefulWidget {
-  const _SidebarHeader();
+  const _SidebarHeader({required this.collapsed});
+
+  /// Whether the rail is collapsed to icons.
+  final bool collapsed;
 
   @override
   State<_SidebarHeader> createState() => _SidebarHeaderState();
@@ -279,51 +298,59 @@ class _SidebarHeaderState extends State<_SidebarHeader> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
+    final Widget badge = RepaintBoundary(
+      child: AnimatedRotation(
+        turns: _isHovered ? 0.25 : 0.0,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeOutBack,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: _isHovered
+                ? colorScheme.primaryContainer
+                : colorScheme.primaryContainer.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Icon(
+            Icons.settings_outlined,
+            size: 24,
+            color: _isHovered
+                ? colorScheme.onPrimaryContainer
+                : colorScheme.primary,
+          ),
+        ),
+      ),
+    );
+
     return Padding(
-      padding: const EdgeInsets.only(left: 24, top: 32, right: 24, bottom: 16),
+      padding: widget.collapsed
+          ? const EdgeInsets.symmetric(vertical: 24)
+          : const EdgeInsets.only(left: 24, top: 32, right: 24, bottom: 16),
       child: MouseRegion(
         onEnter: (_) => setState(() => _isHovered = true),
         onExit: (_) => setState(() => _isHovered = false),
-        child: Row(
-          children: [
-            RepaintBoundary(
-              child: AnimatedRotation(
-                turns: _isHovered ? 0.25 : 0.0,
-                duration: const Duration(milliseconds: 600),
-                curve: Curves.easeOutBack,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: _isHovered
-                        ? colorScheme.primaryContainer
-                        : colorScheme.primaryContainer.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(16),
+        // The brand text does not fit an icon-only rail, so only the badge is
+        // kept and the title is dropped.
+        child: widget.collapsed
+            ? Center(child: badge)
+            : Row(
+                children: [
+                  badge,
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      'Settings',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: colorScheme.onSurface,
+                        letterSpacing: -0.5,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  child: Icon(
-                    Icons.settings_outlined,
-                    size: 24,
-                    color: _isHovered
-                        ? colorScheme.onPrimaryContainer
-                        : colorScheme.primary,
-                  ),
-                ),
+                ],
               ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                'Settings',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: colorScheme.onSurface,
-                  letterSpacing: -0.5,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -332,11 +359,15 @@ class _SidebarHeaderState extends State<_SidebarHeader> {
 class _SidebarItemWidget extends StatefulWidget {
   final SidebarItem item;
   final bool isSelected;
+
+  /// Whether the rail is collapsed to icons.
+  final bool collapsed;
   final VoidCallback onTap;
 
   const _SidebarItemWidget({
     required this.item,
     required this.isSelected,
+    required this.collapsed,
     required this.onTap,
   });
 
@@ -373,8 +404,13 @@ class _SidebarItemWidgetState extends State<_SidebarItemWidget> {
 
     final double translationX = _isHovered && !widget.isSelected ? 4.0 : 0.0;
 
+    final Widget icon = Icon(widget.item.icon, color: iconColor, size: 20);
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 12),
+      padding: EdgeInsets.symmetric(
+        vertical: 2,
+        horizontal: widget.collapsed ? 8 : 12,
+      ),
       child: MouseRegion(
         onEnter: (_) => setState(() => _isHovered = true),
         onExit: (_) => setState(() => _isHovered = false),
@@ -395,55 +431,64 @@ class _SidebarItemWidgetState extends State<_SidebarItemWidget> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeOutCubic,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
+                padding: widget.collapsed
+                    ? const EdgeInsets.symmetric(vertical: 12)
+                    : const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
                   color: backgroundColor,
                   borderRadius: BorderRadius.circular(28),
                 ),
                 child: Row(
+                  mainAxisAlignment: widget.collapsed
+                      ? MainAxisAlignment.center
+                      : MainAxisAlignment.start,
                   children: [
                     // Step 3: The active destination is marked with an accent
                     // rail on its leading edge, the navigation-rail idiom, so
                     // the marker sits where the eye already starts reading.
                     // The rail keeps its width while collapsed, which leaves
                     // the labels of selected and unselected rows aligned.
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeOutCubic,
-                      width: 4,
-                      height: widget.isSelected ? 18 : 0,
-                      margin: const EdgeInsets.only(right: 10),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary,
-                        borderRadius: BorderRadius.circular(2),
+                    if (!widget.collapsed)
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutCubic,
+                        width: 4,
+                        height: widget.isSelected ? 18 : 0,
+                        margin: const EdgeInsets.only(right: 10),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
-                    ),
                     AnimatedScale(
                       scale: widget.isSelected
                           ? 1.05
                           : (_isHovered ? 1.02 : 1.0),
                       duration: const Duration(milliseconds: 200),
-                      child: Icon(widget.item.icon, color: iconColor, size: 20),
+                      // An icon-only rail has no label, so the title moves into
+                      // a tooltip instead of being lost.
+                      child: widget.collapsed
+                          ? Tooltip(message: widget.item.title, child: icon)
+                          : icon,
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: AnimatedDefaultTextStyle(
-                        duration: const Duration(milliseconds: 200),
-                        style: theme.textTheme.bodyMedium!.copyWith(
-                          fontWeight: widget.isSelected
-                              ? FontWeight.w600
-                              : FontWeight.normal,
-                          color: textColor,
-                        ),
-                        child: Text(
-                          widget.item.title,
-                          overflow: TextOverflow.ellipsis,
+                    if (!widget.collapsed) ...[
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 200),
+                          style: theme.textTheme.bodyMedium!.copyWith(
+                            fontWeight: widget.isSelected
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                            color: textColor,
+                          ),
+                          child: Text(
+                            widget.item.title,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),

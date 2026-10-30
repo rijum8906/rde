@@ -87,7 +87,12 @@ class _FakeBluetoothRepository implements BluetoothRepository {
 void main() {
   testWidgets('a connected device row disconnects the device', (tester) async {
     final repository = _FakeBluetoothRepository();
-    final bloc = BluetoothBloc(bluetoothRepository: repository);
+    // The scan window is wound down at once: a widget test owns no real clock,
+    // so a normal window would leave a timer pending when the tree is disposed.
+    final bloc = BluetoothBloc(
+      bluetoothRepository: repository,
+      scanWindow: Duration.zero,
+    );
     addTearDown(bloc.close);
 
     await tester.pumpWidget(

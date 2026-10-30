@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:core/core.dart';
 import 'package:rde_settings/features/bluetooth/data/datasources/dbus/bluez_proxy.dart';
 import 'package:rde_settings/features/bluetooth/data/datasources/dbus_bluetooth_datasource.dart';
@@ -17,12 +18,24 @@ import 'package:rde_settings/features/bluetooth/presentation/pages/bluetooth_pai
 /// Sections of the Bluetooth page.
 enum BluetoothSection { devices, paired }
 
+/// Route of [section], so the page and the sidebar select the same one.
+String routeForBluetoothSection(BluetoothSection section) {
+  return switch (section) {
+    BluetoothSection.devices => '/bluetooth',
+    BluetoothSection.paired => '/bluetooth/paired',
+  };
+}
+
 /// Bluetooth settings backed by `org.bluez`.
 ///
 /// The page is a BlueZ client: bluetoothd owns the adapter and the device
-/// tree, so every read and mutation goes through org.bluez.
+/// tree, so every read and mutation goes through org.bluez. Each section has
+/// its own route, because the sidebar links to them directly.
 class BluetoothPage extends StatelessWidget {
-  const BluetoothPage({super.key});
+  const BluetoothPage({super.key, this.section = BluetoothSection.devices});
+
+  /// Section this route renders.
+  final BluetoothSection section;
 
   @override
   Widget build(BuildContext context) {
@@ -34,24 +47,20 @@ class BluetoothPage extends StatelessWidget {
       create: (context) =>
           BluetoothBloc(bluetoothRepository: repository)
             ..add(const BluetoothInitEvent()),
-      child: const BluetoothView(),
+      child: BluetoothView(section: section),
     );
   }
 }
 
 /// Renders the state published by [BluetoothBloc].
 ///
-/// Owns the local section selector: which section the user is on is a page
-/// concern, so the bloc does not track it.
-class BluetoothView extends StatefulWidget {
-  const BluetoothView({super.key});
+/// The visible section comes from the route, so the segmented control and the
+/// sidebar cannot disagree about which section is open.
+class BluetoothView extends StatelessWidget {
+  const BluetoothView({super.key, required this.section});
 
-  @override
-  State<BluetoothView> createState() => _BluetoothViewState();
-}
-
-class _BluetoothViewState extends State<BluetoothView> {
-  BluetoothSection _section = BluetoothSection.devices;
+  /// Section this route renders.
+  final BluetoothSection section;
 
   @override
   Widget build(BuildContext context) {
@@ -115,13 +124,14 @@ class _BluetoothViewState extends State<BluetoothView> {
                             label: Text('Paired Devices'),
                           ),
                         ],
-                        selected: {_section},
-                        onSelectionChanged: (selection) =>
-                            setState(() => _section = selection.first),
+                        selected: {section},
+                        onSelectionChanged: (selection) => context.go(
+                          routeForBluetoothSection(selection.first),
+                        ),
                         showSelectedIcon: false,
                       ),
                       const SizedBox(height: 16),
-                      if (_section == BluetoothSection.devices)
+                      if (section == BluetoothSection.devices)
                         const BluetoothDevicesCard()
                       else
                         const BluetoothPairedPage(),

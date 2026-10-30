@@ -262,6 +262,29 @@ void main() {
     await bloc.close();
   });
 
+  test('the scan the page started stops at the end of its window', () async {
+    final repository = _FakeBluetoothRepository();
+    final bloc = BluetoothBloc(
+      bluetoothRepository: repository,
+      scanWindow: const Duration(milliseconds: 20),
+    );
+
+    bloc.add(const BluetoothInitEvent());
+    await bloc.stream.firstWhere(
+      (value) => value.status == BluetoothStatus.success,
+    );
+    expect(repository.discovering, isTrue);
+
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+
+    expect(repository.stopDiscoveryCalls, 1);
+    expect(bloc.state.isDiscovering, isFalse);
+    // The end of the window is not a user action, so nothing is announced.
+    expect(bloc.state.noticeMessage, isNull);
+
+    await bloc.close();
+  });
+
   test('leaving the page stops the scan it started', () async {
     final repository = _FakeBluetoothRepository();
     final bloc = BluetoothBloc(bluetoothRepository: repository);

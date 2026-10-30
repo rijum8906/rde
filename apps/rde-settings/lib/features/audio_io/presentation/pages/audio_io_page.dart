@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:rde_settings/features/audio_io/data/datasources/dbus/mpris_proxy.dart';
+import 'package:rde_settings/features/audio_io/data/datasources/dbus/volume_proxy.dart';
+import 'package:rde_settings/features/audio_io/data/repositories/master_volume_repository_impl.dart';
 import 'package:rde_settings/features/audio_io/data/repositories/now_playing_repository_impl.dart';
+import 'package:rde_settings/features/audio_io/presentation/bloc/volume_bloc.dart';
+import 'package:rde_settings/features/audio_io/presentation/bloc/volume_event.dart';
+import 'package:rde_settings/features/audio_io/presentation/widgets/volume_card.dart';
 import 'package:rde_settings/features/audio_io/domain/use_cases/read_now_playing.dart';
 import 'package:rde_settings/features/audio_io/domain/use_cases/skip_track.dart';
 import 'package:rde_settings/features/audio_io/domain/use_cases/toggle_play_pause.dart';
@@ -18,14 +23,23 @@ class AudioIoPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final proxy = MprisProxy();
     final repository = NowPlayingRepositoryImpl(proxy);
+    final volumeRepository = MasterVolumeRepositoryImpl(VolumeProxy());
 
-    return BlocProvider(
-      create: (_) => NowPlayingBloc(
-        read: ReadNowPlayingUseCase(repository),
-        watch: WatchNowPlayingUseCase(repository),
-        togglePlayPause: TogglePlayPauseUseCase(repository),
-        skipTrack: SkipTrackUseCase(repository),
-      )..add(const NowPlayingInitEvent()),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (_) => NowPlayingBloc(
+            read: ReadNowPlayingUseCase(repository),
+            watch: WatchNowPlayingUseCase(repository),
+            togglePlayPause: TogglePlayPauseUseCase(repository),
+            skipTrack: SkipTrackUseCase(repository),
+          )..add(const NowPlayingInitEvent()),
+        ),
+        BlocProvider(
+          create: (_) => VolumeBloc(repository: volumeRepository)
+            ..add(const VolumeInitEvent()),
+        ),
+      ],
       child: const AudioIoView(),
     );
   }
@@ -71,6 +85,13 @@ class AudioIoView extends StatelessWidget {
                         const NowPlayingSkipTrackEvent(SkipDirection.previous),
                       ),
                     ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 520),
+                    child: const VolumeCard(),
                   ),
                 ),
                 const SizedBox(height: 32),
