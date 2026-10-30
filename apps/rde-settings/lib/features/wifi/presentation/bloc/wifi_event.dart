@@ -32,6 +32,16 @@ class ConnectToNetworkEvent extends WifiEvent {
   });
 }
 
+/// Disconnects the active Wi-Fi connection.
+///
+/// [ssid] is the network whose row asked for the disconnect, so the page can
+/// show the spinner on that row while NetworkManager tears the link down.
+class DisconnectFromNetworkEvent extends WifiEvent {
+  final String ssid;
+
+  const DisconnectFromNetworkEvent(this.ssid);
+}
+
 /// Closes the password prompt without retrying the connection.
 class DismissPasswordPromptEvent extends WifiEvent {
   const DismissPasswordPromptEvent();

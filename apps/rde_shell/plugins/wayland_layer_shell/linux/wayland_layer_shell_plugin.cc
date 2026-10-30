@@ -57,7 +57,12 @@ static FlMethodResponse *initialize(WaylandLayerShellPlugin *self, FlValue *args
     int width = fl_value_get_int(fl_value_lookup_string(args, "width"));
     int height = fl_value_get_int(fl_value_lookup_string(args, "height"));
     gtk_widget_set_size_request(GTK_WIDGET(gtk_window), width, height);
-    gtk_layer_init_for_window(gtk_window);
+    // The runner may already have initialized the layer surface before the
+    // toplevel was realized (the only supported order for gtk-layer-shell).
+    if (!gtk_layer_is_layer_window(gtk_window))
+    {
+      gtk_layer_init_for_window(gtk_window);
+    }
 
     // Do NOT map the window here. Mapping commits the layer surface, and the
     // compositor terminates the connection when that first commit carries a

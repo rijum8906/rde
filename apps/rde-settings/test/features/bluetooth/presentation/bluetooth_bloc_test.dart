@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/bluetooth/domain/entities/bluetooth_adapter.dart';
 import 'package:rde_settings/features/bluetooth/domain/entities/bluetooth_device.dart';
 import 'package:rde_settings/features/bluetooth/domain/repositories/bluetooth_repository.dart';

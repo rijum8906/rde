@@ -1,32 +1,48 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:rde_settings/features/battery_health/data/datasources/dbus/power_profiles_proxy.dart';
+import 'package:rde_settings/features/battery_health/data/datasources/dbus/upower_proxy.dart';
+import 'package:rde_settings/features/battery_health/data/datasources/dbus_battery_health_datasource.dart';
+import 'package:rde_settings/features/battery_health/data/repositories/battery_health_repository_impl.dart';
+import 'package:rde_settings/features/battery_health/domain/use_cases/read_battery_health.dart';
+import 'package:rde_settings/features/battery_health/domain/use_cases/set_charge_end_threshold.dart';
+import 'package:rde_settings/features/battery_health/domain/use_cases/set_charge_threshold.dart';
+import 'package:rde_settings/features/battery_health/domain/use_cases/set_power_profile.dart';
+import 'package:rde_settings/features/battery_health/domain/use_cases/watch_battery_health.dart';
 import 'package:rde_settings/features/battery_health/presentation/bloc/battery_health_bloc.dart';
+import 'package:rde_settings/features/battery_health/presentation/bloc/battery_health_event.dart';
 import 'package:rde_settings/features/battery_health/presentation/bloc/battery_health_state.dart';
-import 'package:rde_settings/features/battery_health/presentation/widgets/app_usage_card.dart';
 import 'package:rde_settings/features/battery_health/presentation/widgets/battery_health_header.dart';
 import 'package:rde_settings/features/battery_health/presentation/widgets/health_state_card.dart';
 import 'package:rde_settings/features/battery_health/presentation/widgets/power_management_card.dart';
 import 'package:rde_settings/features/battery_health/presentation/widgets/visual_battery_card.dart';
 
-/// Battery health settings backed by the battery subsystem.
 class BatteryHealthPage extends StatelessWidget {
   const BatteryHealthPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final upower = UPowerProxy();
+    final powerProfiles = PowerProfilesProxy();
+    final datasource = DbusBatteryHealthDatasource(
+      upower: upower,
+      powerProfiles: powerProfiles,
+    );
+    final repository = BatteryHealthRepositoryImpl(datasource);
+
     return BlocProvider(
-      create: (context) => BatteryHealthBloc(),
+      create: (_) => BatteryHealthBloc(
+        read: ReadBatteryHealthUseCase(repository),
+        watch: WatchBatteryHealthUseCase(repository),
+        setChargeThreshold: SetChargeThresholdUseCase(repository),
+        setChargeEndThreshold: SetChargeEndThresholdUseCase(repository),
+        setPowerProfile: SetPowerProfileUseCase(repository),
+      )..add(const BatteryHealthInitEvent()),
       child: const BatteryHealthView(),
     );
   }
 }
 
-/// Renders the state published by [BatteryHealthBloc].
-///
-/// The view only lays out the four cards; each card reads the state it
-/// needs from the bloc. The two-column layout matches the Theme & Styling
-/// page: a wide primary column on the left, a narrower stats column on the
-/// right, stacked on narrow widths.
 class BatteryHealthView extends StatelessWidget {
   const BatteryHealthView({super.key});
 
@@ -42,6 +58,10 @@ class BatteryHealthView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const BatteryHealthHeader(),
+                if (state.errorMessage != null) ...[
+                  const SizedBox(height: 16),
+                  _ErrorBanner(message: state.errorMessage!),
+                ],
                 const SizedBox(height: 28),
                 LayoutBuilder(
                   builder: (context, constraints) {
@@ -64,13 +84,7 @@ class BatteryHealthView extends StatelessWidget {
                         if (!isWide) const SizedBox(height: 32),
                         Expanded(
                           flex: isWide ? 3 : 0,
-                          child: const Column(
-                            children: [
-                              HealthStatsCard(),
-                              SizedBox(height: 24),
-                              AppUsageCard(),
-                            ],
-                          ),
+                          child: const HealthStatsCard(),
                         ),
                       ],
                     );
@@ -80,6 +94,43 @@ class BatteryHealthView extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 18,
+            color: colorScheme.onErrorContainer,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onErrorContainer,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

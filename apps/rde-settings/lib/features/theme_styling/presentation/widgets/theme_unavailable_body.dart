@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:rde_settings/core/widgets/loading_indicator.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_state.dart';

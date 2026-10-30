@@ -1,31 +1,46 @@
-class BatteryHealthState {
-  final bool powerSavingMode;
-  final bool healthProtection;
-  final double chargeLimit;
+import 'package:equatable/equatable.dart';
+import 'package:rde_settings/features/battery_health/domain/entities/battery_snapshot.dart';
 
+enum BatteryHealthStatus { initial, loading, success, failure }
+
+class BatteryHealthState extends Equatable {
   const BatteryHealthState({
-    required this.powerSavingMode,
-    required this.healthProtection,
-    required this.chargeLimit,
+    this.status = BatteryHealthStatus.initial,
+    this.snapshot,
+    this.powerSaverActive = false,
+    this.errorMessage,
+    this.isBusy = false,
   });
 
-  factory BatteryHealthState.initial() {
-    return const BatteryHealthState(
-      powerSavingMode: false,
-      healthProtection: true,
-      chargeLimit: 0.8,
+  final BatteryHealthStatus status;
+  final BatterySnapshot? snapshot;
+  final bool powerSaverActive;
+  final String? errorMessage;
+  final bool isBusy;
+
+  BatteryHealthState copyWith({
+    BatteryHealthStatus? status,
+    BatterySnapshot? snapshot,
+    bool? powerSaverActive,
+    String? errorMessage,
+    bool clearError = false,
+    bool? isBusy,
+  }) {
+    return BatteryHealthState(
+      status: status ?? this.status,
+      snapshot: snapshot ?? this.snapshot,
+      powerSaverActive: powerSaverActive ?? this.powerSaverActive,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      isBusy: isBusy ?? this.isBusy,
     );
   }
 
-  BatteryHealthState copyWith({
-    bool? powerSavingMode,
-    bool? healthProtection,
-    double? chargeLimit,
-  }) {
-    return BatteryHealthState(
-      powerSavingMode: powerSavingMode ?? this.powerSavingMode,
-      healthProtection: healthProtection ?? this.healthProtection,
-      chargeLimit: chargeLimit ?? this.chargeLimit,
-    );
-  }
+  @override
+  List<Object?> get props => [
+    status,
+    snapshot,
+    powerSaverActive,
+    errorMessage,
+    isBusy,
+  ];
 }

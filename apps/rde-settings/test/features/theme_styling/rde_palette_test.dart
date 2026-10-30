@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
-import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
-import 'package:rde_settings/core/theme/domain/entities/theme_color.dart';
-import 'package:rde_settings/core/theme/theme_data_factory.dart';
+import 'package:core/theme.dart';
 
 /// Builds a resolved theme whose roles the mapping assertions can identify.
 ResolvedTheme themedResolved(AppearanceMode mode) {

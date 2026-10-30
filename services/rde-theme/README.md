@@ -22,12 +22,14 @@ bus as `org.rde.Theme`.
   - [`domain/palette.rs`](src/domain/palette.rs): semantic color roles (`primary`, `surface`, ...).
   - [`domain/theme_config.rs`](src/domain/theme_config.rs): the `themes.toml` registry model.
   - [`domain/color.rs`](src/domain/color.rs): hex color parsing and formatting.
-- **`backend/`**: palette engines and toolkit output.
-  - [`backend/mod.rs`](src/backend/mod.rs): `ThemeBackend` trait that resolves manifests into palettes.
-  - [`backend/material/`](src/backend/material/mod.rs): Material 3 seed and scheme computation.
-  - [`backend/kde/`](src/backend/kde/mod.rs): writes `kdeglobals` and the Plasma color scheme.
-  - [`backend/qt/`](src/backend/qt/mod.rs): writes qt5ct/qt6ct palettes and tool configs.
-  - [`backend/gtk/`](src/backend/gtk/mod.rs): renders GTK CSS `@define-color` overrides.
+- **`adapter/`**: toolkit output. Only the toolkit surfaces live here.
+  - [`adapter/mod.rs`](src/adapter/mod.rs): `Adapter` trait, registry, and shared artifact naming.
+  - [`adapter/kde/`](src/adapter/kde/mod.rs): writes `kdeglobals` and the Plasma color scheme.
+  - [`adapter/qt/`](src/adapter/qt/mod.rs): writes qt5ct/qt6ct palettes and tool configs.
+  - [`adapter/gtk/`](src/adapter/gtk/mod.rs): renders GTK CSS `@define-color` overrides and `settings.ini`.
+- **`material/`**: Material 3 palette engine (seed colors → semantic color roles).
+- **`resolver/`**: `Resolver` trait, its registry, and the resolver algorithms.
+- **`detect/`**: session and toolkit detection used by the service and the adapters.
 - **`dbus/`**: `org.rde.Theme` interface at `/org/rde/Theme`.
 
 ## Theme Database
@@ -201,12 +203,18 @@ overwrite the desktop cannot notice.
 
 Defaults are `~/.local/share` and `~/.config`; the XDG variables are honored.
 
-- **Material 3 mapping**: the palette is mapped onto Qt's `QPalette` roles
-  (`Window`/`Base`/`Text` from surface roles, `Highlight`/`Accent` from `primary`,
-  tooltips from `inverse_surface`, and so on) in Qt's `WindowText, Button, Light, …`
-  serialization order. 22 values are written per group (including the unused `NoRole`
-  slot and the Qt 6.6 `Accent` role) so every role index lines up; Qt 5 ignores the
-  trailing `Accent` value.
+- **Material 3 mapping**: the palette is mapped onto Qt's `QPalette` roles in its
+  `WindowText, Button, Light, …` serialization order. Accent roles come from the
+  accent families (`Highlight`/`HighlightedText` from `primary_container`,
+  `Link`/`Accent` from `primary`, `LinkVisited` from `tertiary`); containers and
+  bevels come from the surface ladder (`Button` from `surface_container_high`,
+  `Light` from `surface_container_highest`, `Dark` from `surface_container`,
+  `Mid` from `outline_variant`), with `Window`/`Base`/`AlternateBase` on separate
+  tiers so 3D widgets extrude and alternating rows stay visible. Tooltips use
+  `inverse_surface`/`inverse_on_surface` and text uses
+  `on_surface`/`on_surface_variant`. 22 values are written per group (including
+  the unused `NoRole` slot and the Qt 6.6 `Accent` role) so every role index lines
+  up; Qt 5 ignores the trailing `Accent` value.
 - **Plasma accent**: `kdeglobals [General] AccentColor` is pinned to the theme's
   primary color so Plasma 6 accent-colored widgets follow the theme.
 - **Three color groups**: active and inactive share colors; disabled widgets keep the

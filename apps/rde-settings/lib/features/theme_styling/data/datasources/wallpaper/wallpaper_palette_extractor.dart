@@ -2,7 +2,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
-import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
+import 'package:core/theme.dart';
 
 /// Reduces a wallpaper to the four seed colors of the dynamic theme.
 ///

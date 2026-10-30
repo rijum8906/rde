@@ -1,14 +1,16 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:rde_settings/core/theme/bloc/app_theme_event.dart' as theme_evt;
-import 'package:rde_settings/core/theme/domain/entities/theme_manifest.dart';
+import 'package:core/theme.dart';
 import 'package:rde_settings/features/dashboard/domain/entities/dashboard_settings.dart';
 import 'package:rde_settings/features/dashboard/domain/use_cases/get_dashboard_settings.dart';
 import 'package:rde_settings/features/dashboard/domain/use_cases/save_dashboard_settings.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/set_theme.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/update_dynamic_theme.dart';
 import 'package:rde_settings/main.dart';
+
 import 'dashboard_event.dart';
 import 'dashboard_state.dart';
 

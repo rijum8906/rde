@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rde_settings/core/theme/bloc/app_theme_bloc.dart';
-import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
-import 'package:rde_settings/core/utils/accent_seeds.dart';
+import 'package:core/theme.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 import 'package:rde_settings/features/theme_styling/presentation/views/theme_styling_view.dart';
@@ -72,7 +71,7 @@ void main() {
     expect(find.text('Ocean'), findsOneWidget);
     expect(find.text('Live Preview'), findsOneWidget);
     expect(find.text('Palette roles'), findsOneWidget);
-    expect(find.text('Active'), findsOneWidget);
+    expect(find.text('Active'), findsNWidgets(2));
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 

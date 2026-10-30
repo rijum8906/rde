@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 use crate::{
-    backend::BackendError,
+    adapter::AdapterError,
     domain::{
         IdError,
         error::{ManifestError, RegistryError, SettingsError},
@@ -54,7 +54,7 @@ pub enum ThemeError {
 
     /// Resolved payload parsing or structure error.
     #[error("resolved payload error: {0}")]
-    Backend(#[from] BackendError),
+    Adapter(#[from] AdapterError),
 
     #[error(transparent)]
     IdError(#[from] IdError),

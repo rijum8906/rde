@@ -3,9 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:rde_settings/core/theme/bloc/app_theme_bloc.dart';
 import 'package:rde_settings/core/theme/bloc/app_theme_event.dart';
-import 'package:rde_settings/core/theme/data/datasources/dbus/rde_theme_proxy.dart';
-import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
-import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
+import 'package:core/theme.dart';
 
 /// Keeps the settings app in sync with the theme published by `org.rde.Theme`.
 ///

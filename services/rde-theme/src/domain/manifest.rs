@@ -13,7 +13,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 use thiserror::Error;
-use zbus::zvariant::{Optional, Type};
+use zbus::{Optional, Type};
 
 use crate::domain::identity::{ThemeId, VariantId};
 use crate::domain::validation::{DefaultFileInspector, FileInspector};

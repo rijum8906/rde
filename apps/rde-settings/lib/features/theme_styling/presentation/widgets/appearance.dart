@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
+import 'package:core/theme.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 

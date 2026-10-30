@@ -2,9 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/wifi/domain/entities/wifi_network.dart';
 import 'package:rde_settings/features/wifi/domain/repositories/wifi_repository.dart';
+
 import 'wifi_event.dart';
 import 'wifi_state.dart';
 
@@ -26,6 +27,7 @@ class WifiBloc extends Bloc<WifiEvent, WifiState> {
     on<ScanNetworksEvent>(_onScanNetworks);
     on<ToggleWifiRadioEvent>(_onToggleWifiRadio);
     on<ConnectToNetworkEvent>(_onConnectToNetwork);
+    on<DisconnectFromNetworkEvent>(_onDisconnectFromNetwork);
     on<DismissPasswordPromptEvent>(_onDismissPasswordPrompt);
     on<LoadSavedNetworksEvent>(_onLoadSavedNetworks);
     on<ForgetSavedNetworkEvent>(_onForgetSavedNetwork);
@@ -205,6 +207,34 @@ class WifiBloc extends Bloc<WifiEvent, WifiState> {
       }
       await Future<void>.delayed(const Duration(milliseconds: 400));
     }
+  }
+
+  /// Disconnects the active network.
+  ///
+  /// The row that asked shows the spinner through `connectingSsid`, and the
+  /// daemon is read back afterwards, so the association the page shows comes
+  /// from NetworkManager instead of an optimistic guess.
+  Future<void> _onDisconnectFromNetwork(
+    DisconnectFromNetworkEvent event,
+    Emitter<WifiState> emit,
+  ) async {
+    if (state.connectingSsid != null) {
+      return;
+    }
+
+    emit(state.copyWith(connectingSsid: event.ssid, errorMessage: null));
+
+    final result = await _wifiRepository.disconnectFromNetwork(
+      _networkFor(event.ssid),
+    );
+    final failure = _failureOf(result);
+    if (failure != null) {
+      emit(state.copyWith(connectingSsid: null, errorMessage: failure.message));
+      return;
+    }
+
+    emit(state.copyWith(connectingSsid: null));
+    await _refresh(emit);
   }
 
   void _onDismissPasswordPrompt(

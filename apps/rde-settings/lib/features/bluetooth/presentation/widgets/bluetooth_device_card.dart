@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:rde_settings/core/widgets/loading_indicator.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/bluetooth/domain/entities/bluetooth_device.dart';
 import 'package:rde_settings/features/bluetooth/presentation/bloc/bluetooth_bloc.dart';
 import 'package:rde_settings/features/bluetooth/presentation/widgets/bluetooth_devices_tile.dart';

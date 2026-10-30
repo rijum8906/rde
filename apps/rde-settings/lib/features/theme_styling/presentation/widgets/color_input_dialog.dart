@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:rde_settings/core/theme/domain/entities/theme_color.dart';
-import 'package:rde_settings/core/utils/seed_colors.dart';
+import 'package:core/theme.dart';
 
 /// Dialog that edits the accent color as a hex string.
 ///

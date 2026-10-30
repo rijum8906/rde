@@ -9,11 +9,13 @@ class WifiSavedCard extends StatelessWidget {
     super.key,
     required this.state,
     required this.onConnect,
+    required this.onDisconnect,
     required this.onForget,
   });
 
   final WifiState state;
   final ValueChanged<WifiNetwork> onConnect;
+  final ValueChanged<WifiNetwork> onDisconnect;
   final ValueChanged<WifiNetwork> onForget;
 
   @override
@@ -66,6 +68,7 @@ class WifiSavedCard extends StatelessWidget {
                 networks: state.savedNetworks,
                 state: state,
                 onConnect: onConnect,
+                onDisconnect: onDisconnect,
                 onForget: onForget,
               ),
           ],
@@ -80,12 +83,14 @@ class _SavedGroup extends StatelessWidget {
     required this.networks,
     required this.state,
     required this.onConnect,
+    required this.onDisconnect,
     required this.onForget,
   });
 
   final List<WifiNetwork> networks;
   final WifiState state;
   final ValueChanged<WifiNetwork> onConnect;
+  final ValueChanged<WifiNetwork> onDisconnect;
   final ValueChanged<WifiNetwork> onForget;
 
   @override
@@ -113,6 +118,7 @@ class _SavedGroup extends StatelessWidget {
               isConnected: state.connectedSsid == networks[i].ssid,
               isConnecting: state.connectingSsid == networks[i].ssid,
               onConnect: () => onConnect(networks[i]),
+              onDisconnect: () => onDisconnect(networks[i]),
               onForget: () => onForget(networks[i]),
             ),
           ],

@@ -1,5 +1,5 @@
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/typography/domain/entities/typography_settings.dart';
 import 'package:rde_settings/features/typography/domain/repositories/typography_repository.dart';
 

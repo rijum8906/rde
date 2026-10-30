@@ -17,7 +17,7 @@ It bridges modern **Material 3 (M3)** design principles with Linux desktop toolk
 
 ## 🎨 Material 3 Design System Engine
 
-`rde-theme` uses Google's Material 3 design system to construct harmonious color schemes from four seed colors (primary, secondary, tertiary, error). The engine lives in `backend/material/` behind the `ThemeBackend` trait and emits the toolkit-neutral `domain::palette::Palette`, so storage, D-Bus, and toolkit writers never depend on Material types.
+`rde-theme` uses Google's Material 3 design system to construct harmonious color schemes from four seed colors (primary, secondary, tertiary, error). The engine lives in `material/` behind the `resolver::Resolver` trait and produces the toolkit-neutral `domain::resolved::ResolvedTheme`, so storage, D-Bus, resolvers, and toolkit writers never depend on Material types.
 
 ### 1. Color Role Mapping Schema
 
@@ -94,7 +94,7 @@ $XDG_DATA_HOME/rde/rde-theme/
 
 ### 1. GTK Theme Management Engine (GTK 3 & GTK 4)
 
-Implemented in `backend/gtk/`. CSS emission (`backend/gtk/css.rs`) renders every semantic role as a GTK `@define-color` declaration; writing the files and the synchronization steps below are planned.
+Implemented in `adapter/gtk/`. CSS emission (`adapter/gtk/css.rs`) renders every semantic role as a GTK `@define-color` declaration; writing the files and the synchronization steps below are planned.
 
 - **`settings.ini` Configuration**: Writes GTK configuration options to `~/.config/gtk-3.0/settings.ini` and `~/.config/gtk-4.0/settings.ini`:
   - `gtk-theme-name`
@@ -107,11 +107,11 @@ Implemented in `backend/gtk/`. CSS emission (`backend/gtk/css.rs`) renders every
 
 ### 2. Qt Theme Management Engine (Qt 5 & Qt 6)
 
-Split into `backend/kde/` (Plasma) and `backend/qt/` (qt5ct/qt6ct), both invoked at startup and after every theme or scheme change. Artifact names carry the publication generation, so a regenerated palette never overwrites the file the desktop already loaded.
+Split into `adapter/kde/` (Plasma) and `adapter/qt/` (qt5ct/qt6ct), both invoked at startup and after every theme or scheme change. Artifact names carry the publication generation, so a regenerated palette never overwrites the file the desktop already loaded.
 
 - **qt5ct / qt6ct Schemes**: When either tool is installed, writes `~/.config/qt{5,6}ct/colors/<theme>-<variant>-v<generation>.conf` with active, inactive, and disabled color lists in `QPalette::ColorRole` serialization order (22 values: every Qt role including the unused `NoRole` slot and the Qt 6.6 `Accent` role; Qt 5 ignores the trailing value). Each tool's config is merged non-destructively with `color_scheme_path` + `custom_palette=true`, and superseded palettes of the same variant are removed.
 - **KDE Integration**: Writes the standalone `~/.local/share/color-schemes/<theme>-<variant>-v<generation>.colors` scheme and merges the `[Colors:Window|View|Button|Selection|Tooltip|Complementary|Header]` and `[WM]` groups into `~/.config/kdeglobals` plus `[General] AccentColor`. The scheme selection itself is left to `plasma-apply-colorscheme`, which skips a scheme that `kdeglobals` already selects.
-- **Palette Mapping**: Maps M3 roles to Qt color roles: `Window` from `surface`, `Base` from `surface_container_lowest`, `Text`/`WindowText` from `on_surface`, `Button` from `surface_container`, bevel roles from the surface container tiers, `Highlight` from `primary`, `HighlightedText` from `on_primary`, links from `primary`/`tertiary`, and tooltips from `inverse_surface`.
+- **Palette Mapping**: Accent roles come from the accent families — `Highlight`/`HighlightedText` from `primary_container`/`on_primary_container`, `Link` and `Accent` from `primary`, and `LinkVisited` from `tertiary` — while containers and bevels come from the surface ladder: `Button` from `surface_container_high`, `Light`/`Midlight` from the tiers above it, `Dark` from `surface_container`, `Mid` from `outline_variant`, `Window` and `AlternateBase` from `surface_container`, and `Base` from `surface_container_low` so alternating rows stay visible. `Text`/`WindowText`/`ButtonText` use `on_surface`, `PlaceholderText` uses `on_surface_variant`, and tooltips use `inverse_surface`/`inverse_on_surface`.
 - **Merging and Atomicity**: Existing Qt/KDE configuration is parsed line-by-line so comments, styles, fonts, icons, and unrelated keys survive; files are written atomically and only when their contents change. A failure in one file (for example an unwritable `qt6ct` directory) is reported without preventing the other files or the theme change itself.
 
 ---
@@ -143,7 +143,7 @@ Split into `backend/kde/` (Plasma) and `backend/qt/` (qt5ct/qt6ct), both invoked
 2. **Validation and Persistence**:
    - The store validates the identifier and source color, then writes the affected manifest and/or registry atomically. Failed writes roll the in-memory state back.
 3. **Palette Computation**:
-   - The backend expands the theme's source color into the 37 M3 color roles for the requested light/dark scheme. Palettes are derived on demand and never persisted.
+   - The adapter expands the theme's source color into the 37 M3 color roles for the requested light/dark scheme. Palettes are derived on demand and never persisted.
 4. **Signal Dispatch**:
    - Emits `ThemeChanged`, `ColorSchemeChanged`, `PaletteChanged`, or `InstalledThemesChanged` over the `org.rde.Theme` session D-Bus interface, plus the standard `PropertiesChanged` signal for mutated properties.
 5. **Toolkit Synchronization**:

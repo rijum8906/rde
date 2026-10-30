@@ -1,5 +1,5 @@
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/theme_styling/domain/repositories/theme_repository.dart';
 
 /// Asks the service to re-read the theme database from disk.

@@ -3,9 +3,7 @@ import 'dart:convert';
 
 import 'package:dbus/dbus.dart';
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/data/datasource/network_manager/nm_device_types.dart';
-import 'package:rde_settings/core/dbus/dbus.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/wifi/domain/entities/wifi_network.dart';
 
 /// Talks to the system NetworkManager daemon.
@@ -352,9 +350,9 @@ class NetworkManagerProxy {
 
       final list = networks.values.toList()
         ..sort(
-          (left, right) => _strengthValue(
-            right.strength,
-          ).compareTo(_strengthValue(left.strength)),
+          (left, right) =>
+              _strengthValue(right.strength)
+                  .compareTo(_strengthValue(left.strength)),
         );
       return list;
     });

@@ -1,25 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:rde_settings/features/battery_health/presentation/bloc/battery_health_bloc.dart';
 
 /// Visual battery cylinder with the current charge level.
+///
+/// The level and the charging state come from the UPower snapshot, so the card
+/// follows the daemon instead of showing a placeholder charge.
 class VisualBatteryCard extends StatelessWidget {
   const VisualBatteryCard({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final snapshot = context.watch<BatteryHealthBloc>().state.snapshot;
+
     return _VisualBatteryCardBody(
-      // If BatteryHealthState exposes a `batteryLevel` (0.0–1.0), read it
-      // here. Otherwise fall back to the previous hardcoded 0.88.
-      level: 0.88,
-      isCharging: false,
+      level: ((snapshot?.percentage ?? 0) / 100).clamp(0.0, 1.0),
+      isCharging: snapshot?.isCharging ?? false,
+      statusLabel: snapshot?.timeRemainingLabel ?? 'Waiting for battery data',
     );
   }
 }
 
 class _VisualBatteryCardBody extends StatelessWidget {
-  const _VisualBatteryCardBody({required this.level, required this.isCharging});
+  const _VisualBatteryCardBody({
+    required this.level,
+    required this.isCharging,
+    required this.statusLabel,
+  });
 
   final double level;
   final bool isCharging;
+  final String statusLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -45,9 +56,7 @@ class _VisualBatteryCardBody extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      isCharging
-                          ? 'Charging — ${(level * 100).toInt()}%'
-                          : 'Discharging — 6h 45m remaining',
+                      statusLabel,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: colorScheme.onSurfaceVariant,
                       ),
@@ -65,10 +74,14 @@ class _VisualBatteryCardBody extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.bolt, size: 14, color: colorScheme.primary),
+                      Icon(
+                        isCharging ? Icons.bolt : Icons.battery_std,
+                        size: 14,
+                        color: colorScheme.primary,
+                      ),
                       const SizedBox(width: 4),
                       Text(
-                        'Standard',
+                        isCharging ? 'Charging' : 'On battery',
                         style: theme.textTheme.labelSmall?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),

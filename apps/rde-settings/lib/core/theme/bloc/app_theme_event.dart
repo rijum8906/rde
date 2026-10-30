@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
-import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
+import 'package:core/theme.dart';
 
 abstract class AppThemeEvent {
   const AppThemeEvent();

@@ -12,6 +12,7 @@ rde-core = { workspace = true }
 
 tokio = { workspace = true }
 tracing = { workspace = true }
+nix = { version = "0.31.3", features = ["signal"]}
 
 [dev-dependencies]
 tempfile = "3.27.0"

@@ -20,10 +20,8 @@ use tokio::sync::{Mutex, RwLock, broadcast};
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    backend::{
-        AdapterRegistry, compute_color_roles, detect::SessionEnv, kde::KDE_ADAPTER_NAME,
-        resolvers::ResolverRegistry, unique_theme_name,
-    },
+    adapter::{AdapterRegistry, kde::KDE_ADAPTER_NAME, unique_theme_name},
+    detect::SessionEnv,
     domain::{
         identity::{ThemeId, VariantId},
         manifest::{ContrastLevel, ThemeManifest, ThemeMode},
@@ -35,7 +33,9 @@ use crate::{
         settings::{DynamicThemeUpdate, ThemeSettings},
     },
     fs::write_atomic,
+    material::compute_color_roles,
     paths::ThemePaths,
+    resolver::ResolverRegistry,
     theme_store::{DiskThemeRepository, ThemeError, ThemeRepository},
 };
 
@@ -131,7 +131,7 @@ impl ThemeService {
         settings_path: PathBuf,
         themes_dir: PathBuf,
     ) -> Result<Self, ThemeError> {
-        info!("Starting up ThemeService...");
+        debug!("Starting up ThemeService...");
 
         // Step 1: Load settings with recovery.
         let settings = repo.load_settings().await.unwrap_or_else(|err| {
@@ -206,7 +206,7 @@ impl ThemeService {
         // Step 9: Invariant Step C: Emit signal after files are durable.
         let _ = theme_changed_tx.send(resolved.clone());
 
-        info!("ThemeService startup transaction completed successfully");
+        debug!("ThemeService startup transaction completed successfully");
 
         Ok(Self {
             repo,
@@ -363,6 +363,16 @@ impl ThemeService {
         // the desktop is currently reading.
         let theme_name = unique_theme_name(&resolved.theme_id, &resolved.variant, generation);
 
+        // Step 2: The Material 3 palette is the published payload every other
+        // surface derives from, so it is reported as its own surface.
+        info!(
+            surface = "material",
+            theme = %resolved.theme_id,
+            variant = %resolved.variant,
+            generation,
+            "Updated Material 3 color palette"
+        );
+
         let mut registry = adapter_registry.write().await;
         let mut applied = Vec::new();
 
@@ -371,27 +381,48 @@ impl ThemeService {
 
             match adapter.render(resolved) {
                 Ok(output) => {
-                    // Step 2: Write every rendered file atomically so consumers
+                    // Step 3: Write every rendered file atomically so consumers
                     // never observe a partially themed file.
+                    let mut written = 0usize;
                     for (file_path, bytes) in output.files {
-                        if let Err(err) = write_atomic(&file_path, &bytes) {
-                            warn!(adapter = %adapter.name(), path = %file_path.display(), error = %err, "Failed to write adapter file");
+                        match write_atomic(&file_path, &bytes) {
+                            Ok(()) => {
+                                written += 1;
+                                debug!(
+                                    adapter = %adapter.name(),
+                                    path = %file_path.display(),
+                                    "Wrote adapter file"
+                                );
+                            }
+                            Err(err) => {
+                                warn!(adapter = %adapter.name(), path = %file_path.display(), error = %err, "Failed to write adapter file")
+                            }
                         }
                     }
 
-                    // Step 3: Delete the artifacts of earlier generations, now
+                    // Step 4: Delete the artifacts of earlier generations, now
                     // that their replacements are durable on disk.
                     for superseded in output.removals {
                         Self::remove_superseded(&superseded);
                     }
 
-                    // Step 4: Export the environment the adapter needs in child
+                    // Step 5: Export the environment the adapter needs in child
                     // processes (for example `QT_QPA_PLATFORMTHEME`).
                     for (key, value) in output.env {
                         unsafe {
                             std::env::set_var(&key, &value);
                         }
                     }
+
+                    // Step 6: Report the updated surface, one line per adapter.
+                    info!(
+                        adapter = %adapter.name(),
+                        theme = %resolved.theme_id,
+                        variant = %resolved.variant,
+                        generation,
+                        files = written,
+                        "Updated toolkit theme"
+                    );
 
                     applied.push(adapter.name());
                 }
@@ -453,7 +484,7 @@ impl ThemeService {
             .status()
         {
             Ok(status) if status.success() => {
-                info!(scheme = scheme_name, "Applied KDE color scheme")
+                debug!(scheme = scheme_name, "Applied KDE color scheme")
             }
             Ok(status) => {
                 warn!(scheme = scheme_name, status = ?status, "plasma-apply-colorscheme failed")
@@ -532,7 +563,7 @@ impl ThemeService {
     /// # Hard Invariant
     /// Write file first, then bump generation, then emit signal.
     pub async fn set_active(&self, id: ThemeId) -> Result<(), ThemeError> {
-        info!(theme = %id, "Setting active theme");
+        debug!(theme = %id, "Setting active theme");
 
         // Step 1: Validate theme existence (or reserved dynamic builtin).
         if !id.is_builtin() {
@@ -600,7 +631,7 @@ impl ThemeService {
         theme_id: ThemeId,
         variant_id: VariantId,
     ) -> Result<(), ThemeError> {
-        info!(theme = %theme_id, variant = %variant_id, "Activating theme variant");
+        debug!(theme = %theme_id, variant = %variant_id, "Activating theme variant");
 
         // Step 1: Load the manifest; the repository supplies the built-in manifest.
         let manifest = self.repo.manifest(&theme_id).await?;
@@ -649,7 +680,7 @@ impl ThemeService {
     /// The preference is persisted before the resolved payload is written, the
     /// generation is bumped, and `ThemeChanged` is emitted.
     pub async fn set_mode(&self, mode: ThemeMode) -> Result<(), ThemeError> {
-        info!(mode = ?mode, "Setting appearance mode");
+        debug!(mode = ?mode, "Setting appearance mode");
 
         // Step 1: Read the persisted settings and stop early when nothing changes.
         let mut next = self.theme_settings.read().await.clone();
@@ -681,7 +712,7 @@ impl ThemeService {
     ///
     /// Emits `ThemeChanged` only if the payload changed, and always emits `Reloaded`.
     pub async fn reload(&self) -> Result<(), ThemeError> {
-        info!("Reloading theme service...");
+        debug!("Reloading theme service...");
 
         let current = self.current_state().await;
         let settings = self.theme_settings.read().await.clone();
@@ -754,7 +785,7 @@ impl ThemeService {
         &self,
         update: DynamicThemeUpdate,
     ) -> Result<ThemeSettings, ThemeError> {
-        info!("Updating built-in dynamic theme seeds");
+        debug!("Updating built-in dynamic theme seeds");
 
         // Step 1: Apply and validate the update against the persisted settings.
         let mut next = self.theme_settings.read().await.clone();
@@ -918,7 +949,7 @@ impl ThemeService {
 mod tests {
     use super::*;
     use crate::{
-        backend::KdeAdapter,
+        adapter::KdeAdapter,
         domain::{
             identity::{AdapterId, VariantId},
             manifest::{ContrastLevel, RelativePath, ThemeMode, VariantDescriptor},
@@ -1014,7 +1045,7 @@ mod tests {
             // mirroring the disk repository's seed handling.
             let settings = self.settings.lock().unwrap().clone();
             let seeds = settings.dynamic.color_seeds();
-            let colors = crate::backend::material::compute_color_roles(
+            let colors = crate::material::compute_color_roles(
                 &seeds,
                 ThemeMode::Dark,
                 ContrastLevel::Normal,
@@ -1041,7 +1072,7 @@ mod tests {
     }
 
     fn sample_resolved(theme_id: &ThemeId, variant_id: &VariantId) -> ResolvedTheme {
-        let colors = crate::backend::material::compute_color_roles(
+        let colors = crate::material::compute_color_roles(
             &ColorSeeds::uniform(&Color::new("#123456").unwrap()),
             ThemeMode::Dark,
             ContrastLevel::Normal,
@@ -1273,7 +1304,7 @@ mod tests {
         assert_eq!(received.kind, VariantKind::Dynamic);
         assert_eq!(
             received.colors,
-            crate::backend::material::compute_color_roles(
+            crate::material::compute_color_roles(
                 &ColorSeeds {
                     primary: Color::new("#006a6a").unwrap(),
                     secondary: Color::new("#6750a4").unwrap(),
@@ -1418,7 +1449,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let config_home = temp.path().join("config");
         let data_home = temp.path().join("data");
-        let schemes = crate::backend::kde::color_schemes_dir(&data_home);
+        let schemes = crate::adapter::kde::color_schemes_dir(&data_home);
         std::fs::create_dir_all(&schemes).unwrap();
 
         // A scheme an earlier generation left behind and one the user installed.

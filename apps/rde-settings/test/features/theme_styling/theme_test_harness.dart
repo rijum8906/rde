@@ -1,12 +1,7 @@
 import 'dart:async';
 
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
-import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
-import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
-import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
-import 'package:rde_settings/core/theme/domain/entities/theme_manifest.dart';
-import 'package:rde_settings/core/theme/domain/entities/theme_snapshot.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 import 'package:rde_settings/features/theme_styling/domain/repositories/theme_repository.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/extract_wallpaper_seeds.dart';

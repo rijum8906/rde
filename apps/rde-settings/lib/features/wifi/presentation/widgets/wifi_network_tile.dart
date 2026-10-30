@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:rde_settings/core/widgets/loading_indicator.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/wifi/domain/entities/wifi_network.dart';
 import 'package:rde_settings/features/wifi/presentation/bloc/wifi_state.dart';
 import 'package:rde_settings/features/wifi/presentation/utils/wifi_helpers.dart';
 
-/// One scanned access point.
-///
-/// Layout mirrors `BluetoothDeviceTile`: a fixed 40×40 avatar, an `Expanded`
-/// label (so long SSIDs truncate instead of pushing the action off-screen),
-/// and a fixed trailing area (pill / spinner / compact button).
 class WifiNetworkTile extends StatelessWidget {
   const WifiNetworkTile({
     super.key,
@@ -18,6 +13,7 @@ class WifiNetworkTile extends StatelessWidget {
     required this.isConnecting,
     required this.isSaved,
     required this.onConnect,
+    required this.onDisconnect,
   });
 
   final WifiState state;
@@ -26,6 +22,7 @@ class WifiNetworkTile extends StatelessWidget {
   final bool isConnecting;
   final bool isSaved;
   final VoidCallback onConnect;
+  final VoidCallback onDisconnect;
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +58,18 @@ class WifiNetworkTile extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           if (isConnected)
-            const _ConnectedBadge()
+            TextButton(
+              onPressed: onDisconnect,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                textStyle: const TextStyle(fontSize: 12),
+              ),
+              child: const Text('Disconnect'),
+            )
           else if (isConnecting)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 12.0),
@@ -86,8 +94,6 @@ class WifiNetworkTile extends StatelessWidget {
   }
 }
 
-/// Rounded square holding the security icon. Tinted when connected,
-/// matching `_DeviceAvatar` in `bluetooth_devices_tile.dart`.
 class _NetworkAvatar extends StatelessWidget {
   const _NetworkAvatar({required this.network, required this.connected});
 
@@ -114,39 +120,6 @@ class _NetworkAvatar extends StatelessWidget {
               ? colorScheme.onPrimaryContainer
               : colorScheme.onSurfaceVariant,
         ),
-      ),
-    );
-  }
-}
-
-/// "Connected" pill shown in the trailing slot, same shape and colors as
-/// `_ConnectedBadge` in `bluetooth_devices_tile.dart`.
-class _ConnectedBadge extends StatelessWidget {
-  const _ConnectedBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: colorScheme.primary,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.check, size: 14, color: colorScheme.onPrimary),
-          const SizedBox(width: 4),
-          Text(
-            'Connected',
-            style: TextStyle(
-              color: colorScheme.onPrimary,
-              fontWeight: FontWeight.bold,
-              fontSize: 11,
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -1,5 +1,5 @@
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/environment/domain/entities/environment_settings.dart';
 import 'package:rde_settings/features/environment/domain/repositories/environment_repository.dart';
 

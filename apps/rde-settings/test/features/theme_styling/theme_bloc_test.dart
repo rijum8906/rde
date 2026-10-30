@@ -1,7 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
-import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
-import 'package:rde_settings/core/utils/accent_seeds.dart';
+import 'package:core/theme.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_state.dart';
 

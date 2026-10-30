@@ -1,16 +1,15 @@
 [workspace]
 resolver = "3"
 members = [
-    "cli/rde-cli",
-    "crates/rde-config",
-    "crates/rde-core",
-    "crates/rde-ipc",
-    "services/rde-brightness",
-    "services/rde-daemon",
-    "services/rde-notification",
-    "services/rde-theme",
-    "services/rde-volume",
-    "services/rde-wifi",
+  "cli/rde-cli",
+  "crates/rde-config",
+  "crates/rde-core",
+  "crates/rde-ipc",
+  "services/rde-brightness",
+  "services/rde-daemon",
+  "services/rde-notification",
+  "services/rde-theme",
+  "services/rde-volume",
 ]
 
 [workspace.package]
@@ -26,17 +25,17 @@ rde-config = { path = "crates/rde-config" }
 rde-core = { path = "crates/rde-core" }
 rde-ipc = { path = "crates/rde-ipc" }
 
-# Async & Concurrency
 tokio = { version = "1.52.3", features = [
-    "rt-multi-thread",
-    "macros",
-    "time",
-    "signal",
-] }
+  "io-util",
+  "rt-multi-thread",
+  "macros",
+  "time",
+  "signal",
+] } # Async & Concurrency
 tokio-util = { version = "0.7", features = ["rt"] }
 
 # IPC and Serialization
-zbus = { version = "5.16.0", features = ["tokio"] }
+zbus = { version = "6.1.0", features = ["tokio"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 toml = "1.1"

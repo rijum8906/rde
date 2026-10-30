@@ -1,6 +1,5 @@
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
-import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/theme_styling/domain/repositories/theme_repository.dart';
 
 /// Extracts the dynamic seeds from the wallpaper the desktop displays.

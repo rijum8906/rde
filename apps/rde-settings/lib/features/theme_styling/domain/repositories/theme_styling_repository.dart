@@ -1,5 +1,5 @@
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_styling_settings.dart';
 
 abstract interface class ThemeStylingRepository {

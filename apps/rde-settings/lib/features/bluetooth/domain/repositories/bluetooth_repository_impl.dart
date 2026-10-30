@@ -1,5 +1,5 @@
 import 'package:fpdart/fpdart.dart';
-import 'package:rde_settings/core/errors/rde_error.dart';
+import 'package:core/core.dart';
 import 'package:rde_settings/features/bluetooth/data/datasources/dbus_bluetooth_datasource.dart';
 import 'package:rde_settings/features/bluetooth/domain/entities/bluetooth_device.dart';
 import 'package:rde_settings/features/bluetooth/domain/repositories/bluetooth_repository.dart';

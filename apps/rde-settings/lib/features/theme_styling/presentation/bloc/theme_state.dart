@@ -1,7 +1,4 @@
-import 'package:rde_settings/core/theme/domain/entities/appearance_mode.dart';
-import 'package:rde_settings/core/theme/domain/entities/dynamic_seeds.dart';
-import 'package:rde_settings/core/theme/domain/entities/resolved_theme.dart';
-import 'package:rde_settings/core/theme/domain/entities/theme_manifest.dart';
+import 'package:core/theme.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 
 /// Lifecycle of the theme page's data.
