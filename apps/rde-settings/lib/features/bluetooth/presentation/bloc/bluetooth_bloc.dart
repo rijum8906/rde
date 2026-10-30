@@ -362,17 +362,29 @@ class BluetoothBloc extends Bloc<BluetoothEvent, BluetoothState> {
   /// refresh waits for the burst to settle. The page keeps showing its current
   /// content until then, and a device operation in flight is left alone because
   /// it refreshes when it finishes.
-  void _onServiceChanged(
+  Future<void> _onServiceChanged(
     BluetoothServiceChangedEvent event,
     Emitter<BluetoothState> emit,
-  ) {
+  ) async {
     _changeDebounce?.cancel();
+
+    // Create a completer so we can await the timer.
+    final completer = Completer<void>();
+
     _changeDebounce = Timer(const Duration(milliseconds: 350), () {
-      if (state.busyAddress != null) {
-        return;
+      if (!completer.isCompleted) {
+        completer.complete();
       }
-      unawaited(_refresh(emit));
     });
+
+    // This keeps the emit object alive until the timer finishes.
+    await completer.future;
+
+    if (state.busyAddress != null) {
+      return;
+    }
+
+    await _refresh(emit);
   }
 
   /// Reads the adapter and its devices back from the daemon.
@@ -381,25 +393,22 @@ class BluetoothBloc extends Bloc<BluetoothEvent, BluetoothState> {
   /// the error, because a transient daemon error should not blank the list.
   Future<void> _refresh(Emitter<BluetoothState> emit) async {
     final result = await _bluetoothRepository.getSnapshot();
-    Failure? failure;
-    BluetoothSnapshot? snapshot;
-    result.fold((value) => failure = value, (value) => snapshot = value);
 
-    if (failure != null) {
-      emit(state.copyWith(errorMessage: failure!.message));
-      return;
+    switch (result) {
+      case Left(value: final failure):
+        emit(state.copyWith(errorMessage: failure.message));
+
+      case Right(value: final snapshot):
+        emit(
+          state.copyWith(
+            status: BluetoothStatus.success,
+            adapter: snapshot.adapter,
+            devices: snapshot.devices,
+            errorMessage: null,
+            noticeMessage: null,
+          ),
+        );
     }
-
-    final loaded = snapshot!;
-    emit(
-      state.copyWith(
-        status: BluetoothStatus.success,
-        adapter: loaded.adapter,
-        devices: loaded.devices,
-        errorMessage: null,
-        noticeMessage: null,
-      ),
-    );
   }
 
   /// Returns the device at [address], or `null` when it is gone.
