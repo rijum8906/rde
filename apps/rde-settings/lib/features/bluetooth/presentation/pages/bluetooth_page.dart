@@ -12,6 +12,10 @@ import 'package:rde_settings/features/bluetooth/presentation/widgets/bluetooth_d
 import 'package:rde_settings/features/bluetooth/presentation/widgets/bluetooth_error_banner.dart';
 import 'package:rde_settings/features/bluetooth/presentation/widgets/bluetooth_error_message.dart';
 import 'package:rde_settings/features/bluetooth/presentation/widgets/bluetooth_header.dart';
+import 'package:rde_settings/features/bluetooth/presentation/pages/bluetooth_paired_page.dart';
+
+/// Sections of the Bluetooth page.
+enum BluetoothSection { devices, paired }
 
 /// Bluetooth settings backed by `org.bluez`.
 ///
@@ -36,8 +40,18 @@ class BluetoothPage extends StatelessWidget {
 }
 
 /// Renders the state published by [BluetoothBloc].
-class BluetoothView extends StatelessWidget {
+///
+/// Owns the local section selector: which section the user is on is a page
+/// concern, so the bloc does not track it.
+class BluetoothView extends StatefulWidget {
   const BluetoothView({super.key});
+
+  @override
+  State<BluetoothView> createState() => _BluetoothViewState();
+}
+
+class _BluetoothViewState extends State<BluetoothView> {
+  BluetoothSection _section = BluetoothSection.devices;
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +101,31 @@ class BluetoothView extends StatelessWidget {
                   else ...[
                     const BluetoothAdapterCard(),
                     const SizedBox(height: 16),
-                    if (state.isEnabled) const BluetoothDevicesCard(),
+                    if (state.isEnabled) ...[
+                      SegmentedButton<BluetoothSection>(
+                        segments: const [
+                          ButtonSegment(
+                            value: BluetoothSection.devices,
+                            icon: Icon(Icons.devices_other, size: 16),
+                            label: Text('Devices'),
+                          ),
+                          ButtonSegment(
+                            value: BluetoothSection.paired,
+                            icon: Icon(Icons.bluetooth_connected, size: 16),
+                            label: Text('Paired Devices'),
+                          ),
+                        ],
+                        selected: {_section},
+                        onSelectionChanged: (selection) =>
+                            setState(() => _section = selection.first),
+                        showSelectedIcon: false,
+                      ),
+                      const SizedBox(height: 16),
+                      if (_section == BluetoothSection.devices)
+                        const BluetoothDevicesCard()
+                      else
+                        const BluetoothPairedPage(),
+                    ],
                   ],
                 ],
               ),

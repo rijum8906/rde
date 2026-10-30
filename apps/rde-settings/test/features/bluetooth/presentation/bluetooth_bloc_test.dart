@@ -175,6 +175,12 @@ void main() {
     expect(state.isEnabled, isTrue);
     expect(repository.startDiscoveryCalls, 1);
     expect(state.connectedDevices.single.name, 'Headset');
+    // The Available column is the scan list: the connected device is shown in
+    // its own column instead of being repeated here.
+    expect(
+      state.availableDevices.map((device) => device.name),
+      isNot(contains('Headset')),
+    );
     expect(state.availableDevices.single.name, 'Mouse');
 
     await bloc.close();
