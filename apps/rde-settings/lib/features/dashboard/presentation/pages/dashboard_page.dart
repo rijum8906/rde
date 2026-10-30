@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:rde_settings/core/widgets/silky_scroll_config.dart';
+import 'package:silky_scroll/silky_scroll.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:core/core.dart';
 import 'package:rde_settings/features/dashboard/data/repositories/dashboard_repository_impl.dart';
@@ -64,7 +66,8 @@ class DashboardView extends StatelessWidget {
             );
           }
 
-          return SingleChildScrollView(
+          return SilkySingleChildScrollView(
+            silkyConfig: appSilkyScroll,
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.all(32.0),
             child: Column(

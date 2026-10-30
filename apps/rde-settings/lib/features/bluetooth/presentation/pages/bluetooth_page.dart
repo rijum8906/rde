@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:rde_settings/core/widgets/silky_scroll_config.dart';
+import 'package:silky_scroll/silky_scroll.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:core/core.dart';
@@ -79,7 +81,8 @@ class BluetoothView extends StatelessWidget {
       child: Scaffold(
         body: BlocBuilder<BluetoothBloc, BluetoothState>(
           builder: (context, state) {
-            return SingleChildScrollView(
+            return SilkySingleChildScrollView(
+              silkyConfig: appSilkyScroll,
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.all(32.0),
               child: Column(

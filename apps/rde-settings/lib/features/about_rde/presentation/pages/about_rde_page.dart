@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:rde_settings/core/widgets/silky_scroll_config.dart';
+import 'package:silky_scroll/silky_scroll.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:core/core.dart';
 import 'package:rde_settings/features/about_rde/presentation/bloc/about_rde_bloc.dart';
@@ -35,7 +37,8 @@ class AboutRdeView extends StatelessWidget {
               color: Colors.black,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: SingleChildScrollView(
+            child: SilkySingleChildScrollView(
+              silkyConfig: appSilkyScroll,
               child: SelectableText(
                 '[INFO] 20:19:15 supervisor: daemon running healthy\n'
                 '[INFO] 20:19:16 dbus-wifi: fetched NM device list [wlan0]\n'
@@ -110,7 +113,8 @@ class AboutRdeView extends StatelessWidget {
           }
         },
         builder: (context, state) {
-          return SingleChildScrollView(
+          return SilkySingleChildScrollView(
+            silkyConfig: appSilkyScroll,
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.all(32.0),
             child: Column(

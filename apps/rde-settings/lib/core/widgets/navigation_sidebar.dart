@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:rde_settings/core/widgets/silky_scroll_config.dart';
+import 'package:silky_scroll/silky_scroll.dart';
 
 class SidebarItem {
   final String title;
@@ -27,6 +29,12 @@ class NavigationSidebar extends StatelessWidget {
   /// Width of the icon-only rail.
   static const double _collapsedWidth = 88;
 
+  /// Window width below which the rail shows icons only.
+  ///
+  /// The rail gives up its labels before the page has to squeeze, which keeps
+  /// the two-column pages usable on a small window.
+  static const double _collapseBreakpoint = 1000;
+
   final String currentPath;
 
   const NavigationSidebar({super.key, required this.currentPath});
@@ -49,11 +57,6 @@ class NavigationSidebar extends StatelessWidget {
           title: 'Bluetooth',
           icon: Icons.bluetooth,
           path: '/bluetooth',
-        ),
-        SidebarItem(
-          title: 'Paired Devices',
-          icon: Icons.bluetooth_connected,
-          path: '/bluetooth/paired',
         ),
         SidebarItem(
           title: 'Network Proxy',
@@ -172,7 +175,8 @@ class NavigationSidebar extends StatelessWidget {
 
     // Step 0: A narrow window collapses the rail to its icons, so the page
     // keeps the width it needs for its own layout.
-    final collapsed = MediaQuery.sizeOf(context).width < _expandedWidth;
+    final collapsed =
+        MediaQuery.sizeOf(context).width < _collapseBreakpoint;
 
     // Step 1: One surface color is used by both the rail and the fade that
     // covers its bottom edge, so the fade stays invisible over the background.
@@ -180,7 +184,9 @@ class NavigationSidebar extends StatelessWidget {
         ? colorScheme.surfaceContainerLow
         : colorScheme.surfaceContainerLowest;
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
       width: collapsed ? _collapsedWidth : _expandedWidth,
       decoration: BoxDecoration(
         color: sidebarColor,
@@ -201,7 +207,8 @@ class NavigationSidebar extends StatelessWidget {
             // bottom edge, which hints that more sections continue below.
             child: Stack(
               children: [
-                ListView.builder(
+                SilkyListView.builder(
+                  silkyConfig: appSilkyScroll,
                   itemCount: _sections.length,
                   physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.symmetric(
@@ -416,7 +423,13 @@ class _SidebarItemWidgetState extends State<_SidebarItemWidget> {
         onExit: (_) => setState(() => _isHovered = false),
         child: RepaintBoundary(
           child: AnimatedSlide(
-            offset: Offset(translationX / 280, 0),
+            offset: Offset(
+              translationX /
+                  (widget.collapsed
+                      ? NavigationSidebar._collapsedWidth
+                      : NavigationSidebar._expandedWidth),
+              0,
+            ),
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
             child: InkWell(

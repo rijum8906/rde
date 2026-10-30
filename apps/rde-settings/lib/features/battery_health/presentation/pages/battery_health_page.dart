@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:rde_settings/core/widgets/silky_scroll_config.dart';
+import 'package:silky_scroll/silky_scroll.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:rde_settings/features/battery_health/data/datasources/dbus/power_profiles_proxy.dart';
 import 'package:rde_settings/features/battery_health/data/datasources/dbus/upower_proxy.dart';
@@ -51,7 +53,8 @@ class BatteryHealthView extends StatelessWidget {
     return Scaffold(
       body: BlocBuilder<BatteryHealthBloc, BatteryHealthState>(
         builder: (context, state) {
-          return SingleChildScrollView(
+          return SilkySingleChildScrollView(
+            silkyConfig: appSilkyScroll,
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.all(32.0),
             child: Column(

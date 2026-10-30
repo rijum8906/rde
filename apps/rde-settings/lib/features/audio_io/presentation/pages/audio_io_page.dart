@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:rde_settings/core/widgets/silky_scroll_config.dart';
+import 'package:silky_scroll/silky_scroll.dart';
 import 'package:rde_settings/features/audio_io/data/datasources/dbus/mpris_proxy.dart';
 import 'package:rde_settings/features/audio_io/data/datasources/dbus/volume_proxy.dart';
+import 'package:rde_settings/features/audio_io/data/datasources/pactl_audio_datasource.dart';
+import 'package:rde_settings/features/audio_io/data/repositories/audio_devices_repository_impl.dart';
 import 'package:rde_settings/features/audio_io/data/repositories/master_volume_repository_impl.dart';
 import 'package:rde_settings/features/audio_io/data/repositories/now_playing_repository_impl.dart';
+import 'package:rde_settings/features/audio_io/presentation/bloc/audio_devices_bloc.dart';
+import 'package:rde_settings/features/audio_io/presentation/bloc/audio_devices_event.dart';
 import 'package:rde_settings/features/audio_io/presentation/bloc/volume_bloc.dart';
 import 'package:rde_settings/features/audio_io/presentation/bloc/volume_event.dart';
+import 'package:rde_settings/features/audio_io/presentation/widgets/microphone_card.dart';
 import 'package:rde_settings/features/audio_io/presentation/widgets/volume_card.dart';
 import 'package:rde_settings/features/audio_io/domain/use_cases/read_now_playing.dart';
 import 'package:rde_settings/features/audio_io/domain/use_cases/skip_track.dart';
@@ -24,6 +31,9 @@ class AudioIoPage extends StatelessWidget {
     final proxy = MprisProxy();
     final repository = NowPlayingRepositoryImpl(proxy);
     final volumeRepository = MasterVolumeRepositoryImpl(VolumeProxy());
+    final devicesRepository = AudioDevicesRepositoryImpl(
+      const PactlAudioDatasource(),
+    );
 
     return MultiBlocProvider(
       providers: [
@@ -36,8 +46,14 @@ class AudioIoPage extends StatelessWidget {
           )..add(const NowPlayingInitEvent()),
         ),
         BlocProvider(
-          create: (_) => VolumeBloc(repository: volumeRepository)
-            ..add(const VolumeInitEvent()),
+          create: (_) =>
+              VolumeBloc(repository: volumeRepository)
+                ..add(const VolumeInitEvent()),
+        ),
+        BlocProvider(
+          create: (_) =>
+              AudioDevicesBloc(repository: devicesRepository)
+                ..add(const AudioDevicesInitEvent()),
         ),
       ],
       child: const AudioIoView(),
@@ -55,7 +71,8 @@ class AudioIoView extends StatelessWidget {
         builder: (context, state) {
           final bloc = context.read<NowPlayingBloc>();
 
-          return SingleChildScrollView(
+          return SilkySingleChildScrollView(
+            silkyConfig: appSilkyScroll,
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.all(32.0),
             child: Column(
@@ -67,9 +84,11 @@ class AudioIoView extends StatelessWidget {
                   _ErrorBanner(message: state.errorMessage!),
                 ],
                 const SizedBox(height: 28),
+
+                // Now Playing Card
                 Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 520),
+                    constraints: const BoxConstraints(maxWidth: 600),
                     child: NowPlayingSlider(
                       players: state.players,
                       activeIndex: state.activeIndex,
@@ -87,19 +106,59 @@ class AudioIoView extends StatelessWidget {
                     ),
                   ),
                 ),
+
                 const SizedBox(height: 32),
-                Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 520),
-                    child: const VolumeCard(),
-                  ),
-                ),
-                const SizedBox(height: 32),
-                Text(
-                  'Audio I/O configuration will be implemented here.',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+
+                // Responsive Volume & Mic Cards
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.maxWidth > 900;
+
+                    final volumeSection = Container(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerLowest,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                        ),
+                      ),
+                      child: const VolumeCard(),
+                    );
+
+                    final micSection = Container(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerLowest,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                        ),
+                      ),
+                      child: const MicrophoneCard(),
+                    );
+
+                    if (isWide) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: volumeSection),
+                          const SizedBox(width: 24),
+                          Expanded(child: micSection),
+                        ],
+                      );
+                    }
+
+                    return Column(
+                      children: [
+                        volumeSection,
+                        const SizedBox(height: 24),
+                        micSection,
+                      ],
+                    );
+                  },
                 ),
               ],
             ),

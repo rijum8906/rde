@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:rde_settings/core/widgets/silky_scroll_config.dart';
+import 'package:silky_scroll/silky_scroll.dart';
 import 'package:rde_settings/features/wifi/presentation/widgets/wifi_network_card.dart';
 import 'package:rde_settings/features/wifi/presentation/widgets/wifi_radio_card.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -126,7 +128,8 @@ class _WifiViewState extends State<WifiView> {
           builder: (context, state) {
             final isLoading = state.status == WifiStatus.loading;
 
-            return SingleChildScrollView(
+            return SilkySingleChildScrollView(
+              silkyConfig: appSilkyScroll,
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.all(32.0),
               child: Column(
