@@ -56,13 +56,20 @@ class BluetoothState {
   List<BluetoothDevice> get connectedDevices =>
       devices.where((device) => device.connected).toList();
 
-  /// Paired devices that are not connected.
+  /// Every bonded device, connected or not.
+  ///
+  /// The paired page lists the whole bond list, because a paired device that
+  /// is connected is still paired and should not vanish from it.
   List<BluetoothDevice> get pairedDevices =>
-      devices.where((device) => device.paired && !device.connected).toList();
+      devices.where((device) => device.paired).toList();
 
-  /// Devices that are neither paired nor connected.
+  /// Every device the daemon reports that is not connected right now.
+  ///
+  /// The connected devices are listed in their own column, so this list is the
+  /// scan result: what the page can offer to connect to, without repeating the
+  /// devices that are already in use.
   List<BluetoothDevice> get availableDevices =>
-      devices.where((device) => !device.paired && !device.connected).toList();
+      devices.where((device) => !device.connected).toList();
 
   BluetoothState copyWith({
     BluetoothStatus? status,

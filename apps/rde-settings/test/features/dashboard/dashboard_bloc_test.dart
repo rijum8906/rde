@@ -47,7 +47,7 @@ DashboardBloc buildDashboardBloc(FakeThemeRepository themes) {
     getSettingsUseCase: GetDashboardSettingsUseCase(dashboard),
     saveSettingsUseCase: SaveDashboardSettingsUseCase(dashboard),
     updateDynamicTheme: UpdateDynamicThemeUseCase(themes),
-    setTheme: SetThemeUseCase(themes),
+    setThemeUseCase: SetThemeUseCase(themes),
   );
 }
 

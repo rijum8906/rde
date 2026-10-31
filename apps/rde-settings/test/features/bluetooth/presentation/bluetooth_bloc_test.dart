@@ -175,6 +175,12 @@ void main() {
     expect(state.isEnabled, isTrue);
     expect(repository.startDiscoveryCalls, 1);
     expect(state.connectedDevices.single.name, 'Headset');
+    // The Available column is the scan list: the connected device is shown in
+    // its own column instead of being repeated here.
+    expect(
+      state.availableDevices.map((device) => device.name),
+      isNot(contains('Headset')),
+    );
     expect(state.availableDevices.single.name, 'Mouse');
 
     await bloc.close();
@@ -252,6 +258,29 @@ void main() {
 
     expect(state.errorMessage, 'Connection refused by the device.');
     expect(state.busyAddress, isNull);
+
+    await bloc.close();
+  });
+
+  test('the scan the page started stops at the end of its window', () async {
+    final repository = _FakeBluetoothRepository();
+    final bloc = BluetoothBloc(
+      bluetoothRepository: repository,
+      scanWindow: const Duration(milliseconds: 20),
+    );
+
+    bloc.add(const BluetoothInitEvent());
+    await bloc.stream.firstWhere(
+      (value) => value.status == BluetoothStatus.success,
+    );
+    expect(repository.discovering, isTrue);
+
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+
+    expect(repository.stopDiscoveryCalls, 1);
+    expect(bloc.state.isDiscovering, isFalse);
+    // The end of the window is not a user action, so nothing is announced.
+    expect(bloc.state.noticeMessage, isNull);
 
     await bloc.close();
   });

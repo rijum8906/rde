@@ -11,8 +11,8 @@ abstract class AppThemeEvent {
 /// `org.rde.Theme`; this event remains for screens that only restyle the
 /// settings window itself.
 class ChangeThemeModeEvent extends AppThemeEvent {
-  final ThemeMode themeMode;
-  const ChangeThemeModeEvent(this.themeMode);
+  final AppearanceMode appearanceMode;
+  const ChangeThemeModeEvent(this.appearanceMode);
 }
 
 /// Replaces the theme with a locally picked accent color.

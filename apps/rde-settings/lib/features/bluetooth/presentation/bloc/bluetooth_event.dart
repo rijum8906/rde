@@ -31,6 +31,14 @@ class StopDiscoveryEvent extends BluetoothEvent {
   const StopDiscoveryEvent();
 }
 
+/// The automatic scan window elapsed.
+///
+/// Discovery stops without a notice: the user did not ask for this stop, it is
+/// simply the end of the window the page started.
+class BluetoothScanWindowEndedEvent extends BluetoothEvent {
+  const BluetoothScanWindowEndedEvent();
+}
+
 /// Connects to the device at [address].
 class ConnectDeviceEvent extends BluetoothEvent {
   final String address;

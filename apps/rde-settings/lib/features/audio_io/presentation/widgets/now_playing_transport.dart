@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:rde_settings/features/audio_io/domain/entities/now_playing_media.dart';
+import 'package:rde_settings/features/audio_io/presentation/widgets/curvy_progress.dart';
 
-/// Previous / play-pause / next buttons.
+/// The horizontal control bar at the bottom of the card.
 ///
-/// Every button is white on the blurred backdrop, with `disabledColor` set to
-/// a dimmed white so an unsupported action reads as unavailable instead of
-/// just grayed out against the dark scrim.
+/// Matches the reference image:
+/// [Previous] ─── [Waveform Progress] ─── [Next] ─── [Thumb Up] ─── [Shuffle]
 class NowPlayingTransport extends StatelessWidget {
   const NowPlayingTransport({
     super.key,
@@ -13,48 +13,85 @@ class NowPlayingTransport extends StatelessWidget {
     required this.onTogglePlayPause,
     required this.onSkipNext,
     required this.onSkipPrevious,
+    required this.isPlaying,
   });
 
   final NowPlayingMedia media;
   final VoidCallback onTogglePlayPause;
   final VoidCallback onSkipNext;
   final VoidCallback onSkipPrevious;
+  final bool isPlaying;
 
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
+        // 1. Previous Button
         IconButton(
-          tooltip: 'Previous track',
-          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
           color: Colors.white,
           disabledColor: Colors.white.withValues(alpha: 0.35),
           onPressed: media.canSkipPrevious ? onSkipPrevious : null,
-          icon: const Icon(Icons.skip_previous_rounded),
+          icon: const Icon(Icons.skip_previous_rounded, size: 28),
         ),
-        const SizedBox(width: 2),
-        IconButton.filled(
-          tooltip: media.isPlaying ? 'Pause' : 'Play',
-          visualDensity: VisualDensity.compact,
-          style: IconButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.black,
-            disabledBackgroundColor: Colors.white.withValues(alpha: 0.35),
-          ),
-          onPressed: media.canTogglePlayback ? onTogglePlayPause : null,
-          icon: Icon(
-            media.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-          ),
+
+        const SizedBox(width: 16),
+
+        // 2. Waveform Progress Bar (replaces the old flat line)
+        Expanded(
+          child: media.length != null && media.position != null
+              ? CurvyProgress(
+                  isPlaying: isPlaying,
+                  position: media.position!,
+                  length: media.length!,
+                  color: Colors.white,
+                  trackColor: Colors.white.withValues(
+                    alpha: 0.25,
+                  ), // Faint line for unplayed
+                  height: 24,
+                )
+              : const SizedBox.shrink(),
         ),
-        const SizedBox(width: 2),
+
+        const SizedBox(width: 16),
+
+        // 3. Next Button
         IconButton(
-          tooltip: 'Next track',
-          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
           color: Colors.white,
           disabledColor: Colors.white.withValues(alpha: 0.35),
           onPressed: media.canSkipNext ? onSkipNext : null,
-          icon: const Icon(Icons.skip_next_rounded),
+          icon: const Icon(Icons.skip_next_rounded, size: 28),
+        ),
+
+        const SizedBox(width: 24),
+
+        // 4. Like (Thumb Up) Button
+        // Note: You'll need to wire this to your actual logic later
+        IconButton(
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+          color: Colors.white,
+          onPressed: () {
+            // TODO: implement like
+          },
+          icon: const Icon(Icons.thumb_up_outlined, size: 24),
+        ),
+
+        const SizedBox(width: 16),
+
+        // 5. Shuffle Button
+        // Note: You'll need to wire this to your actual logic later
+        IconButton(
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+          color: Colors.white,
+          onPressed: () {
+            // TODO: implement shuffle
+          },
+          icon: const Icon(Icons.shuffle_rounded, size: 24),
         ),
       ],
     );

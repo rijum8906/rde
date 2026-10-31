@@ -63,6 +63,13 @@ final router = GoRouter(
               _buildTransitionPage(state, const BluetoothPage()),
         ),
         GoRoute(
+          path: '/bluetooth/paired',
+          pageBuilder: (context, state) => _buildTransitionPage(
+            state,
+            const BluetoothPage(section: BluetoothSection.paired),
+          ),
+        ),
+        GoRoute(
           path: '/network_proxy',
           pageBuilder: (context, state) =>
               _buildTransitionPage(state, const NetworkProxyPage()),

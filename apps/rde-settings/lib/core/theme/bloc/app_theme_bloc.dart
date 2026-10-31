@@ -14,7 +14,7 @@ import 'app_theme_state.dart';
 class AppThemeBloc extends Bloc<AppThemeEvent, AppThemeState> {
   AppThemeBloc() : super(AppThemeState.initial()) {
     on<ChangeThemeModeEvent>((event, emit) {
-      emit(state.copyWith(themeMode: event.themeMode));
+      emit(state.copyWith(appearanceMode: event.appearanceMode));
     });
     on<ChangeAccentColorEvent>((event, emit) {
       // A locally picked accent has no service payload behind it, so drop the
@@ -36,7 +36,9 @@ class AppThemeBloc extends Bloc<AppThemeEvent, AppThemeState> {
           resolvedTheme: event.resolved,
           theme: theme,
           accentColor: event.resolved.colors.primary.toColor(),
-          themeMode: event.mode.isDark ? ThemeMode.dark : ThemeMode.light,
+          appearanceMode: event.mode.isDark
+              ? AppearanceMode.dark
+              : AppearanceMode.light,
         ),
       );
     });

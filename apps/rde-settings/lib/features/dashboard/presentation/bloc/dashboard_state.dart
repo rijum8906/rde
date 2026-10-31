@@ -1,3 +1,4 @@
+import 'package:core/theme.dart';
 import 'package:flutter/material.dart';
 
 enum DashboardStatus { initial, loading, success, failure }
@@ -11,7 +12,7 @@ class DashboardState {
   final double cpuUsage;
   final double ramUsage;
   final double batteryLevel;
-  final ThemeMode themeMode;
+  final AppearanceMode appearanceMode;
   final Color accentColor;
   final String? errorMessage;
 
@@ -24,7 +25,7 @@ class DashboardState {
     required this.cpuUsage,
     required this.ramUsage,
     required this.batteryLevel,
-    required this.themeMode,
+    required this.appearanceMode,
     required this.accentColor,
     this.errorMessage,
   });
@@ -39,7 +40,7 @@ class DashboardState {
       cpuUsage: 0.38,
       ramUsage: 0.54,
       batteryLevel: 0.88,
-      themeMode: ThemeMode.system,
+      appearanceMode: AppearanceMode.light,
       accentColor: Color(0xFF6750A4),
     );
   }
@@ -53,7 +54,7 @@ class DashboardState {
     double? cpuUsage,
     double? ramUsage,
     double? batteryLevel,
-    ThemeMode? themeMode,
+    AppearanceMode? appearanceMode,
     Color? accentColor,
     String? errorMessage,
   }) {
@@ -66,7 +67,7 @@ class DashboardState {
       cpuUsage: cpuUsage ?? this.cpuUsage,
       ramUsage: ramUsage ?? this.ramUsage,
       batteryLevel: batteryLevel ?? this.batteryLevel,
-      themeMode: themeMode ?? this.themeMode,
+      appearanceMode: appearanceMode ?? this.appearanceMode,
       accentColor: accentColor ?? this.accentColor,
       errorMessage: errorMessage ?? this.errorMessage,
     );
@@ -85,7 +86,7 @@ class DashboardState {
           cpuUsage == other.cpuUsage &&
           ramUsage == other.ramUsage &&
           batteryLevel == other.batteryLevel &&
-          themeMode == other.themeMode &&
+          appearanceMode == other.appearanceMode &&
           accentColor == other.accentColor &&
           errorMessage == other.errorMessage;
 
@@ -99,7 +100,7 @@ class DashboardState {
       cpuUsage.hashCode ^
       ramUsage.hashCode ^
       batteryLevel.hashCode ^
-      themeMode.hashCode ^
+      appearanceMode.hashCode ^
       accentColor.hashCode ^
       errorMessage.hashCode;
 }

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:rde_settings/core/widgets/silky_scroll_config.dart';
+import 'package:silky_scroll/silky_scroll.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 // ...bloc/state/event imports...
 import 'package:core/theme.dart';
@@ -37,7 +39,8 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
   }
 
   Widget _buildContent(BuildContext context, ThemeState state) {
-    return SingleChildScrollView(
+    return SilkySingleChildScrollView(
+      silkyConfig: appSilkyScroll,
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(32),
       child: Column(

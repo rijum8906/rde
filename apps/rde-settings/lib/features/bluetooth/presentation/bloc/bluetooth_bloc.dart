@@ -12,10 +12,17 @@ import 'package:rde_settings/features/bluetooth/presentation/bloc/bluetooth_stat
 ///
 /// Every mutation is followed by a fresh read of the object tree, so the page
 /// renders what the daemon reports instead of an optimistic guess. A scan runs
-/// while the page is open and stops when it goes away, because leaving discovery
-/// on keeps the radio busy and slows down Wi-Fi.
+/// in a bounded window, because leaving discovery on keeps the radio busy and
+/// slows down Wi-Fi down while the page sits open.
 class BluetoothBloc extends Bloc<BluetoothEvent, BluetoothState> {
   final BluetoothRepository _bluetoothRepository;
+
+  /// How long a scan the page started runs before it stops itself.
+  ///
+  /// Long enough to find a device that is being put into pairing mode, short
+  /// enough that an open page stops churning the radio. The Scan button starts
+  /// another window whenever the user wants one.
+  final Duration scanWindow;
 
   /// Live updates pushed by BlueZ while the page is open.
   late final StreamSubscription<void> _changes;
@@ -23,13 +30,19 @@ class BluetoothBloc extends Bloc<BluetoothEvent, BluetoothState> {
   /// Collapses a burst of daemon signals into a single refresh.
   Timer? _changeDebounce;
 
-  BluetoothBloc({required this._bluetoothRepository})
-    : super(BluetoothState.initial()) {
+  /// Ends the scan this page started when it elapses.
+  Timer? _scanWindowTimer;
+
+  BluetoothBloc({
+    required this._bluetoothRepository,
+    this.scanWindow = const Duration(seconds: 30),
+  }) : super(BluetoothState.initial()) {
     on<BluetoothInitEvent>(_onInit);
     on<ToggleBluetoothPowerEvent>(_onTogglePower);
     on<ToggleDiscoverableEvent>(_onToggleDiscoverable);
     on<StartDiscoveryEvent>(_onStartDiscovery);
     on<StopDiscoveryEvent>(_onStopDiscovery);
+    on<BluetoothScanWindowEndedEvent>(_onScanWindowEnded);
     on<ConnectDeviceEvent>(_onConnect);
     on<DisconnectDeviceEvent>(_onDisconnect);
     on<PairDeviceEvent>(_onPair);
@@ -49,6 +62,7 @@ class BluetoothBloc extends Bloc<BluetoothEvent, BluetoothState> {
   @override
   Future<void> close() async {
     _changeDebounce?.cancel();
+    _cancelScanWindow();
     await _changes.cancel();
 
     // A scan left running would keep the radio and the page's device list alive
@@ -95,7 +109,9 @@ class BluetoothBloc extends Bloc<BluetoothEvent, BluetoothState> {
     }
 
     // A page that claims to list devices without scanning for them looks
-    // broken, so an enabled radio starts a scan right away.
+    // broken, so an enabled radio starts a scan right away. Only a scan the
+    // page started gets a window: a scan another client is running is left to
+    // that client.
     if (adapter.powered && !adapter.discovering) {
       final scan = await _bluetoothRepository.startDiscovery();
       final scanFailure = _failureOf(scan);
@@ -103,6 +119,7 @@ class BluetoothBloc extends Bloc<BluetoothEvent, BluetoothState> {
         emit(state.copyWith(errorMessage: scanFailure.message));
         return;
       }
+      _startScanWindow();
     }
 
     await _refresh(emit);
@@ -130,6 +147,9 @@ class BluetoothBloc extends Bloc<BluetoothEvent, BluetoothState> {
     // gone while it was off, so the list would otherwise stay empty.
     if (event.value) {
       await _bluetoothRepository.startDiscovery();
+      _startScanWindow();
+    } else {
+      _cancelScanWindow();
     }
     await _refresh(emit);
   }
@@ -168,6 +188,8 @@ class BluetoothBloc extends Bloc<BluetoothEvent, BluetoothState> {
       return;
     }
 
+    _startScanWindow();
+
     emit(
       state.copyWith(
         errorMessage: null,
@@ -188,8 +210,44 @@ class BluetoothBloc extends Bloc<BluetoothEvent, BluetoothState> {
       return;
     }
 
+    _cancelScanWindow();
     emit(state.copyWith(errorMessage: null, noticeMessage: 'Scan stopped'));
     await _refresh(emit);
+  }
+
+  /// Stops discovery at the end of the window the page started.
+  ///
+  /// The stop is not announced: the user did not ask for it, and a snackbar
+  /// every time the window elapses would be noise. The page simply switches
+  /// back to the stopped state, where the Scan button starts another window.
+  Future<void> _onScanWindowEnded(
+    BluetoothScanWindowEndedEvent event,
+    Emitter<BluetoothState> emit,
+  ) async {
+    _scanWindowTimer = null;
+
+    final result = await _bluetoothRepository.stopDiscovery();
+    final failure = _failureOf(result);
+    if (failure != null) {
+      emit(state.copyWith(errorMessage: failure.message));
+      return;
+    }
+
+    await _refresh(emit);
+  }
+
+  /// Ends the current scan window and starts a fresh one.
+  void _startScanWindow() {
+    _scanWindowTimer?.cancel();
+    _scanWindowTimer = Timer(scanWindow, () {
+      _scanWindowTimer = null;
+      add(const BluetoothScanWindowEndedEvent());
+    });
+  }
+
+  void _cancelScanWindow() {
+    _scanWindowTimer?.cancel();
+    _scanWindowTimer = null;
   }
 
   Future<void> _onConnect(
@@ -362,17 +420,29 @@ class BluetoothBloc extends Bloc<BluetoothEvent, BluetoothState> {
   /// refresh waits for the burst to settle. The page keeps showing its current
   /// content until then, and a device operation in flight is left alone because
   /// it refreshes when it finishes.
-  void _onServiceChanged(
+  Future<void> _onServiceChanged(
     BluetoothServiceChangedEvent event,
     Emitter<BluetoothState> emit,
-  ) {
+  ) async {
     _changeDebounce?.cancel();
+
+    // Create a completer so we can await the timer.
+    final completer = Completer<void>();
+
     _changeDebounce = Timer(const Duration(milliseconds: 350), () {
-      if (state.busyAddress != null) {
-        return;
+      if (!completer.isCompleted) {
+        completer.complete();
       }
-      unawaited(_refresh(emit));
     });
+
+    // This keeps the emit object alive until the timer finishes.
+    await completer.future;
+
+    if (state.busyAddress != null) {
+      return;
+    }
+
+    await _refresh(emit);
   }
 
   /// Reads the adapter and its devices back from the daemon.
@@ -381,25 +451,22 @@ class BluetoothBloc extends Bloc<BluetoothEvent, BluetoothState> {
   /// the error, because a transient daemon error should not blank the list.
   Future<void> _refresh(Emitter<BluetoothState> emit) async {
     final result = await _bluetoothRepository.getSnapshot();
-    Failure? failure;
-    BluetoothSnapshot? snapshot;
-    result.fold((value) => failure = value, (value) => snapshot = value);
 
-    if (failure != null) {
-      emit(state.copyWith(errorMessage: failure!.message));
-      return;
+    switch (result) {
+      case Left(value: final failure):
+        emit(state.copyWith(errorMessage: failure.message));
+
+      case Right(value: final snapshot):
+        emit(
+          state.copyWith(
+            status: BluetoothStatus.success,
+            adapter: snapshot.adapter,
+            devices: snapshot.devices,
+            errorMessage: null,
+            noticeMessage: null,
+          ),
+        );
     }
-
-    final loaded = snapshot!;
-    emit(
-      state.copyWith(
-        status: BluetoothStatus.success,
-        adapter: loaded.adapter,
-        devices: loaded.devices,
-        errorMessage: null,
-        noticeMessage: null,
-      ),
-    );
   }
 
   /// Returns the device at [address], or `null` when it is gone.

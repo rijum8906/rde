@@ -2,45 +2,43 @@ import 'package:flutter/material.dart';
 import 'package:rde_settings/features/audio_io/domain/entities/now_playing_media.dart';
 
 /// Playback state of the selected player, as a small pill.
-///
-/// The dot color is fixed by state (green = playing, amber = paused, white =
-/// stopped), not by the theme, because the pill sits on an arbitrary artwork
-/// and a theme-tinted dot would disappear against some covers.
 class NowPlayingStatusChip extends StatelessWidget {
-  const NowPlayingStatusChip({super.key, required this.media});
+  const NowPlayingStatusChip({super.key, required this.media, this.deviceName});
 
   final NowPlayingMedia media;
+  final String? deviceName;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final color = switch (media.status) {
-      MprisPlaybackStatus.playing => Colors.greenAccent.shade200,
-      MprisPlaybackStatus.paused => Colors.amberAccent.shade100,
-      MprisPlaybackStatus.stopped => Colors.white70,
-    };
-
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(20),
+        color: const Color(0xFFFBE0C3), // Peach background
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            media.statusLabel,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
+          const Icon(Icons.speaker_rounded, size: 16, color: Colors.black),
+          const SizedBox(width: 8),
+          // AnimatedSize lets the pill expand/shrink gracefully if the device name changes
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 160),
+              child: Text(
+                deviceName ?? "This device",
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: Colors.black,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.2,
+                ),
+              ),
             ),
           ),
         ],

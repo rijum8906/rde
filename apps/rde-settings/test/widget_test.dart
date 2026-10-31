@@ -3,8 +3,9 @@
 // To perform an interaction with a widget in your test, use the WidgetTester
 // utility in the flutter_test package. For example, you can send tap and scroll
 // gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// tree, read text, and check that the values of widget properties are correct.
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:rde_settings/main.dart';
@@ -13,6 +14,13 @@ void main() {
   testWidgets('Settings app renders DashboardPage', (
     WidgetTester tester,
   ) async {
+    // A narrow window collapses the rail to icons, which this test is not
+    // about: it checks the labelled layout, so it asks for a wide window.
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     // Build our app and trigger a frame.
     await tester.pumpWidget(const SettingsApp());
 
