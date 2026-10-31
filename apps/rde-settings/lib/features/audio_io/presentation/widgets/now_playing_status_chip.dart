@@ -15,7 +15,7 @@ class NowPlayingStatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFFBE0C3), // Peach background
+        color: theme.colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
@@ -34,7 +34,7 @@ class NowPlayingStatusChip extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.labelMedium?.copyWith(
-                  color: Colors.black,
+                  color: theme.colorScheme.onPrimaryContainer,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.2,
                 ),

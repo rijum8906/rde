@@ -30,6 +30,7 @@ class NowPlayingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = this.media;
+    final theme = Theme.of(context);
 
     return Card(
       margin: EdgeInsets.zero,
@@ -109,9 +110,11 @@ class NowPlayingCard extends StatelessWidget {
                                       : 'Play',
                                   child: FilledButton(
                                     style: FilledButton.styleFrom(
-                                      backgroundColor: const Color(0xFFFBE0C3),
+                                      backgroundColor:
+                                          theme.colorScheme.primaryContainer,
                                       splashFactory: NoSplash.splashFactory,
-                                      foregroundColor: Colors.black,
+                                      foregroundColor:
+                                          theme.colorScheme.onPrimaryContainer,
                                       padding: EdgeInsets.zero,
                                       shape: activeMedia.isPlaying
                                           ? RoundedRectangleBorder(
