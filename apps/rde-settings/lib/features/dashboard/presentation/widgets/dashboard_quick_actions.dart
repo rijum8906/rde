@@ -38,7 +38,17 @@ class DashboardQuickActions extends StatelessWidget {
             Column(
               children: [
                 Row(
+                  spacing: 12,
                   children: [
+                    Icon(
+                      state.brightness <= 0.2
+                          ? Icons.brightness_low_rounded
+                          : state.brightness <= 70
+                          ? Icons.brightness_medium_rounded
+                          : Icons.brightness_high_rounded,
+                      size: 30,
+                    ),
+
                     Expanded(
                       child: RdeSlider(
                         min: 0,
@@ -50,17 +60,24 @@ class DashboardQuickActions extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 16),
-                    SizedBox(
-                      width: 40,
-                      child: Text(
-                        "${(state.brightness * 100).toInt()}%",
-                        textAlign: TextAlign.right,
-                      ),
+                    Text(
+                      "${(state.brightness * 100).toInt()}%",
+                      textAlign: TextAlign.right,
                     ),
                   ],
                 ),
+                SizedBox(height: 16),
                 Row(
+                  spacing: 12,
                   children: [
+                    Icon(
+                      (volumeState.master?.volume ?? 0) == 0
+                          ? Icons.volume_off_rounded
+                          : (volumeState.master?.volume ?? 0) <= 70
+                          ? Icons.volume_down_rounded
+                          : Icons.volume_up_rounded,
+                      size: 30,
+                    ),
                     Expanded(
                       child: RdeSlider(
                         min: 0,
@@ -76,15 +93,14 @@ class DashboardQuickActions extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 16),
-                    SizedBox(
-                      width: 40,
-                      child: Text(
-                        "${(volumeState.master?.volume.toDouble() ?? 0).toInt()}%",
-                        textAlign: TextAlign.right,
-                      ),
+
+                    Text(
+                      "${(volumeState.master?.volume.toDouble() ?? 0).toInt()}%",
+                      textAlign: TextAlign.right,
                     ),
                   ],
                 ),
+                SizedBox(height: 16),
               ],
             ),
             Row(

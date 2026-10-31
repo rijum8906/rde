@@ -227,7 +227,7 @@ class NavigationSidebar extends StatelessWidget {
                               section.title!.toUpperCase(),
                               style: theme.textTheme.bodySmall?.copyWith(
                                 fontWeight: FontWeight.bold,
-                                color: colorScheme.primary,
+                                color: colorScheme.secondary,
                                 letterSpacing: 1.3,
                                 fontSize: 10,
                               ),
@@ -311,16 +311,16 @@ class _SidebarHeaderState extends State<_SidebarHeader> {
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: _isHovered
-                ? colorScheme.primaryContainer
-                : colorScheme.primaryContainer.withValues(alpha: 0.35),
+                ? colorScheme.secondaryContainer
+                : colorScheme.secondaryContainer.withValues(alpha: 0.35),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Icon(
             Icons.settings_outlined,
             size: 24,
             color: _isHovered
-                ? colorScheme.onPrimaryContainer
-                : colorScheme.primary,
+                ? colorScheme.onSecondaryContainer
+                : colorScheme.secondary,
           ),
         ),
       ),
@@ -386,23 +386,18 @@ class _SidebarItemWidgetState extends State<_SidebarItemWidget> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    // Step 1: Selection is carried by the primary family, so the active
-    // destination wears the accent the user chose instead of Material's
-    // default secondary container.
     final Color textColor = widget.isSelected
-        ? colorScheme.onPrimaryContainer
+        ? colorScheme.onSecondaryContainer
         : (_isHovered ? colorScheme.onSurface : colorScheme.onSurfaceVariant);
 
     final Color iconColor = widget.isSelected
-        ? colorScheme.onPrimaryContainer
-        : (_isHovered ? colorScheme.primary : colorScheme.onSurfaceVariant);
+        ? colorScheme.onSecondaryContainer
+        : (_isHovered ? colorScheme.secondary : colorScheme.onSurfaceVariant);
 
-    // Step 2: Hovering an unselected destination lays an M3 state layer over the
-    // rail: a translucent wash of the accent rather than a solid neutral fill.
     final Color backgroundColor = widget.isSelected
-        ? colorScheme.primaryContainer
+        ? colorScheme.secondaryContainer
         : (_isHovered
-              ? colorScheme.primary.withValues(alpha: 0.08)
+              ? colorScheme.secondary.withValues(alpha: 0.08)
               : Colors.transparent);
 
     final double translationX = _isHovered && !widget.isSelected ? 4.0 : 0.0;
@@ -432,10 +427,8 @@ class _SidebarItemWidgetState extends State<_SidebarItemWidget> {
               onTap: widget.onTap,
               borderRadius: BorderRadius.circular(28),
               hoverColor: Colors.transparent,
-              splashColor: colorScheme.primary.withValues(alpha: 0.1),
-              // Keyboard users tab through the rail, so focus has to be as
-              // visible as hover on a pointer-driven desktop.
-              focusColor: colorScheme.primary.withValues(alpha: 0.12),
+              splashColor: colorScheme.secondary.withValues(alpha: 0.1),
+              focusColor: colorScheme.secondary.withValues(alpha: 0.12),
               highlightColor: Colors.transparent,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
@@ -452,30 +445,13 @@ class _SidebarItemWidgetState extends State<_SidebarItemWidget> {
                       ? MainAxisAlignment.center
                       : MainAxisAlignment.start,
                   children: [
-                    // Step 3: The active destination is marked with an accent
-                    // rail on its leading edge, the navigation-rail idiom, so
-                    // the marker sits where the eye already starts reading.
-                    // The rail keeps its width while collapsed, which leaves
-                    // the labels of selected and unselected rows aligned.
-                    if (!widget.collapsed)
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeOutCubic,
-                        width: 4,
-                        height: widget.isSelected ? 18 : 0,
-                        margin: const EdgeInsets.only(right: 10),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primary,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
+                    // REMOVED THE LEFT BAR HERE
+
                     AnimatedScale(
                       scale: widget.isSelected
-                          ? 1.05
-                          : (_isHovered ? 1.02 : 1.0),
+                          ? 1.02
+                          : (_isHovered ? 1.1 : 1.0),
                       duration: const Duration(milliseconds: 200),
-                      // An icon-only rail has no label, so the title moves into
-                      // a tooltip instead of being lost.
                       child: widget.collapsed
                           ? Tooltip(message: widget.item.title, child: icon)
                           : icon,

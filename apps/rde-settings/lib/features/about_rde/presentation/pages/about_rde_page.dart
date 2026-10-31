@@ -26,7 +26,6 @@ class AboutRdeView extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) {
-        final theme = Theme.of(context);
         return AlertDialog(
           title: const Text('System Core Logs'),
           content: Container(
