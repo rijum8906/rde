@@ -26,7 +26,6 @@ class DashboardPersonalization extends StatelessWidget {
 
     return Card(
       elevation: 2,
-      color: colorScheme.surfaceContainerLow,
       child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(

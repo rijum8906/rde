@@ -12,7 +12,6 @@ class DashboardSystemHealth extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return Card(
-      color: colorScheme.surfaceContainerLow,
       child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(

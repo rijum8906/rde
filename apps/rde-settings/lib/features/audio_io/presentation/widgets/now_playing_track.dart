@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:rde_settings/features/audio_io/domain/entities/now_playing_media.dart';
 
-/// Title, artist line, and loading indicator.
+/// Title and artist line of the track the player reports.
 /// The transport controls have been moved to the bottom row.
 class NowPlayingTrack extends StatelessWidget {
-  const NowPlayingTrack({super.key, required this.media, required this.isBusy});
+  const NowPlayingTrack({super.key, required this.media});
 
   final NowPlayingMedia media;
-  final bool isBusy;
 
   @override
   Widget build(BuildContext context) {

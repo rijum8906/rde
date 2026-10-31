@@ -23,63 +23,65 @@ class MicrophoneCard extends StatelessWidget {
     final isReady = state.status == AudioDevicesStatus.success && hasInput;
     final inputs = devices?.inputs ?? const <AudioInput>[];
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Microphone',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.onSurface,
+    return Card(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Microphone',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onSurface,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Adjust capture volume and input device',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+                      Text(
+                        'Adjust capture volume and input device',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                ),
+                // Use the new picker
+                if (inputs.isNotEmpty) AudioInputPicker(inputs: inputs),
+              ],
+            ),
+            const SizedBox(height: 32),
+
+            // Content
+            if (!hasInput)
+              Text(
+                state.status == AudioDevicesStatus.loading
+                    ? 'Looking for a microphone…'
+                    : 'No microphone was found on the audio server.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              )
+            else
+              _MicControls(devices: devices!, state: state, isReady: isReady),
+
+            if (state.errorMessage != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                state.errorMessage!,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.error,
                 ),
               ),
-              // Use the new picker
-              if (inputs.isNotEmpty) AudioInputPicker(inputs: inputs),
             ],
-          ),
-          const SizedBox(height: 32),
-
-          // Content
-          if (!hasInput)
-            Text(
-              state.status == AudioDevicesStatus.loading
-                  ? 'Looking for a microphone…'
-                  : 'No microphone was found on the audio server.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            )
-          else
-            _MicControls(devices: devices!, state: state, isReady: isReady),
-
-          if (state.errorMessage != null) ...[
-            const SizedBox(height: 16),
-            Text(
-              state.errorMessage!,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.error,
-              ),
-            ),
           ],
-        ],
+        ),
       ),
     );
   }

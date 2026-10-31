@@ -114,48 +114,22 @@ class AudioIoView extends StatelessWidget {
                   builder: (context, constraints) {
                     final isWide = constraints.maxWidth > 900;
 
-                    final volumeSection = Container(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerLowest,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: Theme.of(context).colorScheme.outlineVariant,
-                        ),
-                      ),
-                      child: const VolumeCard(),
-                    );
-
-                    final micSection = Container(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerLowest,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: Theme.of(context).colorScheme.outlineVariant,
-                        ),
-                      ),
-                      child: const MicrophoneCard(),
-                    );
-
                     if (isWide) {
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(child: volumeSection),
+                          Expanded(child: const VolumeCard()),
                           const SizedBox(width: 24),
-                          Expanded(child: micSection),
+                          Expanded(child: const MicrophoneCard()),
                         ],
                       );
                     }
 
                     return Column(
                       children: [
-                        volumeSection,
+                        const VolumeCard(),
                         const SizedBox(height: 24),
-                        micSection,
+                        const MicrophoneCard(),
                       ],
                     );
                   },

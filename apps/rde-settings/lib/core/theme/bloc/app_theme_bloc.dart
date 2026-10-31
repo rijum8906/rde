@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:core/theme.dart';
 
@@ -28,7 +27,10 @@ class AppThemeBloc extends Bloc<AppThemeEvent, AppThemeState> {
     });
     on<ApplyResolvedThemeEvent>((event, emit) {
       // Step 1: Build the complete ThemeData from the desktop payload.
-      final theme = buildRdeTheme(event.resolved, mode: event.mode);
+      final theme = RdeThemeBuilder.fromResolvedTheme(
+        event.resolved,
+        event.mode,
+      );
 
       // Step 2: Publish it together with the appearance it was resolved for.
       emit(

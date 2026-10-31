@@ -27,7 +27,6 @@ class ToggleCard extends StatelessWidget {
         : RoundedRectangleBorder(borderRadius: BorderRadius.circular(50));
 
     return Card(
-      color: theme.colorScheme.surfaceContainerHigh,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
         child: Row(

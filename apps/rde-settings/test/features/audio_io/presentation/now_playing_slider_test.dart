@@ -1,6 +1,12 @@
+import 'package:core/core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fpdart/fpdart.dart';
+import 'package:rde_settings/features/audio_io/domain/entities/audio_devices.dart';
 import 'package:rde_settings/features/audio_io/domain/entities/now_playing_media.dart';
+import 'package:rde_settings/features/audio_io/domain/repositories/audio_devices_repository.dart';
+import 'package:rde_settings/features/audio_io/presentation/bloc/audio_devices_bloc.dart';
 import 'package:rde_settings/features/audio_io/presentation/widgets/now_playing_slider.dart';
 
 const String _spotify = 'org.mpris.MediaPlayer2.spotify';
@@ -36,6 +42,57 @@ final _spotifyTrack = _media(
 );
 final _vlcTrack = _media(busName: _vlc, playerName: 'vlc', title: 'Odd Look');
 
+/// Minimal audio server the slider only reads the output label from.
+class _FakeAudioDevicesRepository implements AudioDevicesRepository {
+  @override
+  Future<Either<Failure, AudioDevices>> read() async => Right(
+    AudioDevices(
+      outputName: 'speaker',
+      outputLabel: 'Speaker',
+      outputs: const [
+        AudioOutput(
+          name: 'speaker',
+          label: 'Speaker',
+          volume: 55,
+          muted: false,
+          isDefault: true,
+        ),
+      ],
+      inputName: 'mic',
+      inputLabel: 'Microphone',
+      inputs: const [
+        AudioInput(
+          name: 'mic',
+          label: 'Microphone',
+          volume: 40,
+          muted: false,
+          isDefault: true,
+        ),
+      ],
+      inputVolume: 40,
+    ),
+  );
+
+  @override
+  Future<Either<Failure, void>> setDefaultOutput(String name) async =>
+      const Right(null);
+
+  @override
+  Future<Either<Failure, void>> setDefaultInput(String name) async =>
+      const Right(null);
+
+  @override
+  Future<Either<Failure, void>> setInputVolume(int volume) async =>
+      const Right(null);
+
+  @override
+  Future<Either<Failure, void>> setInputMuted(bool muted) async =>
+      const Right(null);
+
+  @override
+  Stream<void> watchChanges() => const Stream<void>.empty();
+}
+
 Future<List<String>> _pumpSlider(
   WidgetTester tester, {
   required List<NowPlayingMedia> players,
@@ -45,15 +102,19 @@ Future<List<String>> _pumpSlider(
 
   await tester.pumpWidget(
     MaterialApp(
-      home: Scaffold(
-        body: NowPlayingSlider(
-          players: players,
-          activeIndex: activeIndex,
-          isBusy: false,
-          onSelect: selected.add,
-          onTogglePlayPause: () {},
-          onSkipNext: () {},
-          onSkipPrevious: () {},
+      home: BlocProvider<AudioDevicesBloc>(
+        create: (_) =>
+            AudioDevicesBloc(repository: _FakeAudioDevicesRepository()),
+        child: Scaffold(
+          body: NowPlayingSlider(
+            players: players,
+            activeIndex: activeIndex,
+            isBusy: false,
+            onSelect: selected.add,
+            onTogglePlayPause: () {},
+            onSkipNext: () {},
+            onSkipPrevious: () {},
+          ),
         ),
       ),
     ),
@@ -71,7 +132,7 @@ void main() {
 
     // Nothing to slide to, so a swipe must not select another player.
     await tester.drag(find.byType(PageView), const Offset(-400, 0));
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     expect(selected, isEmpty);
     expect(find.text('Nightcall'), findsOneWidget);
@@ -88,7 +149,10 @@ void main() {
     expect(find.text('Nightcall'), findsOneWidget);
 
     await tester.drag(find.byType(PageView), const Offset(-600, 0));
-    await tester.pumpAndSettle();
+    // The waveform loops while playing, so settle the page snap explicitly
+    // instead of waiting for every animation to stop.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
 
     expect(selected, [_vlc]);
     expect(find.text('Odd Look'), findsOneWidget);
@@ -117,7 +181,8 @@ void main() {
       players: [_spotifyTrack, _vlcTrack],
       activeIndex: 1,
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.text('Odd Look'), findsOneWidget);
     expect(find.text('Nightcall'), findsNothing);

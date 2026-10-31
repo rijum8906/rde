@@ -1,7 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rde_settings/features/audio_io/presentation/widgets/scrollable_volume_slider.dart';
+import 'package:rde_settings/core/widgets/rde_slider.dart';
 
 Future<void> _pumpSlider(
   WidgetTester tester,
@@ -13,7 +13,7 @@ Future<void> _pumpSlider(
         body: Center(
           child: SizedBox(
             width: 320,
-            child: ScrollableVolumeSlider(
+            child: RdeSlider(
               value: 50,
               min: 0,
               max: 100,
@@ -29,7 +29,7 @@ Future<void> _pumpSlider(
 
 /// Sends one mouse wheel notch over the slider.
 Future<void> _wheel(WidgetTester tester, double deltaY) async {
-  final center = tester.getCenter(find.byType(ScrollableVolumeSlider));
+  final center = tester.getCenter(find.byType(RdeSlider));
   final pointer = TestPointer(1, PointerDeviceKind.mouse);
   pointer.hover(center);
   await tester.sendEventToBinding(

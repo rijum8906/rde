@@ -42,6 +42,7 @@ Future<void> _pumpCard(
   WidgetTester tester, {
   NowPlayingMedia? media,
   bool isBusy = false,
+  String? outputDeviceName,
   VoidCallback? onTogglePlayPause,
   VoidCallback? onSkipNext,
   VoidCallback? onSkipPrevious,
@@ -54,6 +55,7 @@ Future<void> _pumpCard(
           child: NowPlayingCard(
             media: media,
             isBusy: isBusy,
+            outputDeviceName: outputDeviceName,
             onTogglePlayPause: onTogglePlayPause ?? () {},
             onSkipNext: onSkipNext ?? () {},
             onSkipPrevious: onSkipPrevious ?? () {},
@@ -65,19 +67,19 @@ Future<void> _pumpCard(
 }
 
 void main() {
-  testWidgets('shows the track the player reports', (tester) async {
-    await _pumpCard(tester, media: _media());
+  testWidgets('shows the track and output device the player reports', (
+    tester,
+  ) async {
+    await _pumpCard(tester, media: _media(), outputDeviceName: 'Speaker');
 
-    expect(find.text('Now Playing'), findsOneWidget);
     expect(find.text('Nightcall'), findsOneWidget);
     expect(find.text('Kavinsky • OutRun'), findsOneWidget);
-    expect(find.text('Playing'), findsOneWidget);
+    expect(find.text('Speaker'), findsOneWidget);
   });
 
   testWidgets('a paused player shows a play button', (tester) async {
     await _pumpCard(tester, media: _media(status: MprisPlaybackStatus.paused));
 
-    expect(find.text('Paused'), findsOneWidget);
     expect(find.byTooltip('Play'), findsOneWidget);
     expect(find.byTooltip('Pause'), findsNothing);
   });
@@ -168,8 +170,8 @@ void main() {
 
     expect(
       tester
-          .widget<IconButton>(
-            find.widgetWithIcon(IconButton, Icons.pause_rounded),
+          .widget<FilledButton>(
+            find.widgetWithIcon(FilledButton, Icons.pause_rounded),
           )
           .onPressed,
       isNull,
