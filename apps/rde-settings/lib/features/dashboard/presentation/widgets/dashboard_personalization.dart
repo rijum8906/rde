@@ -11,14 +11,44 @@ import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_even
 class DashboardPersonalization extends StatelessWidget {
   const DashboardPersonalization({super.key});
 
-  /// Accent presets offered as seed colors.
+  /// Accent presets optimized for Material 3 ColorScheme generation.
+  /// Spaced evenly around the color wheel for maximum visual distinction.
   static const List<Color> _accentColors = [
-    Color(0xFF6750A4), // Purple
-    Color(0xFF0061A4), // Ocean Blue
-    Color(0xFF006E3C), // Emerald
-    Color(0xFFB52700), // Terracotta
-    Color(0xFF7E5700), // Sunny Amber
-    Color(0xFFB90063), // Sunset Pink
+    // 1. Material Purple (The baseline)
+    Color(0xFF6750A4),
+
+    // 2. Deep Indigo (Cool, night-sky blue)
+    Color(0xFF3F51B5),
+
+    // 3. Cyan (Bright, tech-focused)
+    Color(0xFF0097A7),
+
+    // 4. Emerald Green (Fresh, successful)
+    Color(0xFF00695C),
+
+    // 5. Lime / Olive (Earthy, distinct)
+    Color(0xFF558B2F),
+
+    // 6. Mustard Yellow (Warm, bright)
+    Color(0xFFF57F17),
+
+    // 7. Burnt Orange (Cozy, energetic)
+    Color(0xFFD84315),
+
+    // 8. Crimson Red (Bold, aggressive)
+    Color(0xFFC62828),
+
+    // 9. Magenta / Rose (Vibrant, playful)
+    Color(0xFFAD1457),
+
+    // 10. Deep Violet (Rich, moody)
+    Color(0xFF7B1FA2),
+
+    // 11. Slate Blue (Minimalist, calm)
+    Color(0xFF546E7A),
+
+    // 12. Warm Grey / Stone (Neutral, professional)
+    Color.fromARGB(255, 6, 187, 238),
   ];
 
   @override
