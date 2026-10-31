@@ -17,3 +17,4 @@ export 'theme/domain/entities/theme_snapshot.dart';
 export 'theme/domain/entities/theme_typography.dart';
 export 'theme/theme_cache.dart';
 export 'theme/theme_data_factory.dart';
+export 'theme/rde_theme_builder.dart';

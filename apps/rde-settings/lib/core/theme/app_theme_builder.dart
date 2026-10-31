@@ -26,7 +26,7 @@ class AppThemeBuilder {
 
       cardTheme: CardThemeData(
         elevation: 2,
-        color: colorScheme.surfaceContainerLow,
+        color: colorScheme.primary,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
           side: BorderSide(

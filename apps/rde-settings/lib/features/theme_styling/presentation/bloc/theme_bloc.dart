@@ -5,36 +5,19 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:core/core.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/extract_wallpaper_seeds.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/load_theme_catalog.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/preview_theme.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/reload_themes.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/set_mode.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/set_theme.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/update_dynamic_theme.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/watch_theme_changes.dart';
+import 'package:rde_settings/features/theme_styling/domain/repositories/theme_repository.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_state.dart';
 
 /// Aggregates the `org.rde.Theme` operations for the Theme & Styling page.
 ///
-/// Reads happen through [LoadThemeCatalogUseCase]; mutations go through the
-/// matching use case and are always followed by a catalog reload, so the UI
-/// reflects the service's authoritative state instead of optimistic guesses.
-/// The bloc also subscribes to the service's `ThemeChanged` and
-/// `ThemeListChanged` signals so theme switches made by other RDE applications
-/// appear here immediately.
+/// Reads and mutations go straight through [ThemeRepository]; every mutation
+/// is followed by a catalog reload, so the UI reflects the service's
+/// authoritative state instead of optimistic guesses. The bloc also subscribes
+/// to the service's `ThemeChanged` and `ThemeListChanged` signals so theme
+/// switches made by other RDE applications appear here immediately.
 class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
-  ThemeBloc({
-    required this.loadThemeCatalog,
-    required this.previewTheme,
-    required this.setTheme,
-    required this.setMode,
-    required this.updateDynamicTheme,
-    required this.extractWallpaperSeeds,
-    required this.reloadThemes,
-    required this.watchThemeChanges,
-  }) : super(ThemeState.initial()) {
+  ThemeBloc({required this._repository}) : super(ThemeState.initial()) {
     on<ThemeInitEvent>(_onInit);
     on<ReloadThemeDatabaseEvent>(_onReload);
     on<ThemeServiceChangedEvent>(_onServiceChanged);
@@ -47,7 +30,7 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
 
     // Live sync is best effort: when the session bus cannot deliver the
     // signals, explicit actions and the refresh button still work.
-    _subscription = watchThemeChanges().listen(
+    _subscription = _repository.watchThemeChanges().listen(
       (_) => add(const ThemeServiceChangedEvent()),
       onError: (Object error) {
         debugPrint('org.rde.Theme signal subscription failed: $error');
@@ -55,14 +38,8 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     );
   }
 
-  final LoadThemeCatalogUseCase loadThemeCatalog;
-  final PreviewThemeUseCase previewTheme;
-  final SetThemeUseCase setTheme;
-  final SetModeUseCase setMode;
-  final UpdateDynamicThemeUseCase updateDynamicTheme;
-  final ExtractWallpaperSeedsUseCase extractWallpaperSeeds;
-  final ReloadThemesUseCase reloadThemes;
-  final WatchThemeChangesUseCase watchThemeChanges;
+  /// Service-backed repository this page reads and mutates.
+  final ThemeRepository _repository;
 
   StreamSubscription<void>? _subscription;
   bool _isLoading = false;
@@ -78,7 +55,7 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     // Step 1: Ask the service to reconcile manifests, variant files, and
     // settings with what is durable on disk.
     emit(state.copyWith(isBusy: true, clearError: true));
-    final failure = _failureOf(await reloadThemes());
+    final failure = _failureOf(await _repository.reload());
     if (failure != null) {
       emit(state.copyWith(isBusy: false, errorMessage: failure.message));
       return;
@@ -112,7 +89,7 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     }
 
     emit(state.copyWith(isBusy: true, clearError: true));
-    final failure = _failureOf(await setTheme(event.theme));
+    final failure = _failureOf(await _repository.setTheme(event.theme));
     if (failure != null) {
       emit(state.copyWith(isBusy: false, errorMessage: failure.message));
       return;
@@ -132,7 +109,7 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     emit(
       state.copyWith(isBusy: true, clearError: true, previewMode: event.mode),
     );
-    final failure = _failureOf(await setMode(event.mode));
+    final failure = _failureOf(await _repository.setMode(event.mode));
     if (failure != null) {
       emit(state.copyWith(isBusy: false, errorMessage: failure.message));
       return;
@@ -169,7 +146,7 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
 
     // Step 2: Send all four seeds; the service regenerates each palette.
     final failure = _failureOf(
-      await updateDynamicTheme(
+      await _repository.updateDynamicTheme(
         primary: seeds.primary,
         secondary: seeds.secondary,
         tertiary: seeds.tertiary,
@@ -197,7 +174,7 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     emit(state.copyWith(isBusy: true, clearError: true));
 
     // Step 1: The app owns wallpaper decoding; ask it for the four seeds.
-    final extracted = await extractWallpaperSeeds();
+    final extracted = await _repository.seedsFromWallpaper();
 
     // Step 2: Hand the seeds to the service, which regenerates every family.
     return extracted.fold(
@@ -205,7 +182,7 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
           emit(state.copyWith(isBusy: false, errorMessage: failure.message)),
       (seeds) async {
         final failure = _failureOf(
-          await updateDynamicTheme(
+          await _repository.updateDynamicTheme(
             primary: seeds.primary,
             secondary: seeds.secondary,
             tertiary: seeds.tertiary,
@@ -249,7 +226,7 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
       // Step 2: Read the theme catalog.
       Failure? failure;
       ThemeCatalog? catalog;
-      final result = await loadThemeCatalog();
+      final result = await _repository.loadCatalog();
       result.fold((value) => failure = value, (value) => catalog = value);
 
       if (failure != null || catalog == null) {
@@ -309,7 +286,10 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     }
 
     // Step 2: Ask the service for a preview of the other appearance.
-    final result = await previewTheme(catalog.currentTheme, state.previewMode);
+    final result = await _repository.preview(
+      catalog.currentTheme,
+      state.previewMode,
+    );
     result.fold(
       (failure) => emit(state.copyWith(errorMessage: failure.message)),
       (resolved) => emit(state.copyWith(previewResolved: resolved)),

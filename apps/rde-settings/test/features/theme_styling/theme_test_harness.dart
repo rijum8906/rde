@@ -4,28 +4,11 @@ import 'package:fpdart/fpdart.dart';
 import 'package:core/core.dart';
 import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 import 'package:rde_settings/features/theme_styling/domain/repositories/theme_repository.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/extract_wallpaper_seeds.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/load_theme_catalog.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/preview_theme.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/reload_themes.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/set_mode.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/set_theme.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/update_dynamic_theme.dart';
-import 'package:rde_settings/features/theme_styling/domain/use_cases/watch_theme_changes.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
 
 /// Builds a theme bloc wired to an arbitrary repository.
 ThemeBloc buildThemeBloc(ThemeRepository repository) {
-  return ThemeBloc(
-    loadThemeCatalog: LoadThemeCatalogUseCase(repository),
-    previewTheme: PreviewThemeUseCase(repository),
-    setTheme: SetThemeUseCase(repository),
-    setMode: SetModeUseCase(repository),
-    updateDynamicTheme: UpdateDynamicThemeUseCase(repository),
-    extractWallpaperSeeds: ExtractWallpaperSeedsUseCase(repository),
-    reloadThemes: ReloadThemesUseCase(repository),
-    watchThemeChanges: WatchThemeChangesUseCase(repository),
-  );
+  return ThemeBloc(repository: repository);
 }
 
 /// Builds a resolved payload with the given primary color and appearance.

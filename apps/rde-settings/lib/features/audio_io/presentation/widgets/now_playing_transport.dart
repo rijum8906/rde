@@ -27,13 +27,16 @@ class NowPlayingTransport extends StatelessWidget {
     return Row(
       children: [
         // 1. Previous Button
-        IconButton(
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-          color: Colors.white,
-          disabledColor: Colors.white.withValues(alpha: 0.35),
-          onPressed: media.canSkipPrevious ? onSkipPrevious : null,
-          icon: const Icon(Icons.skip_previous_rounded, size: 28),
+        Tooltip(
+          message: 'Previous track',
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            color: Colors.white,
+            disabledColor: Colors.white.withValues(alpha: 0.35),
+            onPressed: media.canSkipPrevious ? onSkipPrevious : null,
+            icon: const Icon(Icons.skip_previous_rounded, size: 28),
+          ),
         ),
 
         const SizedBox(width: 16),
@@ -57,13 +60,16 @@ class NowPlayingTransport extends StatelessWidget {
         const SizedBox(width: 16),
 
         // 3. Next Button
-        IconButton(
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-          color: Colors.white,
-          disabledColor: Colors.white.withValues(alpha: 0.35),
-          onPressed: media.canSkipNext ? onSkipNext : null,
-          icon: const Icon(Icons.skip_next_rounded, size: 28),
+        Tooltip(
+          message: 'Next track',
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            color: Colors.white,
+            disabledColor: Colors.white.withValues(alpha: 0.35),
+            onPressed: media.canSkipNext ? onSkipNext : null,
+            icon: const Icon(Icons.skip_next_rounded, size: 28),
+          ),
         ),
 
         const SizedBox(width: 24),

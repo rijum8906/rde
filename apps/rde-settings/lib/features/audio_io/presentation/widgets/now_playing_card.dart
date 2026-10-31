@@ -1,3 +1,4 @@
+import 'package:core/core.dart';
 import 'package:flutter/material.dart';
 import 'package:rde_settings/features/audio_io/domain/entities/now_playing_media.dart';
 import 'package:rde_settings/features/audio_io/presentation/widgets/now_playing_backdrop.dart';
@@ -29,6 +30,7 @@ class NowPlayingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = this.media;
+    final theme = Theme.of(context);
 
     return Card(
       margin: EdgeInsets.zero,
@@ -90,40 +92,46 @@ class NowPlayingCard extends StatelessWidget {
                         Expanded(
                           child: media == null
                               ? const NowPlayingNothing()
-                              : NowPlayingTrack(media: media, isBusy: isBusy),
+                              : NowPlayingTrack(media: media),
                         ),
                         const SizedBox(width: 16),
 
                         // CRASH FIX: Wrapped in a Builder to capture media! safely
-                        if (media != null)
+                        if (media != null && !isBusy)
                           Builder(
                             builder: (context) {
                               final activeMedia = media;
                               return SizedBox(
                                 width: 53,
                                 height: 53,
-                                child: FilledButton(
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: const Color(0xFFFBE0C3),
-                                    splashFactory: NoSplash.splashFactory,
-                                    foregroundColor: Colors.black,
-                                    padding: EdgeInsets.zero,
-                                    shape: activeMedia.isPlaying
-                                        ? RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              16,
-                                            ),
-                                          )
-                                        : const CircleBorder(),
-                                  ),
-                                  onPressed: activeMedia.canTogglePlayback
-                                      ? onTogglePlayPause
-                                      : null,
-                                  child: Icon(
-                                    activeMedia.isPlaying
-                                        ? Icons.pause_rounded
-                                        : Icons.play_arrow_rounded,
-                                    size: 32,
+                                child: Tooltip(
+                                  message: activeMedia.isPlaying
+                                      ? 'Pause'
+                                      : 'Play',
+                                  child: FilledButton(
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor:
+                                          theme.colorScheme.primaryContainer,
+                                      splashFactory: NoSplash.splashFactory,
+                                      foregroundColor:
+                                          theme.colorScheme.onPrimaryContainer,
+                                      padding: EdgeInsets.zero,
+                                      shape: activeMedia.isPlaying
+                                          ? RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                            )
+                                          : const CircleBorder(),
+                                    ),
+                                    onPressed: activeMedia.canTogglePlayback
+                                        ? onTogglePlayPause
+                                        : null,
+                                    child: Icon(
+                                      activeMedia.isPlaying
+                                          ? Icons.pause_rounded
+                                          : Icons.play_arrow_rounded,
+                                      size: 32,
+                                    ),
                                   ),
                                 ),
                               );
@@ -136,13 +144,25 @@ class NowPlayingCard extends StatelessWidget {
                   // ── ROW 3: Bottom (Controls + Waveform) ──
                   const SizedBox(height: 16),
                   if (media != null)
-                    NowPlayingTransport(
-                      media: media,
-                      isPlaying: media.isPlaying, // Pass the playing state
-                      onTogglePlayPause: onTogglePlayPause,
-                      onSkipNext: onSkipNext,
-                      onSkipPrevious: onSkipPrevious,
-                    ),
+                    if (isBusy)
+                      const SizedBox(
+                        height: 40,
+                        child: Center(
+                          child: RdeLoadingIndicator(
+                            size: 24,
+                            color: Colors.white,
+                            semanticsLabel: 'Applying playback change',
+                          ),
+                        ),
+                      )
+                    else
+                      NowPlayingTransport(
+                        media: media,
+                        isPlaying: media.isPlaying, // Pass the playing state
+                        onTogglePlayPause: onTogglePlayPause,
+                        onSkipNext: onSkipNext,
+                        onSkipPrevious: onSkipPrevious,
+                      ),
                 ],
               ),
             ),
