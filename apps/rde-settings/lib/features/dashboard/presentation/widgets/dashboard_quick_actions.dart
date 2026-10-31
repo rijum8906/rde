@@ -1,23 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:core/theme.dart';
 import 'package:rde_settings/core/widgets/rde_quick_action_tile.dart';
 import 'package:rde_settings/core/widgets/rde_slider.dart';
 import 'package:rde_settings/features/audio_io/presentation/bloc/volume_bloc.dart';
 import 'package:rde_settings/features/audio_io/presentation/bloc/volume_event.dart';
-import 'package:rde_settings/features/dashboard/presentation/bloc/dashboard_bloc.dart';
-import 'package:rde_settings/features/dashboard/presentation/bloc/dashboard_event.dart';
-import 'package:rde_settings/features/dashboard/presentation/bloc/dashboard_state.dart';
+import 'package:rde_settings/features/bluetooth/presentation/bloc/bluetooth_bloc.dart';
+import 'package:rde_settings/features/bluetooth/presentation/bloc/bluetooth_event.dart';
+import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
+import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
+import 'package:rde_settings/features/wifi/presentation/bloc/wifi_bloc.dart';
+import 'package:rde_settings/features/wifi/presentation/bloc/wifi_event.dart';
 
-class DashboardQuickActions extends StatelessWidget {
-  const DashboardQuickActions({super.key, required this.state});
+/// Quick volume, brightness, and radio controls.
+///
+/// Each control reads the bloc that owns the service behind it, so a change
+/// made on the dedicated page shows up here without a dashboard copy to keep
+/// in sync. Brightness has no service bloc yet, so its slider keeps the value
+/// locally.
+class DashboardQuickActions extends StatefulWidget {
+  const DashboardQuickActions({super.key});
 
-  final DashboardState state;
+  @override
+  State<DashboardQuickActions> createState() => _DashboardQuickActionsState();
+}
+
+class _DashboardQuickActionsState extends State<DashboardQuickActions> {
+  /// Brightness percentage shown by the slider.
+  double _brightness = 0.65;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     final volumeState = context.watch<VolumeBloc>().state;
+    final wifiState = context.watch<WifiBloc>().state;
+    final bluetoothState = context.watch<BluetoothBloc>().state;
+    final themeState = context.watch<ThemeBloc>().state;
+    final isDark = themeState.mode.isDark;
 
     return Card(
       child: Container(
@@ -44,11 +64,11 @@ class DashboardQuickActions extends StatelessWidget {
                       spacing: 12,
                       children: [
                         IconButton.filledTonal(
-                          onPressed: () => {},
+                          onPressed: () {},
                           icon: Icon(
-                            state.brightness <= 0.2
+                            _brightness <= 0.2
                                 ? Icons.brightness_low_rounded
-                                : state.brightness <= 70
+                                : _brightness <= 0.7
                                 ? Icons.brightness_medium_rounded
                                 : Icons.brightness_high_rounded,
                             size: 30,
@@ -59,15 +79,16 @@ class DashboardQuickActions extends StatelessWidget {
                           child: RdeSlider(
                             min: 0,
                             max: 100,
-                            value: state.brightness * 100,
+                            value: _brightness * 100,
                             divisions: 100,
                             label: "Brightness",
-                            onChanged: (value) {},
+                            onChanged: (value) =>
+                                setState(() => _brightness = value / 100),
                           ),
                         ),
                         const SizedBox(width: 16),
                         Text(
-                          "${(state.brightness * 100).toInt()}%",
+                          "${(_brightness * 100).toInt()}%",
                           textAlign: TextAlign.right,
                         ),
                       ],
@@ -116,25 +137,35 @@ class DashboardQuickActions extends StatelessWidget {
                   spacing: 12,
                   children: [
                     RdeQuickActionTile(
-                      icon: state.wifiEnabled ? Icons.wifi : Icons.wifi_off,
-                      isActive: state.wifiEnabled,
-                      onTap: () => context.read<DashboardBloc>().add(
-                        ToggleWifiEvent(!state.wifiEnabled),
+                      icon: wifiState.isWifiEnabled
+                          ? Icons.wifi
+                          : Icons.wifi_off,
+                      isActive: wifiState.isWifiEnabled,
+                      onTap: () => context.read<WifiBloc>().add(
+                        ToggleWifiRadioEvent(!wifiState.isWifiEnabled),
                       ),
                     ),
                     RdeQuickActionTile(
-                      icon: state.bluetoothEnabled
+                      icon: bluetoothState.isEnabled
                           ? Icons.bluetooth
                           : Icons.bluetooth_disabled,
-                      isActive: state.bluetoothEnabled,
-                      onTap: () => context.read<DashboardBloc>().add(
-                        ToggleBluetoothEvent(!state.bluetoothEnabled),
-                      ),
+                      isActive: bluetoothState.isEnabled,
+                      onTap: () {
+                        // A machine without an adapter has nothing to switch.
+                        if (!bluetoothState.isAvailable) return;
+                        context.read<BluetoothBloc>().add(
+                          ToggleBluetoothPowerEvent(!bluetoothState.isEnabled),
+                        );
+                      },
                     ),
                     RdeQuickActionTile(
-                      icon: Icons.dark_mode,
-                      isActive: false,
-                      onTap: () {},
+                      icon: isDark ? Icons.dark_mode : Icons.light_mode,
+                      isActive: isDark,
+                      onTap: () => context.read<ThemeBloc>().add(
+                        SetAppearanceEvent(
+                          isDark ? AppearanceMode.light : AppearanceMode.dark,
+                        ),
+                      ),
                     ),
                     RdeQuickActionTile(
                       icon: Icons.airplanemode_active,

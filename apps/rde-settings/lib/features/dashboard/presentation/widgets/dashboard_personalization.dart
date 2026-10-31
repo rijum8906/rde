@@ -1,28 +1,34 @@
 import 'package:core/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:rde_settings/features/dashboard/presentation/bloc/dashboard_bloc.dart';
-import 'package:rde_settings/features/dashboard/presentation/bloc/dashboard_event.dart';
-import 'package:rde_settings/features/dashboard/presentation/bloc/dashboard_state.dart';
+import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
+import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 
+/// Quick appearance and accent controls backed by the theme service.
+///
+/// Both controls go through [ThemeBloc], which writes to `org.rde.Theme` and
+/// reloads the catalog, so the selected state always reflects the service.
 class DashboardPersonalization extends StatelessWidget {
-  const DashboardPersonalization({super.key, required this.state});
+  const DashboardPersonalization({super.key});
 
-  final DashboardState state;
+  /// Accent presets offered as seed colors.
+  static const List<Color> _accentColors = [
+    Color(0xFF6750A4), // Purple
+    Color(0xFF0061A4), // Ocean Blue
+    Color(0xFF006E3C), // Emerald
+    Color(0xFFB52700), // Terracotta
+    Color(0xFF7E5700), // Sunny Amber
+    Color(0xFFB90063), // Sunset Pink
+  ];
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    final List<Color> accentColors = [
-      const Color(0xFF6750A4), // Purple
-      const Color(0xFF0061A4), // Ocean Blue
-      const Color(0xFF006E3C), // Emerald
-      const Color(0xFFB52700), // Terracotta
-      const Color(0xFF7E5700), // Sunny Amber
-      const Color(0xFFB90063), // Sunset Pink
-    ];
+    final themeState = context.watch<ThemeBloc>().state;
+    final appearanceMode = themeState.mode;
+    final accentSeed = themeState.dynamicSeeds.primary.toUpperCase();
 
     return Card(
       elevation: 2,
@@ -59,13 +65,12 @@ class DashboardPersonalization extends StatelessWidget {
                   icon: Icon(Icons.dark_mode_outlined),
                 ),
               ],
-              selected: {state.appearanceMode},
+              selected: {appearanceMode},
               onSelectionChanged: (newSelection) {
-                if (newSelection.isNotEmpty) {
-                  context.read<DashboardBloc>().add(
-                    ChangeThemeAppearanceEvent(newSelection.first),
-                  );
-                }
+                if (newSelection.isEmpty || themeState.isBusy) return;
+                context.read<ThemeBloc>().add(
+                  SetAppearanceEvent(newSelection.first),
+                );
               },
             ),
             const SizedBox(height: 20),
@@ -80,15 +85,17 @@ class DashboardPersonalization extends StatelessWidget {
             Wrap(
               spacing: 12,
               runSpacing: 12,
-              children: accentColors.map((color) {
-                final isSelected =
-                    state.accentColor.toARGB32() == color.toARGB32();
+              children: _accentColors.map((color) {
+                final isSelected = accentSeed == _hexOf(color);
                 return MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: GestureDetector(
-                    onTap: () => context.read<DashboardBloc>().add(
-                      ChangeAccentColorEvent(color),
-                    ),
+                    onTap: () {
+                      if (themeState.isBusy) return;
+                      context.read<ThemeBloc>().add(
+                        SetDynamicAccentEvent(_hexOf(color)),
+                      );
+                    },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       width: 36,
@@ -128,5 +135,14 @@ class DashboardPersonalization extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Returns [color] as the `#RRGGBB` form the theme service uses for seeds.
+  String _hexOf(Color color) {
+    final rgb = (color.toARGB32() & 0xFFFFFF)
+        .toRadixString(16)
+        .padLeft(6, '0')
+        .toUpperCase();
+    return '#$rgb';
   }
 }
