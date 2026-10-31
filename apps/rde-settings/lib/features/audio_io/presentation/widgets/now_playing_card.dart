@@ -98,7 +98,7 @@ class NowPlayingCard extends StatelessWidget {
                         if (media != null)
                           Builder(
                             builder: (context) {
-                              final activeMedia = media!;
+                              final activeMedia = media;
                               return SizedBox(
                                 width: 53,
                                 height: 53,

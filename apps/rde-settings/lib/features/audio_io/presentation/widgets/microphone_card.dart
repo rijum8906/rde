@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:core/core.dart';
+import 'package:rde_settings/core/widgets/rde_slider.dart';
 import 'package:rde_settings/features/audio_io/domain/entities/audio_devices.dart';
 import 'package:rde_settings/features/audio_io/presentation/bloc/audio_devices_bloc.dart';
 import 'package:rde_settings/features/audio_io/presentation/bloc/audio_devices_event.dart';
 import 'package:rde_settings/features/audio_io/presentation/bloc/audio_devices_state.dart';
 
 import 'audio_device_picker.dart'; // <-- Import the new picker
-import 'scrollable_volume_slider.dart';
 
 class MicrophoneCard extends StatelessWidget {
   const MicrophoneCard({super.key});
@@ -138,7 +138,7 @@ class _MicControls extends StatelessWidget {
 
         // Slider
         Expanded(
-          child: ScrollableVolumeSlider(
+          child: RdeSlider(
             value: volume.toDouble(),
             min: 0,
             max: 100,
@@ -146,7 +146,7 @@ class _MicControls extends StatelessWidget {
             label: '$volume%',
             isEnabled: isReady,
             onChanged: (value) =>
-                bloc.add(MicrophoneVolumeChangedEvent(value.round())),
+                bloc.add(MicrophoneVolumeSetEvent(value.round())),
           ),
         ),
 

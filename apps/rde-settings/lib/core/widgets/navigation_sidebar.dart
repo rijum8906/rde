@@ -175,15 +175,11 @@ class NavigationSidebar extends StatelessWidget {
 
     // Step 0: A narrow window collapses the rail to its icons, so the page
     // keeps the width it needs for its own layout.
-    final collapsed =
-        MediaQuery.sizeOf(context).width < _collapseBreakpoint;
+    final collapsed = MediaQuery.sizeOf(context).width < _collapseBreakpoint;
 
     // Step 1: One surface color is used by both the rail and the fade that
     // covers its bottom edge, so the fade stays invisible over the background.
-    final sidebarColor = isDark
-        ? colorScheme.surfaceContainerLow
-        : colorScheme.surfaceContainerLowest;
-
+    final sidebarColor = theme.colorScheme.surfaceContainerLow;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,

@@ -7,6 +7,7 @@ import 'package:core/theme.dart';
 import 'package:rde_settings/features/dashboard/domain/entities/dashboard_settings.dart';
 import 'package:rde_settings/features/dashboard/domain/use_cases/get_dashboard_settings.dart';
 import 'package:rde_settings/features/dashboard/domain/use_cases/save_dashboard_settings.dart';
+import 'package:rde_settings/features/theme_styling/domain/use_cases/set_mode.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/set_theme.dart';
 import 'package:rde_settings/features/theme_styling/domain/use_cases/update_dynamic_theme.dart';
 import 'package:rde_settings/main.dart';
@@ -14,38 +15,30 @@ import 'package:rde_settings/main.dart';
 import 'dashboard_event.dart';
 import 'dashboard_state.dart';
 
-/// Drives the dashboard tiles, quick toggles, and personalization shortcuts.
-///
-/// The appearance controls are deliberately not local-only: the seed color is
-/// written to `org.rde.Theme`, which republishes the palette for every themed
-/// application on the desktop, and this app follows that publication.
 class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
   final GetDashboardSettingsUseCase _getSettingsUseCase;
   final SaveDashboardSettingsUseCase _saveSettingsUseCase;
   final UpdateDynamicThemeUseCase _updateDynamicTheme;
-  final SetThemeUseCase _setTheme;
+  final SetThemeUseCase _setThemeUseCase;
+  final SetModeUseCase _setModeUseCase;
   Timer? _statsTimer;
 
-  /// Creates the dashboard bloc.
-  ///
-  /// [updateDynamicTheme] and [setTheme] reach the `org.rde.Theme` service, so
-  /// a seed picked here changes the whole desktop instead of only this app.
   DashboardBloc({
     required this._getSettingsUseCase,
     required this._saveSettingsUseCase,
     required this._updateDynamicTheme,
-    required this._setTheme,
+    required this._setThemeUseCase,
+    required this._setModeUseCase,
   }) : super(DashboardState.initial()) {
     on<DashboardInitEvent>(_onInit);
     on<ToggleWifiEvent>(_onToggleWifi);
     on<ToggleBluetoothEvent>(_onToggleBluetooth);
-    on<ChangeVolumeEvent>(_onChangeVolume);
-    on<ChangeBrightnessEvent>(_onChangeBrightness);
+    on<SetDashboardVolumeEvent>(_onSetVolume);
+    on<SetDashboardBrightnessEvent>(_onSetBrightness);
     on<UpdateSystemStatsEvent>(_onUpdateSystemStats);
-    on<ChangeThemeModeEvent>(_onChangeThemeMode);
+    on<ChangeThemeAppearanceEvent>(_onChangeThemeAppearance);
     on<ChangeAccentColorEvent>(_onChangeAccentColor);
 
-    // Periodically update simulated resource health stats
     _statsTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
       final newCpu = (0.25 + (timer.tick % 5) * 0.05).clamp(0.0, 1.0);
       final newRam = (0.50 + (timer.tick % 3) * 0.02).clamp(0.0, 1.0);
@@ -82,7 +75,7 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
           batteryLevel: settings.batteryLevel,
           ramUsage: settings.ramUsage,
           cpuUsage: 0.38,
-          themeMode: appThemeBloc.state.themeMode,
+          appearanceMode: appThemeBloc.state.appearanceMode,
           accentColor: appThemeBloc.state.accentColor,
         ),
       ),
@@ -107,15 +100,15 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
     await _saveDashboardSettings(newState);
   }
 
-  Future<void> _onChangeVolume(
-    ChangeVolumeEvent event,
+  Future<void> _onSetVolume(
+    SetDashboardVolumeEvent event,
     Emitter<DashboardState> emit,
   ) async {
     emit(state.copyWith(volume: event.value));
   }
 
-  Future<void> _onChangeBrightness(
-    ChangeBrightnessEvent event,
+  Future<void> _onSetBrightness(
+    SetDashboardBrightnessEvent event,
     Emitter<DashboardState> emit,
   ) async {
     emit(state.copyWith(brightness: event.value));
@@ -134,12 +127,14 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
     );
   }
 
-  Future<void> _onChangeThemeMode(
-    ChangeThemeModeEvent event,
+  Future<void> _onChangeThemeAppearance(
+    ChangeThemeAppearanceEvent event,
     Emitter<DashboardState> emit,
   ) async {
-    appThemeBloc.add(theme_evt.ChangeThemeModeEvent(event.themeMode));
-    final newState = state.copyWith(themeMode: event.themeMode);
+    appThemeBloc.add(theme_evt.ChangeThemeModeEvent(event.appearanceMode));
+
+    // FIXED: Used event.appearanceMode instead of hardcoding AppearanceMode.light
+    final newState = state.copyWith(appearanceMode: event.appearanceMode);
     emit(newState);
     await _saveDashboardSettings(newState);
   }
@@ -148,31 +143,15 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
     ChangeAccentColorEvent event,
     Emitter<DashboardState> emit,
   ) async {
-    // Step 1: Restyle this window immediately, so the picker reacts before the
-    // service round trip finishes.
     appThemeBloc.add(theme_evt.ChangeAccentColorEvent(event.accentColor));
     final newState = state.copyWith(accentColor: event.accentColor);
     emit(newState);
 
-    // Step 2: Regenerate the desktop palette from the same seed.
     await _applyDesktopSeed(event.accentColor);
-
-    // Step 3: Keep the dashboard settings in sync with the picked appearance.
     await _saveDashboardSettings(newState);
   }
 
-  /// Re-seeds and activates the `org.rde.Theme` dynamic theme.
-  ///
-  /// A picked accent color only drives the primary family; the service keeps the
-  /// stored secondary, tertiary, and error seeds. The accent is written first and
-  /// the dynamic theme is activated afterwards, because a static active theme
-  /// keeps its shipped payload and only this application would show the color.
-  ///
-  /// Failures are logged instead of surfaced: the dashboard stays usable when
-  /// the theme service is offline, and the selection made here still applies
-  /// to this window.
   Future<void> _applyDesktopSeed(Color accentColor) async {
-    // Step 1: Send the color as the primary seed of the dynamic theme.
     final seed = _hexSeed(accentColor);
     final updated = await _updateDynamicTheme(primary: seed);
     final updateFailure = updated.fold((failure) => failure, (_) => null);
@@ -183,8 +162,7 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
       return;
     }
 
-    // Step 2: Publish the regenerated palette to the whole desktop.
-    final activated = await _setTheme(ThemeManifest.dynamicId);
+    final activated = await _setThemeUseCase(ThemeManifest.dynamicId);
     activated.fold(
       (failure) => debugPrint(
         'Unable to activate ${ThemeManifest.dynamicId}: ${failure.message}',
@@ -193,7 +171,6 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
     );
   }
 
-  /// Formats [color] as the uppercase `#RRGGBB` seed the service accepts.
   String _hexSeed(Color color) {
     final rgb = (color.toARGB32() & 0xFFFFFF)
         .toRadixString(16)
@@ -204,7 +181,7 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
 
   Future<void> _saveDashboardSettings(DashboardState state) async {
     final settings = DashboardSettings(
-      isDarkMode: state.themeMode == ThemeMode.dark,
+      isDarkMode: state.appearanceMode == AppearanceMode.dark,
       isWifiEnabled: state.wifiEnabled,
       isBluetoothEnabled: state.bluetoothEnabled,
       isDndEnabled: false,

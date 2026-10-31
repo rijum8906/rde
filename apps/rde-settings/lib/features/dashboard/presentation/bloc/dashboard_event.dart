@@ -1,3 +1,4 @@
+import 'package:core/theme/domain/entities/appearance_mode.dart';
 import 'package:flutter/material.dart';
 
 abstract class DashboardEvent {
@@ -18,14 +19,16 @@ class ToggleBluetoothEvent extends DashboardEvent {
   const ToggleBluetoothEvent(this.value);
 }
 
-class ChangeVolumeEvent extends DashboardEvent {
+/// Renamed to avoid conflict with the system's volume service
+class SetDashboardVolumeEvent extends DashboardEvent {
   final double value;
-  const ChangeVolumeEvent(this.value);
+  const SetDashboardVolumeEvent(this.value);
 }
 
-class ChangeBrightnessEvent extends DashboardEvent {
+/// Renamed to avoid conflict with the system's brightness service
+class SetDashboardBrightnessEvent extends DashboardEvent {
   final double value;
-  const ChangeBrightnessEvent(this.value);
+  const SetDashboardBrightnessEvent(this.value);
 }
 
 class UpdateSystemStatsEvent extends DashboardEvent {
@@ -39,9 +42,9 @@ class UpdateSystemStatsEvent extends DashboardEvent {
   });
 }
 
-class ChangeThemeModeEvent extends DashboardEvent {
-  final ThemeMode themeMode;
-  const ChangeThemeModeEvent(this.themeMode);
+class ChangeThemeAppearanceEvent extends DashboardEvent {
+  final AppearanceMode appearanceMode;
+  const ChangeThemeAppearanceEvent(this.appearanceMode);
 }
 
 class ChangeAccentColorEvent extends DashboardEvent {
