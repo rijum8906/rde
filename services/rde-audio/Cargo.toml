@@ -1,0 +1,17 @@
+[package]
+name = "rde-audio"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Internal Crates
+rde-core.workspace = true
+rde-ipc.workspace = true
+
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+serde.workspace = true

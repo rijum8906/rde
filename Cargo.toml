@@ -4,7 +4,7 @@ members = [
   "cli/rde-cli",
   "crates/rde-config",
   "crates/rde-core",
-  "crates/rde-ipc",
+  "crates/rde-ipc", "services/rde-audio",
   "services/rde-brightness",
   "services/rde-daemon",
   "services/rde-notification",
