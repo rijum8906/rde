@@ -45,6 +45,18 @@ pub enum DomainError {
         source: io::Error,
     },
 
+    /// The service lacks write access to a sysfs backlight file.
+    #[error(
+        "permission denied writing {path}: {source}; add the user to the 'video' group so the service can write the backlight"
+    )]
+    BacklightPermission {
+        /// Backlight file that rejected the write.
+        path: String,
+        /// Underlying I/O failure.
+        #[source]
+        source: io::Error,
+    },
+
     /// A value was read but could not be parsed.
     #[error("could not parse {what}: {reason}")]
     Parse {

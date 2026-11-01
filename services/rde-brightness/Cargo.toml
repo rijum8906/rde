@@ -11,10 +11,6 @@ path = "src/lib.rs"
 name = "rde-brightness"
 path = "src/main.rs"
 
-[[bin]]
-name = "rde-brightness-helper"
-path = "src/bin/rde-brightness-helper.rs"
-
 [dependencies]
 rde-core = { path = "../../crates/rde-core" }
 rde-ipc = { path = "../../crates/rde-ipc" }

@@ -3,9 +3,9 @@
 //! Serves `org.rde.Brightness` at `/org/rde/Brightness`, translating D-Bus
 //! calls into [`BrightnessCommand`]s for the application service.
 //!
-//! Privileged sysfs writes never happen on the bus connection: the service
-//! falls back to `pkexec`, which authorises `rde-brightness-helper` through the
-//! `org.rde.brightness.set` polkit action shipped in `assets/polkit/`.
+//! Sysfs and DDC/CI writes are performed directly by the service process. The
+//! service user must belong to the `video` group (and have access to
+//! `/dev/i2c-*` for external monitors); no polkit helper is involved.
 
 use std::sync::Arc;
 

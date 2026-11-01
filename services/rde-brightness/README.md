@@ -30,9 +30,6 @@ of D-Bus and async runtimes.
   - [`infrastructure/ipc.rs`](src/infrastructure/ipc.rs): registers with
     `rde-daemon`, answers `HealthCheck`, `GetStatus`, and `Shutdown`, and
     deregisters on exit.
-- **`bin/rde-brightness-helper.rs`**: standalone root helper. It takes a
-  percentage as `argv[1]` and writes to the preferred
-  `/sys/class/backlight/*/brightness`; it does not link the service library.
 
 ## Lifecycle
 
@@ -43,12 +40,21 @@ of D-Bus and async runtimes.
 4. `SIGINT`, `SIGTERM`, or a supervisor `Shutdown` request cancels the token.
 5. Supervision is stopped with a bounded wait and the service deregisters.
 
-## Privileges
+## Hardware Access
 
-Direct sysfs writes are attempted first. On failure the domain layer falls back
-to `pkexec /usr/bin/rde-brightness-helper <percent>`, which is authorised by the
-`org.rde.brightness.set` polkit action in
-[`assets/polkit/org.rde.brightness.policy`](../../assets/polkit/org.rde.brightness.policy).
+The service writes brightness directly; there is no privileged helper and no
+polkit action.
+
+- **Internal panels:** the service user must be allowed to write
+  `/sys/class/backlight/*/brightness`. Add the user to the `video` group and
+  re-login so the session picks up the new membership. Distributions that ship
+  restrictive stock permissions may also need a udev rule that sets the
+  backlight file's group to `video`.
+- **External monitors:** `ddcutil` talks to `/dev/i2c-*`, so the service user
+  needs access to the I2C devices as well (commonly the `i2c` group or a udev
+  rule).
+
+No `pkexec`, polkit policy, or root helper binary is used.
 
 ## DBus Interface
 
