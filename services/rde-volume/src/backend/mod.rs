@@ -5,6 +5,7 @@
 //!
 //! ## Features
 //! - Master volume queries and boundary-clamped mutations (0-100%)
+//! - Microphone capture volume queries and boundary-clamped mutations (0-100%)
 //! - Mute state querying, explicit assignment, and atomic toggle logic
 //! - Configurable step-based incremental and decremental adjustments
 //! - Decoupled hardware driver interaction via `AudioController`
@@ -241,6 +242,114 @@ impl VolumeBackend {
 
         // Step 3: Apply new volume
         self.set_volume(new_vol).await
+    }
+
+    /// Queries the current microphone capture volume percentage.
+    ///
+    /// # Returns
+    /// Microphone volume clamped between 0 and 100.
+    ///
+    /// # Errors
+    /// Returns `RdeError` if the device has no capture control or the driver
+    /// query fails.
+    pub async fn get_microphone_volume(&self) -> RdeResult<u8> {
+        // Step 1: Delegate the capture query to the controller
+        let raw_vol = self.controller.get_microphone_volume()?;
+
+        // Step 2: Ensure the returned volume is strictly clamped
+        Ok(raw_vol.clamp(MIN_VOLUME, MAX_VOLUME))
+    }
+
+    /// Sets the microphone capture volume to an absolute percentage.
+    ///
+    /// # Parameters
+    /// - `volume`: Desired percentage (clamped to `0..=100`).
+    ///
+    /// # Returns
+    /// The clamped volume percentage written to hardware.
+    ///
+    /// # Errors
+    /// Returns `RdeError` if the device has no capture control or the driver
+    /// write fails.
+    pub async fn set_microphone_volume(&self, volume: u8) -> RdeResult<u8> {
+        // Step 1: Clamp the requested volume to allowed bounds
+        let target = volume.clamp(MIN_VOLUME, MAX_VOLUME);
+
+        // Step 2: Update the capture hardware state
+        self.controller.set_microphone_volume(target)?;
+
+        tracing::info!("Microphone volume updated to {}%", target);
+        Ok(target)
+    }
+
+    /// Increases microphone volume by the configured default step size.
+    ///
+    /// # Returns
+    /// New microphone volume percentage after increment.
+    ///
+    /// # Errors
+    /// Returns `RdeError` if querying or writing the capture volume fails.
+    pub async fn increase_microphone_volume(&self) -> RdeResult<u8> {
+        let step = self.get_step();
+        self.increase_microphone_volume_by(step).await
+    }
+
+    /// Decreases microphone volume by the configured default step size.
+    ///
+    /// # Returns
+    /// New microphone volume percentage after decrement.
+    ///
+    /// # Errors
+    /// Returns `RdeError` if querying or writing the capture volume fails.
+    pub async fn decrease_microphone_volume(&self) -> RdeResult<u8> {
+        let step = self.get_step();
+        self.decrease_microphone_volume_by(step).await
+    }
+
+    /// Increases microphone volume by a specified custom step size.
+    ///
+    /// Automatically caps the volume at `MAX_VOLUME` (100%).
+    ///
+    /// # Parameters
+    /// - `step`: Percentage to add to the current microphone volume.
+    ///
+    /// # Returns
+    /// Resulting microphone volume percentage.
+    ///
+    /// # Errors
+    /// Returns `RdeError` if querying or writing the capture volume fails.
+    pub async fn increase_microphone_volume_by(&self, step: u8) -> RdeResult<u8> {
+        // Step 1: Read the current capture volume
+        let current = self.get_microphone_volume().await?;
+
+        // Step 2: Compute incremented volume with upper boundary capping
+        let new_vol = current.saturating_add(step).min(MAX_VOLUME);
+
+        // Step 3: Apply the new volume
+        self.set_microphone_volume(new_vol).await
+    }
+
+    /// Decreases microphone volume by a specified custom step size.
+    ///
+    /// Automatically saturates at `MIN_VOLUME` (0%).
+    ///
+    /// # Parameters
+    /// - `step`: Percentage to subtract from the current microphone volume.
+    ///
+    /// # Returns
+    /// Resulting microphone volume percentage.
+    ///
+    /// # Errors
+    /// Returns `RdeError` if querying or writing the capture volume fails.
+    pub async fn decrease_microphone_volume_by(&self, step: u8) -> RdeResult<u8> {
+        // Step 1: Read the current capture volume
+        let current = self.get_microphone_volume().await?;
+
+        // Step 2: Compute decremented volume with lower boundary saturation
+        let new_vol = current.saturating_sub(step);
+
+        // Step 3: Apply the new volume
+        self.set_microphone_volume(new_vol).await
     }
 
     /// Returns a full snapshot of the current audio state (volume, mute, step).

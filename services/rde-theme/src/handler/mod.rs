@@ -3,7 +3,7 @@
 //! Routes supervisor messages from `rde-daemon` to the request and response
 //! handlers.
 
-use rde_ipc::client::IpcClient;
+use rde_ipc::socket::UnixIpcClient;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -68,7 +68,7 @@ impl SupervisionContext {
 /// caller can close a dead supervision connection.
 pub async fn handle_message(
     message: Message,
-    client: &mut dyn IpcClient,
+    client: &mut UnixIpcClient,
     context: &SupervisionContext,
 ) -> RdeResult<()> {
     match message.payload {

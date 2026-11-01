@@ -7,7 +7,8 @@ import 'package:rde_settings/features/audio_io/domain/repositories/master_volume
 import 'package:rde_settings/features/audio_io/presentation/bloc/volume_event.dart';
 import 'package:rde_settings/features/audio_io/presentation/bloc/volume_state.dart';
 
-/// Keeps the volume card in step with the `org.rde.Volume` service.
+/// Keeps the volume and microphone cards in step with the `org.rde.Volume`
+/// service.
 ///
 /// The service owns the mixer, so the card reads the state back after every
 /// write instead of trusting its own guess. A drag is the one exception: the
@@ -24,6 +25,7 @@ class VolumeBloc extends Bloc<VolumeEvent, VolumeState> {
     on<VolumeInitEvent>(_onInit);
     on<VolumeSliderChangedEvent>(_onSliderChanged);
     on<VolumeSetEvent>(_onSet);
+    on<VolumeMicrophoneSetEvent>(_onMicrophoneSet);
     on<ToggleVolumeMuteEvent>(_onToggleMute);
     on<VolumeServiceChangedEvent>(_onServiceChanged);
 
@@ -58,10 +60,7 @@ class VolumeBloc extends Bloc<VolumeEvent, VolumeState> {
     return super.close();
   }
 
-  Future<void> _onInit(
-    VolumeInitEvent event,
-    Emitter<VolumeState> emit,
-  ) async {
+  Future<void> _onInit(VolumeInitEvent event, Emitter<VolumeState> emit) async {
     emit(state.copyWith(status: VolumeStatus.loading, errorMessage: null));
 
     final result = await _repository.read();
@@ -102,7 +101,10 @@ class VolumeBloc extends Bloc<VolumeEvent, VolumeState> {
         .clamp(master.minVolume, master.maxVolume)
         .toInt();
     emit(
-      state.copyWith(master: master.copyWith(volume: volume), errorMessage: null),
+      state.copyWith(
+        master: master.copyWith(volume: volume),
+        errorMessage: null,
+      ),
     );
 
     _volumeCommit?.cancel();
@@ -121,10 +123,47 @@ class VolumeBloc extends Bloc<VolumeEvent, VolumeState> {
         .clamp(master.minVolume, master.maxVolume)
         .toInt();
     emit(
-      state.copyWith(master: master.copyWith(volume: volume), errorMessage: null),
+      state.copyWith(
+        master: master.copyWith(volume: volume),
+        errorMessage: null,
+      ),
     );
 
     final result = await _repository.setVolume(volume);
+    final failure = _failureOf(result);
+    if (failure != null) {
+      emit(state.copyWith(errorMessage: failure.message));
+    }
+
+    // The service is the truth: a rejected write snaps the slider back.
+    await _refresh(emit);
+  }
+
+  /// Writes the microphone capture level through the service.
+  ///
+  /// The card shows the requested value immediately and the service is read
+  /// back afterwards, because it clamps and may reject the write when the
+  /// device exposes no capture control.
+  Future<void> _onMicrophoneSet(
+    VolumeMicrophoneSetEvent event,
+    Emitter<VolumeState> emit,
+  ) async {
+    final master = state.master;
+    if (master == null || !master.hasMicrophone) {
+      return;
+    }
+
+    final volume = event.volume
+        .clamp(master.minVolume, master.maxVolume)
+        .toInt();
+    emit(
+      state.copyWith(
+        master: master.copyWith(microphoneVolume: volume),
+        errorMessage: null,
+      ),
+    );
+
+    final result = await _repository.setMicrophoneVolume(volume);
     final failure = _failureOf(result);
     if (failure != null) {
       emit(state.copyWith(errorMessage: failure.message));

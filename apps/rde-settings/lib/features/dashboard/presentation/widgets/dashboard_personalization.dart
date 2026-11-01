@@ -60,108 +60,128 @@ class DashboardPersonalization extends StatelessWidget {
     final appearanceMode = themeState.mode;
     final accentSeed = themeState.dynamicSeeds.primary.toUpperCase();
 
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Quick Personalization',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Theme Mode',
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 8),
-            SegmentedButton<AppearanceMode>(
-              segments: const [
-                ButtonSegment(
-                  value: AppearanceMode.light,
-                  label: Text('Light'),
-                  icon: Icon(Icons.light_mode_outlined),
+    return AnimatedOpacity(
+      opacity: 1,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutCubic,
+      child: Card(
+        elevation: 2,
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Quick Personalization',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
                 ),
-                ButtonSegment(
-                  value: AppearanceMode.dark,
-                  label: Text('Dark'),
-                  icon: Icon(Icons.dark_mode_outlined),
-                ),
-              ],
-              selected: {appearanceMode},
-              onSelectionChanged: (newSelection) {
-                if (newSelection.isEmpty || themeState.isBusy) return;
-                context.read<ThemeBloc>().add(
-                  SetAppearanceEvent(newSelection.first),
-                );
-              },
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Accent Color Seed',
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: colorScheme.onSurfaceVariant,
               ),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: _accentColors.map((color) {
-                final isSelected = accentSeed == _hexOf(color);
-                return MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: GestureDetector(
-                    onTap: () {
-                      if (themeState.isBusy) return;
-                      context.read<ThemeBloc>().add(
-                        SetDynamicAccentEvent(_hexOf(color)),
-                      );
-                    },
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isSelected
-                              ? colorScheme.onSurface
-                              : Colors.transparent,
-                          width: 3,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: color.withValues(alpha: 0.3),
-                            blurRadius: 6,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: isSelected
-                          ? Icon(
-                              Icons.check,
-                              color: color.computeLuminance() > 0.5
-                                  ? Colors.black
-                                  : Colors.white,
-                              size: 18,
-                            )
-                          : null,
-                    ),
+              const SizedBox(height: 16),
+              Text(
+                'Theme Mode',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<AppearanceMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: AppearanceMode.light,
+                    label: Text('Light'),
+                    icon: Icon(Icons.light_mode_outlined),
                   ),
-                );
-              }).toList(),
-            ),
-          ],
+                  ButtonSegment(
+                    value: AppearanceMode.dark,
+                    label: Text('Dark'),
+                    icon: Icon(Icons.dark_mode_outlined),
+                  ),
+                ],
+                selected: {appearanceMode},
+                onSelectionChanged: (newSelection) {
+                  if (newSelection.isEmpty || themeState.isBusy) return;
+                  context.read<ThemeBloc>().add(
+                    SetAppearanceEvent(newSelection.first),
+                  );
+                },
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Accent Color Seed',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: _accentColors.map((color) {
+                  final isSelected = accentSeed == _hexOf(color);
+                  return MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () {
+                        if (themeState.isBusy) return;
+                        context.read<ThemeBloc>().add(
+                          SetDynamicAccentEvent(_hexOf(color)),
+                        );
+                      },
+                      child: AnimatedScale(
+                        scale: isSelected ? 1.08 : 1,
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOutCubic,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isSelected
+                                  ? colorScheme.onSurface
+                                  : Colors.transparent,
+                              width: 3,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: color.withValues(alpha: 0.3),
+                                blurRadius: 6,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: isSelected
+                              ? AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 150),
+                                  transitionBuilder: (child, animation) {
+                                    return ScaleTransition(
+                                      scale: animation,
+                                      child: child,
+                                    );
+                                  },
+                                  child: Icon(
+                                    key: const ValueKey('selected'),
+                                    Icons.check,
+                                    color: color.computeLuminance() > 0.5
+                                        ? Colors.black
+                                        : Colors.white,
+                                    size: 18,
+                                  ),
+                                )
+                              : null,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
         ),
       ),
     );

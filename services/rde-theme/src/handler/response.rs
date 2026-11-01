@@ -4,9 +4,9 @@
 //! daemon supervisor.
 
 use rde_core::errors::RdeResult;
-use rde_ipc::client::IpcClient;
+use rde_ipc::socket::UnixIpcClient;
 use rde_ipc::message::DaemonResponse;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::constants::SERVICE_NAME;
 
@@ -20,7 +20,7 @@ use crate::constants::SERVICE_NAME;
 /// Never fails: responses are informational and only affect logging.
 pub async fn handle_daemon_response(
     response: DaemonResponse,
-    _client: &mut dyn IpcClient,
+    _client: &mut UnixIpcClient,
 ) -> RdeResult<()> {
     match response {
         DaemonResponse::RegisterAck(ack) => {
@@ -37,6 +37,12 @@ pub async fn handle_daemon_response(
                     "Supervisor rejected the registration"
                 );
             }
+        }
+        DaemonResponse::Success => {
+            debug!(
+                service = SERVICE_NAME,
+                "Supervisor acknowledged a request"
+            );
         }
     }
 

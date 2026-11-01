@@ -64,4 +64,24 @@ pub trait AudioController: Send + Sync {
     /// # Errors
     /// Returns `RdeError::Hardware` on driver failure.
     fn set_mute(&self, muted: bool) -> RdeResult<()>;
+
+    /// Queries the current microphone capture volume as an integer percentage (0-100).
+    ///
+    /// # Returns
+    /// Microphone volume percentage.
+    ///
+    /// # Errors
+    /// Returns `RdeError::HardwareNotFound` when the device exposes no capture
+    /// control, and `RdeError::Hardware` on driver failure.
+    fn get_microphone_volume(&self) -> RdeResult<u8>;
+
+    /// Sets the microphone capture volume to an absolute integer percentage (0-100).
+    ///
+    /// # Parameters
+    /// - `percentage`: Volume percentage clamped to 0..=100.
+    ///
+    /// # Errors
+    /// Returns `RdeError::HardwareNotFound` when the device exposes no capture
+    /// control, and `RdeError::Hardware` on driver failure.
+    fn set_microphone_volume(&self, percentage: u8) -> RdeResult<()>;
 }

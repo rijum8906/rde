@@ -24,7 +24,6 @@
 //! ## Copyright
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
-use rde_ipc::client::IpcClient;
 use std::{sync::Arc, time::Duration};
 
 use rde_core::errors::{RdeError, RdeResult};
@@ -32,7 +31,7 @@ use rde_ipc::{
     message::{MIN_PROTOCOL_VERSION, MessagePayload},
     socket::{IpcServer, UnixIpcClient},
 };
-use tokio::{net::UnixStream, task::JoinHandle};
+use tokio::task::JoinHandle;
 
 use crate::{
     app::App,
@@ -61,7 +60,10 @@ impl Server {
     /// # Returns
     /// A running [`Server`] whose accept loop is already scheduled.
     pub fn new() -> RdeResult<Self> {
-        Self::from_listener(IpcServer::new()?)
+        // 1. Bind the default supervision socket, mapping the IPC error into
+        //    the daemon's domain error so startup callers see one type.
+        let listener = IpcServer::new().map_err(|error| RdeError::Socket(error.to_string()))?;
+        Self::from_listener(listener)
     }
 
     /// Binds a supervision socket at an explicit path.
@@ -101,7 +103,7 @@ impl Server {
 
     /// Returns the socket path the server is listening on.
     pub fn socket_path(&self) -> &std::path::Path {
-        self.listener.socket_path().as_path()
+        self.listener.socket_path()
     }
 
     /// Accepts connections until the task is aborted.
@@ -110,10 +112,10 @@ impl Server {
     /// [`ACCEPT_ERROR_BACKOFF`] so the loop never spins on a persistent error.
     async fn accept_loop(listener: Arc<IpcServer>) {
         loop {
-            match listener.accept().await {
-                Ok(stream) => {
+            match listener.accept_client().await {
+                Ok(client) => {
                     tokio::spawn(async move {
-                        if let Err(error) = Self::handle_client(stream).await {
+                        if let Err(error) = Self::handle_client(client).await {
                             tracing::warn!(%error, "Service session ended with an error");
                         }
                     });
@@ -129,7 +131,7 @@ impl Server {
     /// Runs the message loop for a single connected service.
     ///
     /// # Parameters
-    /// - `stream`: the accepted connection to the service
+    /// - `client`: the accepted connection to the service
     ///
     /// # Errors
     /// Returns an error if the daemon state cannot be locked or a registration
@@ -139,8 +141,7 @@ impl Server {
     /// # Cleanup
     /// Any service registered on this connection is removed from the registry
     /// before the function returns, whichever way the session ended.
-    pub async fn handle_client(stream: UnixStream) -> RdeResult<()> {
-        let mut client = UnixIpcClient::from(stream);
+    pub async fn handle_client(mut client: UnixIpcClient) -> RdeResult<()> {
         let mut registered_service: Option<String> = None;
 
         loop {
@@ -223,7 +224,9 @@ impl Server {
         }
 
         // 2. Remove the socket file so a restart can bind the same path.
-        self.listener.shutdown()?;
+        self.listener
+            .shutdown()
+            .map_err(|error| RdeError::Socket(error.to_string()))?;
         tracing::info!("IPC supervision server stopped");
 
         Ok(())

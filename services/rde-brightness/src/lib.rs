@@ -1,47 +1,39 @@
-//! # RDE Brightness Service Library (`rde-brightness`)
+//! # RDE Brightness Service
 //!
-//! `rde-brightness` is a lightweight microservice within the Riju Desktop Environment (RDE).
-//! It provides hardware brightness control and management for display backlights across
-//! various graphics hardware (Intel, AMD, NVIDIA).
+//! Brightness control service for the Riju Desktop Environment, split into
+//! domain, application, and infrastructure layers.
 //!
-//! ## Features
-//! - Direct and privileged backlight brightness control via sysfs interface
-//! - Percentage-based brightness adjustment (0-100%)
-//! - Raw brightness value access for advanced use cases
-//! - D-Bus interface (`org.rde.Brightness`) for system integration
-//! - Graceful daemon supervision via Unix socket IPC
-//! - Hardware abstraction for Intel, AMD, and other backlight drivers
-//! - Fallback to privilege escalation (pkexec) for restricted sysfs access
-//!
-//! ## Architecture
-//! - **app**: Application singleton ([`app::App`]), event loop, and supervision task
-//! - **handler**: Routing and handling of supervisor requests and responses
-//! - **backend**: Hardware interface abstraction and brightness control
-//! - **dbus**: D-Bus interface definitions (properties, methods, signals)
-//! - **constants**: Service name, D-Bus contract, and retry policy
-//!
-//! ## D-Bus Interface: `org.rde.Brightness`
-//! Clients interact with brightness control via D-Bus at path `/org/rde/Brightness`:
-//! - Properties: brightness, brightness_percentage, max_brightness, version
-//! - Methods: IncreaseBrightness, DecreaseBrightness
-//! - Signals: BrightnessChanged
-//!
-//! ## Related
-//! - [Linux Backlight Driver Documentation](https://www.kernel.org/doc/html/latest/userspace-api/sysfs-behavior.rst)
-//! - [`rde-daemon`](../rde-daemon)
-//! - [`rde-ipc`](../../crates/rde-ipc)
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! # Layers
+//! - [`domain`]: display detection and hardware actuation, free of D-Bus and async runtimes.
+//! - [`application`]: command routing and the in-memory brightness state.
+//! - [`infrastructure`]: the `org.rde.Brightness` D-Bus object and `rde-daemon` supervision.
 
-pub mod app;
-pub mod backend;
-pub mod constants;
-pub mod dbus;
-pub mod handler;
+pub mod application;
+pub mod domain;
+pub mod infrastructure;
+
+use std::time::Duration;
+
+/// Service name reported to the `rde-daemon` supervisor.
+pub const SERVICE_NAME: &str = "brightness";
+
+/// Package version advertised over D-Bus and during registration.
+pub const SERVICE_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Capabilities advertised during the registration handshake.
+pub const CAPABILITIES: &[&str] = &["backlight"];
+
+/// Well-known D-Bus name owned by this service on the session bus.
+pub const DBUS_SERVICE_NAME: &str = "org.rde.Brightness";
+
+/// Object path exposing `org.rde.Brightness` on the session bus.
+pub const DBUS_OBJECT_PATH: &str = "/org/rde/Brightness";
+
+/// Maximum number of attempts made when connecting to the supervision socket.
+pub const MAX_SOCKET_CONN_RETRY_COUNT: u32 = 5;
+
+/// Delay between supervision socket connection attempts, in milliseconds.
+pub const SOCKET_CONN_RETRY_DELAY_MS: u64 = 2_000;
+
+/// Maximum time spent waiting for the supervision task to stop on shutdown.
+pub const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);

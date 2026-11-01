@@ -10,6 +10,9 @@ abstract interface class MasterVolumeRepository {
   /// Sets the master volume to [volume] percent.
   Future<Either<Failure, void>> setVolume(int volume);
 
+  /// Sets the microphone capture volume to [volume] percent.
+  Future<Either<Failure, void>> setMicrophoneVolume(int volume);
+
   /// Mutes or unmutes playback.
   Future<Either<Failure, void>> setMuted(bool muted);
 
