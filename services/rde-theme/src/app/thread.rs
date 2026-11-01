@@ -3,7 +3,6 @@
 //! Connects to the `rde-daemon` supervision socket, registers the service, routes
 //! supervisor messages, and deregisters on disconnect.
 
-use rde_ipc::client::IpcClient;
 use std::{
     path::Path,
     process,
@@ -132,7 +131,7 @@ impl App {
 ///
 /// # Returns
 /// `true` when a connection was established, `false` after the final attempt.
-async fn connect(client: &mut dyn IpcClient, socket_path: &Path) -> bool {
+async fn connect(client: &mut UnixIpcClient, socket_path: &Path) -> bool {
     for attempt in 1..=MAX_SOCKET_CONN_RETRY_COUNT {
         match client.connect(socket_path).await {
             Ok(()) => {
@@ -166,7 +165,7 @@ async fn connect(client: &mut dyn IpcClient, socket_path: &Path) -> bool {
 ///
 /// # Errors
 /// Returns [`RdeError::Socket`] when the request cannot be written.
-async fn register(client: &mut dyn IpcClient, version: &str) -> RdeResult<()> {
+async fn register(client: &mut UnixIpcClient, version: &str) -> RdeResult<()> {
     let request = ServiceRequest::Register(RegisterRequest {
         name: SERVICE_NAME.to_string(),
         pid: process::id(),
@@ -189,7 +188,7 @@ async fn register(client: &mut dyn IpcClient, version: &str) -> RdeResult<()> {
 ///
 /// # Errors
 /// Returns [`RdeError::Socket`] when the request cannot be written.
-async fn deregister(client: &mut dyn IpcClient) -> RdeResult<()> {
+async fn deregister(client: &mut UnixIpcClient) -> RdeResult<()> {
     let request = ServiceRequest::Deregister {
         name: SERVICE_NAME.to_string(),
         pid: process::id(),

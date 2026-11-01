@@ -4,7 +4,7 @@
 //! supervisor.
 
 use rde_core::errors::{RdeError, RdeResult};
-use rde_ipc::client::IpcClient;
+use rde_ipc::socket::UnixIpcClient;
 use rde_ipc::{
     error::IpcError,
     message::{DaemonRequest, ServiceResponse},
@@ -29,7 +29,7 @@ use crate::handler::SupervisionContext;
 /// Returns [`RdeError::Socket`] when a response cannot be written.
 pub async fn handle_daemon_request(
     request: DaemonRequest,
-    client: &mut dyn IpcClient,
+    client: &mut UnixIpcClient,
     context: &SupervisionContext,
 ) -> RdeResult<()> {
     match request {

@@ -1,9 +1,5 @@
-pub mod ipc;
-
 // crates/rde-core/src/error.rs
 use thiserror::Error;
-
-use crate::errors::ipc::IpcError;
 
 #[derive(Error, Debug)]
 pub enum RdeError {
@@ -46,9 +42,6 @@ pub enum RdeError {
     // ============================================
     // IPC Errors (Internal Communication)
     // ============================================
-    #[error("IPC error: {0}")]
-    Ipc(#[from] IpcError),
-
     #[error("Socket error: {0}")]
     Socket(String),
 

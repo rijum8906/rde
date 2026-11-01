@@ -17,7 +17,6 @@
 //! ## Copyright
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
-use rde_ipc::client::IpcClient;
 use std::time::Duration;
 
 use rde_core::errors::{RdeError, RdeResult};

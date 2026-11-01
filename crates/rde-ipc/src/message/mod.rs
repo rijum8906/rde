@@ -1,30 +1,30 @@
-//! IPC Message Definitions
+//! # IPC Message Definitions
+pub mod daemon;
 pub mod error;
 pub mod protocol;
-pub mod request;
-pub mod response;
+pub mod service;
 pub mod types;
 
-// Re-export
+pub use daemon::{AckResponse, DaemonRequest, DaemonResponse, GetStatusRequest};
 pub use error::MessageError;
 pub use protocol::*;
-pub use request::*;
-pub use response::*;
-use serde::{Deserialize, Serialize};
+pub use service::{RegisterRequest, ServiceRequest, ServiceResponse, StatusUpdateRequest};
 pub use types::*;
 
-/// Complete message wrapper (protocol + payload)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+use bincode::{Decode, Encode};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+const MAX_PAYLOAD_BYTES: usize = 64 * 1024 * 1024;
+
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct Message {
     pub protocol_version: u32,
     pub message_id: u64,
     pub timestamp: u64,
-    #[serde(flatten)]
     pub payload: MessagePayload,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "data")]
+#[derive(Debug, Clone, Encode, Decode)]
 pub enum MessagePayload {
     DaemonRequest(DaemonRequest),
     DaemonResponse(DaemonResponse),
@@ -42,28 +42,51 @@ impl Message {
         }
     }
 
-    /// Check if the message is a daemon request
     pub fn is_daemon_request(&self) -> bool {
         matches!(self.payload, MessagePayload::DaemonRequest(_))
     }
-
-    /// Check if the message is a service request
+    pub fn is_daemon_response(&self) -> bool {
+        matches!(self.payload, MessagePayload::DaemonResponse(_))
+    }
     pub fn is_service_request(&self) -> bool {
         matches!(self.payload, MessagePayload::ServiceRequest(_))
     }
-
-    /// Check if the message is a daemon response
-    pub fn is_damon_response(&self) -> bool {
-        matches!(self.payload, MessagePayload::DaemonResponse(_))
-    }
-
-    /// Check if the message is a service response
     pub fn is_service_response(&self) -> bool {
         matches!(self.payload, MessagePayload::ServiceResponse(_))
     }
-
     pub fn is_protocol_supported(&self) -> bool {
         self.protocol_version >= MIN_PROTOCOL_VERSION
+    }
+
+    pub fn encode(&self) -> Result<Vec<u8>, MessageError> {
+        let config = bincode::config::standard();
+        let encoded = bincode::encode_to_vec(self, config)?;
+
+        if encoded.len() > MAX_PAYLOAD_BYTES {
+            return Err(MessageError::PayloadTooLarge {
+                max: MAX_PAYLOAD_BYTES,
+                actual: encoded.len(),
+            });
+        }
+
+        let len: u32 = encoded
+            .len()
+            .try_into()
+            .map_err(|_| MessageError::PayloadTooLarge {
+                max: u32::MAX as usize,
+                actual: encoded.len(),
+            })?;
+
+        let mut data = Vec::with_capacity(4 + encoded.len());
+        data.extend_from_slice(&len.to_be_bytes());
+        data.extend_from_slice(&encoded);
+        Ok(data)
+    }
+
+    pub fn decode(bytes: &[u8]) -> Result<Self, MessageError> {
+        let config = bincode::config::standard();
+        let (msg, _) = bincode::decode_from_slice::<Message, _>(bytes, config)?;
+        Ok(msg)
     }
 }
 
@@ -74,8 +97,8 @@ fn generate_message_id() -> u64 {
 }
 
 fn current_timestamp() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
 }

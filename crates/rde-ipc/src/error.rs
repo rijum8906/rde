@@ -4,6 +4,8 @@
 
 use std::time::Duration;
 
+use crate::message::MessageError;
+
 /// Failures a peer can hit while talking over the supervision socket.
 #[derive(Debug, thiserror::Error)]
 pub enum IpcError {
@@ -17,11 +19,19 @@ pub enum IpcError {
     #[error("Connection error: {message} ({reason})")]
     Connection { message: String, reason: String },
 
+    // Connection aborted
+    #[error("Connection aborted")]
+    ConnectionAborted,
+
+    // Connection failed
+    #[error("Connection failed")]
+    ConnectionFailed,
+
     #[error("Not connected to IPC")]
     NotConnected,
 
-    #[error("Failed to send message")]
-    FailedToSendMessage,
+    #[error(transparent)]
+    Message(#[from] MessageError),
 
     #[error("Invalid arguments: {0}")]
     InvalidArgs(String),
