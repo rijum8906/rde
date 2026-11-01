@@ -45,7 +45,7 @@ rde-core          fs abstractions, shared error types, generic utilities
 rde-config        XDG path resolution + typed config parsing (serde/toml)
 rde-ipc           internal message types + Unix socket transport (daemon <-> service only)
 rde-cli           thin client that calls services' public D-Bus methods
-rde-brightness    owns org.rde.Brightness; talks to sysfs directly
+rde-brightness    owns org.rde.Brightness; layered domain/application/infrastructure over sysfs and DDC/CI
 rde-volume        owns org.rde.Volume; talks to ALSA via zbus
 rde-theme         owns org.rde.Theme; persists its theme database under $XDG_DATA_HOME/rde/rde-theme
 rde-wifi          owns org.rde.wifi; talks to NetworkManager via system D-Bus
@@ -53,6 +53,22 @@ rde-notification  owns org.freedesktop.Notifications (WIP)
 ```
 
 A service crate never talks to another service crate directly. If `rde-theme` needs to react to a brightness change (for example, auto dark-mode based on ambient light in the future), it subscribes to the relevant D-Bus signal — it does not import `rde-brightness`.
+
+### Brightness service layers
+
+`rde-brightness` is the reference implementation of the layered service structure:
+
+```
+services/rde-brightness/src/
+├── domain/          # wlr-randr parsing, sysfs backlight writes, ddcutil, thiserror
+├── application/     # BrightnessCommand routing and active-display state (anyhow)
+├── infrastructure/  # org.rde.Brightness D-Bus object and rde-daemon supervision
+├── lib.rs           # layer exports and service constants
+├── main.rs          # tracing, D-Bus serve loop, signal handling
+└── bin/rde-brightness-helper.rs  # standalone root helper (argv[1] = percent)
+```
+
+The domain layer never imports `zbus` or `tokio`, so hardware rules remain unit-testable. Actuation is routed by connector class: internal panels (`eDP`, `LVDS`, `DSI`) use `/sys/class/backlight`, while external outputs resolve their I2C bus from `/sys/class/drm/card0-<output>/ddc` and use `ddcutil`. Privileged writes leave the process through `pkexec`/polkit only when a direct sysfs write is denied.
 
 ---
 
@@ -95,7 +111,7 @@ No service crate depends on another service crate. Only `crates/*` are shared de
 
 ## Adding a New Service
 
-1. Create `services/rde-<name>/` adhering to RDE's modular service architecture (modeled after `rde-wifi`):
+1. Create `services/rde-<name>/` adhering to RDE's modular service architecture (modeled after `rde-wifi`), or the domain/application/infrastructure layout used by `rde-brightness` when hardware rules should stay free of D-Bus and async runtimes:
    ```
    services/rde-<name>/
    ├── Cargo.toml          # Crate manifest & dependencies (rde-core, rde-ipc, zbus, etc.)
