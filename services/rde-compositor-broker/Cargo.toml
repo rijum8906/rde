@@ -1,0 +1,13 @@
+[package]
+name = "rde-compositor-broker"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[build-dependencies]
+quick-xml = "0.42.0"
+heck = "0.5.0"
