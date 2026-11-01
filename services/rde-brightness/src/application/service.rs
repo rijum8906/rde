@@ -266,21 +266,17 @@ fn active_display(cached: Option<&DisplayInfo>) -> Result<DisplayInfo, Applicati
 
 /// Reads the current level of a display.
 fn read_level(display: &DisplayInfo) -> Result<BrightnessLevel, DomainError> {
-    if display.is_internal {
-        brightness::internal_brightness()
-    } else {
+    if brightness::is_external_output(&display.name) {
         brightness::external_brightness(&display.name)
+    } else {
+        brightness::internal_brightness()
     }
 }
 
 /// Applies a percentage to a display and reads the resulting level back.
 fn apply(display: &DisplayInfo, percent: u8) -> Result<BrightnessLevel, ApplicationError> {
-    // Step 1: Route to the backend that owns this connector.
-    if display.is_internal {
-        brightness::set_internal_brightness(percent)?;
-    } else {
-        brightness::set_external_brightness(&display.name, percent)?;
-    }
+    // Step 1: Route by connector name so sysfs and DDC/CI stay separate.
+    brightness::set_brightness(&display.name, percent).map_err(|error| anyhow::anyhow!(error))?;
 
     // Step 2: Read back so the reported state matches the hardware.
     match read_level(display) {

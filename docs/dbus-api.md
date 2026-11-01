@@ -14,6 +14,21 @@ Each service documents its own D-Bus API contracts (methods, signals, and proper
 - **org.rde.wifi**: Detailed API is documented in [rde-wifi README](/services/rde-wifi/README.md).
 - **org.rde.Notification**: Detailed API is documented in [rde-notification README](/services/rde-notification/README.md).
 
+### `org.rde.Brightness`
+
+Owned by `rde-brightness` on the session bus at `/org/rde/Brightness`. The service is split into three layers: `domain/` parses `wlr-randr` output and performs sysfs/DDC-CI writes, `application/` routes commands and caches the active display, and `infrastructure/dbus.rs` exposes the interface below.
+
+| Name | Type | Signature | Flag | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `IncreaseBrightness` | method | `u -> u` | – | Increase by `step` percentage points; returns the new percentage. |
+| `DecreaseBrightness` | method | `u -> u` | – | Decrease by `step` percentage points; returns the new percentage. |
+| `Brightness` | property | `u` | writable | Raw brightness on the target display's scale. |
+| `BrightnessPercentage` | property | `u` | writable | Current brightness percentage. |
+| `MaxBrightness` | property | `u` | read-only | Maximum raw value on the target display's scale. |
+| `Version` | property | `s` | read-only | Service version. |
+| `BrightnessChanged` | signal | `u` | – | Emitted after a successful change, carrying the new percentage. |
+
+Changes are written to the internal backlight when the active connector is `eDP`, `LVDS`, or `DSI`, and to the external monitor over DDC/CI when it is `DP`, `HDMI`, or another external connector.
 
 ---
 
@@ -21,5 +36,5 @@ Each service documents its own D-Bus API contracts (methods, signals, and proper
 
 - All percentage values (`u percent`) are `0–100` unless a service explicitly documents otherwise (e.g. `rde-volume` allowing amplification above 100 if configured).
 - Every mutating method emits a corresponding `*Changed` signal — clients should prefer subscribing to signals over polling `Get*` methods.
-- Methods that require elevated privileges (currently only `rde-brightness`'s sysfs writes) are gated by polkit; the policy files live in [`assets/polkit/`](../assets/polkit/).
+- Methods that require elevated privileges are gated by polkit; the policy files live in [`assets/polkit/`](../assets/polkit/). `rde-brightness` writes sysfs directly when permitted and otherwise falls back to `pkexec /usr/bin/rde-brightness-helper <percent>` under the `org.rde.brightness.set` action, rather than issuing a D-Bus `Authorize` call.
 - Interfaces are additive-only within a major version — new methods/signals may be added, but existing signatures will not change without a major version bump, documented in [`CHANGELOG.md`](/CHANGELOG.md).

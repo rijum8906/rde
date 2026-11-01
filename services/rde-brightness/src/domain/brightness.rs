@@ -1,7 +1,9 @@
 //! # Brightness Hardware Control
 //!
 //! Reads and writes brightness through sysfs backlights and DDC/CI monitors.
-//! All hardware and privileged helper access in the service lives here.
+//! All hardware access in the service lives here. Writes are performed directly
+//! by the service process, which must be in the `video` group to own the
+//! backlight files.
 
 use std::{
     fs, io,
@@ -9,7 +11,7 @@ use std::{
     process::Command,
 };
 
-use tracing::{debug, warn};
+use tracing::{info, warn};
 
 use super::error::DomainError;
 
@@ -33,12 +35,6 @@ pub const DDCUTIL_BINARY: &str = "ddcutil";
 
 /// VCP code for luminance.
 pub const BRIGHTNESS_VCP: &str = "10";
-
-/// Unprivileged escalation tool.
-pub const PKEXEC_BINARY: &str = "pkexec";
-
-/// Install path of the privileged helper.
-pub const HELPER_PATH: &str = "/usr/bin/rde-brightness-helper";
 
 /// A brightness value expressed on its hardware scale.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,6 +93,44 @@ pub fn validate_percent(percent: u8) -> Result<(), DomainError> {
     Ok(())
 }
 
+/// Sets the brightness of a display, routing by connector name.
+///
+/// # Routing
+/// - `DP`, `HDMI`, and `DVI` outputs use DDC/CI through `ddcutil`
+/// - every other output (`eDP`, `LVDS`, `DSI`, or the internal fallback) uses
+///   the sysfs backlight
+///
+/// # Parameters
+/// - `output_name`: connector name, e.g. `eDP-1` or `DP-2`
+/// - `percentage`: target brightness percentage (0-100)
+///
+/// # Errors
+/// Returns a human-readable message when the percentage is invalid, the
+/// display cannot be resolved, or the hardware write fails.
+pub fn set_brightness(output_name: &str, percentage: u8) -> Result<(), String> {
+    validate_percent(percentage).map_err(|error| error.to_string())?;
+
+    if is_external_output(output_name) {
+        set_external_brightness(output_name, percentage).map_err(|error| error.to_string())
+    } else {
+        set_internal_brightness(percentage).map_err(|error| error.to_string())
+    }
+}
+
+/// Returns whether a connector is driven over an external cable.
+///
+/// DP, HDMI, and DVI outputs are DDC/CI monitors; `eDP` is deliberately not
+/// matched because its name starts with `E`.
+///
+/// # Returns
+/// `true` for external connectors, `false` for internal panels and unknown
+/// outputs, which fall back to the sysfs backlight.
+pub fn is_external_output(output_name: &str) -> bool {
+    let name = output_name.trim().to_ascii_uppercase();
+
+    name.starts_with("DP") || name.starts_with("HDMI") || name.starts_with("DVI")
+}
+
 /// Resolves the preferred internal backlight device.
 ///
 /// # Errors
@@ -109,8 +143,8 @@ pub fn internal_backlight_path() -> Result<PathBuf, DomainError> {
 /// Resolves a backlight device under `root`.
 ///
 /// # Returns
-/// The preferred device (`intel_backlight`, then `amdgpu_bl0`) when present,
-/// otherwise the first device in sorted order.
+/// The preferred device (`intel_backlight`, then `amdgpu_bl0`, then an NVIDIA
+/// device) when present, otherwise the first device in sorted order.
 ///
 /// # Errors
 /// Returns [`DomainError::BacklightNotFound`] when `root` does not exist or has
@@ -120,12 +154,12 @@ pub fn resolve_backlight_path(root: &Path) -> Result<PathBuf, DomainError> {
     for candidate in PREFERRED_BACKLIGHTS {
         let path = root.join(candidate);
         if path.is_dir() {
-            debug!(device = %path.display(), "Using preferred backlight device");
+            info!(device = %path.display(), "Using preferred backlight device");
             return Ok(path);
         }
     }
 
-    // Step 2: Fall back to the first kernel device, in a deterministic order.
+    // Step 2: Collect the remaining devices in a deterministic order.
     let entries = match fs::read_dir(root) {
         Ok(entries) => entries,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
@@ -146,9 +180,18 @@ pub fn resolve_backlight_path(root: &Path) -> Result<PathBuf, DomainError> {
         .collect::<Vec<_>>();
     devices.sort();
 
-    match devices.into_iter().next() {
+    // Step 3: NVIDIA drivers expose names such as `nvidia_0`; prefer those over
+    // an arbitrary ACPI device. Then take the first remaining device.
+    let nvidia = devices.iter().find(|path| {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("nvidia"))
+    });
+    let selected = nvidia.cloned().or_else(|| devices.into_iter().next());
+
+    match selected {
         Some(path) => {
-            debug!(device = %path.display(), "Using fallback backlight device");
+            info!(device = %path.display(), "Using backlight device");
             Ok(path)
         }
         None => Err(DomainError::BacklightNotFound(root.display().to_string())),
@@ -183,11 +226,11 @@ pub fn read_internal_level(device: &Path) -> Result<BrightnessLevel, DomainError
 /// # Workflow
 /// 1. Validate the percentage and resolve the backlight device
 /// 2. Convert the percentage to the device scale
-/// 3. Write sysfs directly, falling back to the polkit helper when denied
+/// 3. Write the sysfs file directly as the service user
 ///
 /// # Errors
 /// Returns [`DomainError::InvalidPercentage`], [`DomainError::BacklightNotFound`],
-/// or the write/command error from the failing actuation path.
+/// [`DomainError::BacklightPermission`], or [`DomainError::Write`].
 pub fn set_internal_brightness(percent: u8) -> Result<(), DomainError> {
     validate_percent(percent)?;
     let device = internal_backlight_path()?;
@@ -207,24 +250,42 @@ pub fn write_internal_level(device: &Path, percent: u8) -> Result<(), DomainErro
     let raw = BrightnessLevel::raw_for_percent(percent, max);
     let target = device.join(BRIGHTNESS_FILE);
 
-    // Step 2: Try the direct sysfs write used on writable devices.
-    if let Err(source) = fs::write(&target, raw.to_string()) {
-        warn!(
-            %source,
-            path = %target.display(),
-            "Direct sysfs write failed, trying the privileged helper"
-        );
-
-        // Step 3: Fall back to the root helper through the polkit action.
-        return write_with_helper(percent);
+    // Step 2: Write the sysfs file directly. The service must be able to open
+    // it for writing, normally because its user is in the `video` group.
+    match fs::write(&target, raw.to_string()) {
+        Ok(()) => {}
+        Err(source) if source.kind() == io::ErrorKind::PermissionDenied => {
+            warn!(
+                %source,
+                path = %target.display(),
+                percent,
+                "Permission denied writing the backlight; add the service user to the 'video' group"
+            );
+            return Err(DomainError::BacklightPermission {
+                path: target.display().to_string(),
+                source,
+            });
+        }
+        Err(source) => {
+            warn!(
+                %source,
+                path = %target.display(),
+                percent,
+                "Failed to write the backlight"
+            );
+            return Err(DomainError::Write {
+                path: target.display().to_string(),
+                source,
+            });
+        }
     }
 
-    debug!(
+    info!(
         percent,
         raw,
         max,
         path = %target.display(),
-        "Wrote internal brightness"
+        "Applied internal brightness"
     );
 
     Ok(())
@@ -293,9 +354,9 @@ pub fn set_external_brightness(output_name: &str, percent: u8) -> Result<(), Dom
         });
     }
 
-    debug!(
+    info!(
         output = output_name,
-        percent, bus, "Set external brightness"
+        percent, bus, "Applied external brightness"
     );
     Ok(())
 }
@@ -371,33 +432,6 @@ fn read_number(path: &Path) -> Result<u32, DomainError> {
         })
 }
 
-/// Applies a percentage through the privileged helper.
-fn write_with_helper(percent: u8) -> Result<(), DomainError> {
-    let command = format!("{PKEXEC_BINARY} {HELPER_PATH}");
-
-    // Step 1: `pkexec` authorises the helper against the polkit action.
-    let output = Command::new(PKEXEC_BINARY)
-        .arg(HELPER_PATH)
-        .arg(percent.to_string())
-        .output()
-        .map_err(|source| DomainError::Command {
-            command: command.clone(),
-            source,
-        })?;
-
-    // Step 2: Surface stderr when the helper is denied or crashes.
-    if output.status.success() {
-        debug!(percent, "Privileged helper applied the internal brightness");
-        return Ok(());
-    }
-
-    Err(DomainError::CommandFailed {
-        command,
-        status: output.status.to_string(),
-        stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -439,6 +473,34 @@ mod tests {
 
         let device = resolve_backlight_path(root.path()).expect("preferred device");
         assert_eq!(device, root.path().join("intel_backlight"));
+    }
+
+    #[test]
+    fn nvidia_driver_is_preferred_over_other_fallbacks() {
+        let root = tempfile::tempdir().expect("temporary backlight root");
+        fs::create_dir_all(root.path().join("acpi_video0")).expect("acpi device");
+        fs::create_dir_all(root.path().join("nvidia_0")).expect("nvidia device");
+
+        let device = resolve_backlight_path(root.path()).expect("nvidia device");
+        assert_eq!(device, root.path().join("nvidia_0"));
+    }
+
+    #[test]
+    fn connector_names_route_to_the_right_backend() {
+        for external in ["DP-1", "DP-2", "HDMI-A-1", "DVI-I-1", "hdmi-0"] {
+            assert!(is_external_output(external), "{external} must use ddcutil");
+        }
+
+        for internal in ["eDP-1", "LVDS-1", "DSI-1", "internal", ""] {
+            assert!(!is_external_output(internal), "{internal} must use sysfs");
+        }
+    }
+
+    #[test]
+    fn routing_rejects_invalid_percentages_before_hardware_access() {
+        let error = set_brightness("DP-1", 101).expect_err("101% must be rejected");
+
+        assert!(error.contains("invalid brightness percentage 101"));
     }
 
     #[test]
