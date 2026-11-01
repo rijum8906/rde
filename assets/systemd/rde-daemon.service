@@ -1,6 +1,6 @@
 [Unit]
 Description=Riju Desktop Environment - Session Daemon
-Documentation=man:rde-daemon(1)
+Documentation=https://github.com/rijum8906/rde
 After=dbus.socket
 Requires=dbus.socket
 PartOf=graphical-session.target
@@ -9,24 +9,21 @@ ConditionUser=!@system
 Wants=graphical-session-pre.target
 
 [Service]
-Type=notify
-NotifyAccess=main
+Type=simple
+NotifyAccess=none
 ExecStart=/usr/bin/rde-daemon
-ExecReload=/bin/kill -HUP $MAINPID
-ExecStop=/usr/bin/rde-daemon --stop
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=15
 KillMode=mixed
 KillSignal=SIGTERM
 
-# Sandboxing. The daemon spawns services and reads ~/.config, so it needs
-# the user's home; it doesn't need a network socket, and it doesn't need
-# write access to /usr.
+# Sandboxing. The daemon spawns services and writes logs under the user's
+# home (~/.local/rde/logs), so it needs write access there, but it does not
+# need a network socket, kernel tuning, or write access to /usr.
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
-ProtectHome=read-write
 ProtectKernelTunables=yes
 ProtectControlGroups=yes
 ProtectKernelModules=yes

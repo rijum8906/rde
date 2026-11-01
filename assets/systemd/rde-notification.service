@@ -1,0 +1,21 @@
+[Unit]
+Description=Riju Desktop Environment - Notification Service
+Documentation=https://github.com/rijum8906/rde
+After=dbus.socket
+Requires=dbus.socket
+PartOf=graphical-session.target
+
+# Optional standalone unit. rde-daemon supervises the services it detects
+# at startup; the notification service is not in that set yet, so this unit
+# is the way to run it today.
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/rde-notification
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,95 @@
+# Maintainer: Riju Mondal <rijum8906@gmail.com>
+
+pkgname=rde
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Riju Desktop Environment: modular Rust desktop services (daemon, volume, brightness, theme, notifications)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/rijum8906/rde"
+license=('MIT')
+depends=(
+  'alsa-lib'
+  'dbus'
+  'polkit'
+  'systemd'
+  'gcc-libs'
+)
+makedepends=('cargo' 'rust')
+install=rde.install
+options=('!lto')
+
+# Built from the checkout that contains this file, so `makepkg -si` works
+# without a published release tarball. The AUR copy produced by CI replaces
+# this with the release tarball source and its checksum.
+_repo="$startdir/../.."
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('1dc8ce8295ec863a6173eccab6fb60b9274c797173f197df8aa461a2f01c5d97')
+
+build() {
+  cd "$_repo"
+
+  # The workspace pins its dependency versions in Cargo.lock; fail instead of
+  # silently resolving newer ones.
+  cargo build --release --locked --workspace
+}
+
+package() {
+  cd "$_repo"
+
+  # ---------------------------------------------------------------------------
+  # Binaries
+  # ---------------------------------------------------------------------------
+  # rde-daemon detects and supervises the service binaries itself, so every
+  # service must land in /usr/bin next to it.
+  install -Dm755 target/release/rde-daemon \
+    "$pkgdir/usr/bin/rde-daemon"
+  install -Dm755 target/release/rde-brightness \
+    "$pkgdir/usr/bin/rde-brightness"
+  install -Dm755 target/release/rde-brightness-helper \
+    "$pkgdir/usr/bin/rde-brightness-helper"
+  install -Dm755 target/release/rde-volume \
+    "$pkgdir/usr/bin/rde-volume"
+  install -Dm755 target/release/rde-theme \
+    "$pkgdir/usr/bin/rde-theme"
+  install -Dm755 target/release/rde-notification \
+    "$pkgdir/usr/bin/rde-notification"
+  install -Dm755 target/release/rdectl \
+    "$pkgdir/usr/bin/rdectl"
+
+  # ---------------------------------------------------------------------------
+  # systemd (user session)
+  # ---------------------------------------------------------------------------
+  install -Dm644 assets/systemd/rde-daemon.service \
+    "$pkgdir/usr/lib/systemd/user/rde-daemon.service"
+
+  # Optional standalone units for running a service without the supervisor.
+  install -Dm644 assets/systemd/rde-brightness.service \
+    "$pkgdir/usr/lib/systemd/user/rde-brightness.service"
+  install -Dm644 assets/systemd/rde-volume.service \
+    "$pkgdir/usr/lib/systemd/user/rde-volume.service"
+  install -Dm644 assets/systemd/rde-theme.service \
+    "$pkgdir/usr/lib/systemd/user/rde-theme.service"
+  install -Dm644 assets/systemd/rde-notification.service \
+    "$pkgdir/usr/lib/systemd/user/rde-notification.service"
+
+  # ---------------------------------------------------------------------------
+  # polkit
+  # ---------------------------------------------------------------------------
+  # Actions authorize the privileged helper and the D-Bus services.
+  install -Dm644 assets/polkit/org.rde.brightness.policy \
+    "$pkgdir/usr/share/polkit-1/actions/org.rde.brightness.policy"
+  install -Dm644 assets/polkit/org.rde.volume.policy \
+    "$pkgdir/usr/share/polkit-1/actions/org.rde.volume.policy"
+  install -Dm644 assets/polkit/org.rde.theme.policy \
+    "$pkgdir/usr/share/polkit-1/actions/org.rde.theme.policy"
+
+  # Rules (as opposed to actions) live in rules.d and are read by polkitd.
+  install -Dm644 assets/polkit/org.rde.wifi.rules \
+    "$pkgdir/usr/share/polkit-1/rules.d/10-org.rde.wifi.rules"
+
+  # ---------------------------------------------------------------------------
+  # Documentation
+  # ---------------------------------------------------------------------------
+  install -Dm644 assets/config/rde.toml.example \
+    "$pkgdir/usr/share/doc/$pkgname/rde.toml.example"
+}

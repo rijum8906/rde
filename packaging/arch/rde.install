@@ -1,0 +1,29 @@
+post_install() {
+  cat <<'EOF'
+RDE services are started by the per-user supervision daemon.
+
+To enable it for the current user:
+  systemctl --user daemon-reload
+  systemctl --user enable --now rde-daemon.service
+
+The daemon detects the installed service binaries (rde-brightness,
+rde-volume, rde-theme) and spawns them itself, so the per-service units
+shipped in the repository are optional and should not be enabled alongside
+it.
+
+Brightness changes go through /usr/bin/rde-brightness-helper, authorized by
+the polkit action org.rde.brightness.set.
+EOF
+}
+
+post_upgrade() {
+  post_install
+}
+
+pre_remove() {
+  cat <<'EOF'
+If you enabled RDE in this account, stop the user daemon before removing the
+package:
+  systemctl --user disable --now rde-daemon.service
+EOF
+}

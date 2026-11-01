@@ -7,8 +7,8 @@
   <vendor_url>https://github.com/rijum8906/rde</vendor_url>
   
   <action id="org.rde.theme.set">
-    <description>Set master audio theme and playback mute state</description>
-    <message>Authentication is required to adjust master audio theme</message>
+    <description>Apply the desktop theme, appearance mode and accent color</description>
+    <message>Authentication is required to change the desktop theme</message>
     <defaults>
       <allow_any>yes</allow_any>
       <allow_inactive>yes</allow_inactive>
