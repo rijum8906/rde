@@ -29,7 +29,7 @@ use std::sync::{
 
 use alsa::{
     Mixer,
-    mixer::{SelemChannelId, SelemId},
+    mixer::{Selem, SelemChannelId, SelemId},
 };
 use rde_core::errors::{RdeError, RdeResult};
 
@@ -42,6 +42,12 @@ pub struct AlsaController {
 
     /// Simple element identifier targeted for master volume and mute controls.
     selem_id: SelemId,
+
+    /// Simple element identifier targeted for microphone capture volume.
+    ///
+    /// `None` when the card exposes no capture control, which is common on
+    /// output-only devices; the service keeps running without a microphone.
+    capture_selem_id: Option<SelemId>,
 
     /// Software mute flag fallback for devices without hardware mute switches.
     cached_mute: AtomicBool,
@@ -122,7 +128,24 @@ impl AlsaController {
             }
         };
 
-        // Step 4: Check initial mute state from hardware switch if present
+        // Step 4: Discover a microphone capture control independently of the
+        // playback control. Output-only devices simply have no capture element.
+        let capture_selem_id = Self::find_capture_selem(&mixer);
+
+        if let Some(id) = &capture_selem_id {
+            tracing::info!(
+                "Using ALSA capture control: '{}' (card: '{}')",
+                id.get_name().unwrap_or_default(),
+                card_name
+            );
+        } else {
+            tracing::warn!(
+                card = %card_name,
+                "No capture volume control found on ALSA mixer; microphone volume is unavailable"
+            );
+        }
+
+        // Step 5: Check initial mute state from hardware switch if present
         let mut initial_muted = false;
         if let Some(selem) = mixer.find_selem(&selem_id) {
             if selem.has_playback_switch() {
@@ -135,7 +158,55 @@ impl AlsaController {
         Ok(Self {
             mixer: Mutex::new(mixer),
             selem_id,
+            capture_selem_id,
             cached_mute: AtomicBool::new(initial_muted),
+        })
+    }
+
+    /// Finds the simple mixer element that owns microphone capture volume.
+    ///
+    /// Prefers the conventional capture control names, then falls back to the
+    /// first element exposing capture volume.
+    ///
+    /// # Parameters
+    /// - `mixer`: opened ALSA mixer to search
+    ///
+    /// # Returns
+    /// The capture element identifier, or `None` when the card has no input.
+    fn find_capture_selem(mixer: &Mixer) -> Option<SelemId> {
+        // Step 1: Try the conventional capture control names first.
+        for candidate in ["Capture", "Mic", "Microphone", "Mic Boost", "Master"] {
+            let id = SelemId::new(candidate, 0);
+            if let Some(selem) = mixer.find_selem(&id)
+                && selem.has_capture_volume()
+            {
+                return Some(id);
+            }
+        }
+
+        // Step 2: Fall back to the first element that supports capture volume.
+        for elem in mixer.iter() {
+            if let Some(selem) = alsa::mixer::Selem::new(elem)
+                && selem.has_capture_volume()
+            {
+                return Some(selem.get_id());
+            }
+        }
+
+        None
+    }
+
+    /// Returns the microphone capture element, or a domain error when absent.
+    ///
+    /// # Errors
+    /// Returns `RdeError::HardwareNotFound` when the card has no capture control.
+    fn capture_selem<'a>(&self, mixer: &'a Mixer) -> RdeResult<Selem<'a>> {
+        let id = self.capture_selem_id.as_ref().ok_or_else(|| {
+            RdeError::HardwareNotFound("No microphone capture control available".to_string())
+        })?;
+
+        mixer.find_selem(id).ok_or_else(|| {
+            RdeError::HardwareNotFound("Target ALSA capture control element not found".to_string())
         })
     }
 }
@@ -303,6 +374,94 @@ impl AudioController for AlsaController {
 
         // Step 2: Cache software mute state
         self.cached_mute.store(muted, Ordering::Relaxed);
+
+        Ok(())
+    }
+
+    /// Queries the current microphone capture volume percentage from ALSA.
+    ///
+    /// # Execution Steps
+    /// 1. Locks the internal mixer mutex and locates the capture element.
+    /// 2. Resolves the primary capture channel (mono vs stereo).
+    /// 3. Reads raw ALSA volume and converts it to a 0-100 percentage.
+    ///
+    /// # Errors
+    /// Returns `RdeError::HardwareNotFound` when there is no capture control,
+    /// and `RdeError::Hardware` on ALSA query failure.
+    fn get_microphone_volume(&self) -> RdeResult<u8> {
+        let mixer_guard = self
+            .mixer
+            .lock()
+            .map_err(|e| RdeError::Hardware(format!("Failed to acquire ALSA mixer lock: {}", e)))?;
+
+        let selem = self.capture_selem(&mixer_guard)?; // Step 1: Determine active capture channel (mono maps to FrontLeft)
+        let channel = if selem.is_capture_mono() {
+            SelemChannelId::mono()
+        } else if selem.has_capture_channel(SelemChannelId::FrontLeft) {
+            SelemChannelId::FrontLeft
+        } else if selem.has_capture_channel(SelemChannelId::FrontRight) {
+            SelemChannelId::FrontRight
+        } else {
+            SelemChannelId::Unknown
+        };
+
+        // Step 2: Read raw channel volume
+        let raw_volume = selem
+            .get_capture_volume(channel)
+            .map_err(|e| RdeError::Hardware(format!("Failed to get capture volume: {}", e)))?;
+
+        // Step 3: Map raw ALSA range to integer percentage (0-100)
+        let (min, max) = selem.get_capture_volume_range();
+        let percentage = if max > min {
+            let clamped = raw_volume.clamp(min, max);
+            let percent = ((clamped - min) as f64 * 100.0 / (max - min) as f64).round() as u8;
+            percent.min(100)
+        } else {
+            0
+        };
+
+        Ok(percentage)
+    }
+
+    /// Sets the microphone capture volume percentage on ALSA.
+    ///
+    /// # Execution Steps
+    /// 1. Clamps target percentage to `0..=100`.
+    /// 2. Locks the mixer mutex and retrieves the capture element.
+    /// 3. Maps percentage to raw ALSA hardware volume units.
+    /// 4. Dispatches the update across all capture channels.
+    ///
+    /// # Errors
+    /// Returns `RdeError::HardwareNotFound` when there is no capture control,
+    /// and `RdeError::Hardware` on ALSA update failure.
+    fn set_microphone_volume(&self, percentage: u8) -> RdeResult<()> {
+        let clamped_pct = percentage.min(100);
+
+        let mixer_guard = self
+            .mixer
+            .lock()
+            .map_err(|e| RdeError::Hardware(format!("Failed to acquire ALSA mixer lock: {}", e)))?;
+
+        let selem = self.capture_selem(&mixer_guard)?;
+
+        // Step 1: Map percentage to raw ALSA volume value with rounding
+        let (min, max) = selem.get_capture_volume_range();
+        let raw_volume = if max > min {
+            min + ((clamped_pct as i64 * (max - min) + 50) / 100)
+        } else {
+            min
+        };
+
+        // Step 2: Set capture volume for all channels
+        if selem.set_capture_volume_all(raw_volume).is_err() {
+            // Fallback: set supported channels individually
+            if selem.has_capture_channel(SelemChannelId::FrontLeft) {
+                let _ = selem.set_capture_volume(SelemChannelId::FrontLeft, raw_volume);
+            }
+            if selem.has_capture_channel(SelemChannelId::FrontRight) {
+                let _ = selem.set_capture_volume(SelemChannelId::FrontRight, raw_volume);
+            }
+        }
 
         Ok(())
     }

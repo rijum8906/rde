@@ -6,6 +6,7 @@
 //!
 //! ## Features
 //! - Master volume and mute state querying and mutations
+//! - Microphone capture volume querying and mutations (ALSA capture control)
 //! - Public session D-Bus interface (`org.rde.Volume`) at `/org/rde/Volume`
 //! - Reactive signals for volume and mute state transitions
 //! - Unix socket supervision task for `rde-daemon`

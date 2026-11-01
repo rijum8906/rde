@@ -146,6 +146,57 @@ async fn test_controller_error_propagation() {
 }
 
 #[tokio::test]
+async fn test_get_and_set_microphone_volume() {
+    let (backend, mock) = create_test_backend(50, false, 5);
+
+    assert_eq!(backend.get_microphone_volume().await.unwrap(), 50);
+
+    let applied = backend.set_microphone_volume(80).await.unwrap();
+    assert_eq!(applied, 80);
+    assert_eq!(backend.get_microphone_volume().await.unwrap(), 80);
+    assert_eq!(
+        mock.microphone_volume
+            .load(std::sync::atomic::Ordering::Relaxed),
+        80
+    );
+
+    // Microphone volume changes must not touch playback volume.
+    assert_eq!(mock.volume.load(std::sync::atomic::Ordering::Relaxed), 50);
+}
+
+#[tokio::test]
+async fn test_microphone_volume_clamping_and_steps() {
+    let (backend, _mock) = create_test_backend(95, false, 10);
+
+    // Saturate at 100
+    assert_eq!(backend.increase_microphone_volume().await.unwrap(), 100);
+    assert_eq!(backend.increase_microphone_volume().await.unwrap(), 100);
+
+    let (backend_low, _mock2) = create_test_backend(5, false, 10);
+
+    // Custom step below the lower bound saturates at 0
+    assert_eq!(backend_low.decrease_microphone_volume().await.unwrap(), 0);
+    assert_eq!(
+        backend_low.decrease_microphone_volume_by(20).await.unwrap(),
+        0
+    );
+
+    // Values above 100 are clamped
+    assert_eq!(backend_low.set_microphone_volume(150).await.unwrap(), 100);
+}
+
+#[tokio::test]
+async fn test_microphone_controller_error_propagation() {
+    let (backend, mock) = create_test_backend(50, false, 5);
+
+    mock.trigger_error("Capture control missing");
+    assert!(backend.get_microphone_volume().await.is_err());
+
+    mock.trigger_error("Capture mixer busy");
+    assert!(backend.set_microphone_volume(60).await.is_err());
+}
+
+#[tokio::test]
 async fn test_get_state_snapshot() {
     let (backend, _mock) = create_test_backend(42, true, 8);
 

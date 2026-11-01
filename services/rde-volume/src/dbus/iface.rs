@@ -4,10 +4,13 @@
 //! Exposes master volume controls, mute switches, step configurations, and reactive signals.
 //!
 //! ## Features
-//! - Properties: `Volume`, `Muted`, `Step`, `MinVolume`, `MaxVolume`, `Version`
+//! - Properties: `Volume`, `Muted`, `MicrophoneVolume`, `Step`, `MinVolume`, `MaxVolume`, `Version`
 //! - Methods: `SetVolume`, `IncreaseVolume`, `DecreaseVolume`, `IncreaseVolumeBy`, `DecreaseVolumeBy`,
 //!   `ToggleMute`, `SetMute`, `GetVolume`, `GetMuteState`
-//! - Signals: `VolumeChanged`, `MuteChanged`
+//! - Microphone methods: `SetMicrophoneVolume`, `IncreaseMicrophoneVolume`,
+//!   `DecreaseMicrophoneVolume`, `IncreaseMicrophoneVolumeBy`, `DecreaseMicrophoneVolumeBy`,
+//!   `GetMicrophoneVolume`
+//! - Signals: `VolumeChanged`, `MuteChanged`, `MicrophoneVolumeChanged`
 //!
 //! ## Related
 //! - [`crate::backend::VolumeBackend`]
@@ -98,6 +101,27 @@ impl VolumeInterface {
 
         Ok(())
     }
+
+    /// Internal helper to update microphone volume and emit `MicrophoneVolumeChanged`.
+    async fn apply_microphone_volume(
+        &self,
+        emitter: &zbus::object_server::SignalEmitter<'_>,
+        volume: u8,
+    ) -> zbus::fdo::Result<()> {
+        // Step 1: Request the backend to persist the capture volume change
+        let applied_vol = self
+            .backend
+            .set_microphone_volume(volume)
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        // Step 2: Emit MicrophoneVolumeChanged to notify listening UI clients
+        if let Err(e) = Self::emit_microphone_volume_changed(emitter, applied_vol).await {
+            tracing::warn!("Failed to emit MicrophoneVolumeChanged signal: {}", e);
+        }
+
+        Ok(())
+    }
 }
 
 /// D-Bus interface implementation for `org.rde.Volume`.
@@ -167,6 +191,38 @@ impl VolumeInterface {
         muted: bool,
     ) -> zbus::fdo::Result<()> {
         self.apply_mute(&emitter, muted).await
+    }
+
+    /// Read-write D-Bus property returning current microphone volume percentage (0-100).
+    ///
+    /// # Errors
+    /// Returns a D-Bus error if the capture hardware query fails or the device
+    /// has no microphone input.
+    #[zbus(property(emits_changed_signal = "false"))]
+    pub async fn microphone_volume(&self) -> zbus::fdo::Result<u8> {
+        self.backend
+            .get_microphone_volume()
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+    }
+
+    /// Read-write D-Bus property setter for microphone volume percentage.
+    ///
+    /// Clamps the value between `0..=100` and emits `MicrophoneVolumeChanged`.
+    ///
+    /// # Parameters
+    /// - `emitter`: D-Bus signal emitter for dispatching change events.
+    /// - `volume`: Target microphone volume percentage.
+    ///
+    /// # Errors
+    /// Returns a D-Bus error if the capture volume update fails.
+    #[zbus(property)]
+    pub async fn set_microphone_volume(
+        &self,
+        #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
+        volume: u8,
+    ) -> zbus::fdo::Result<()> {
+        self.apply_microphone_volume(&emitter, volume).await
     }
 
     /// Read-write D-Bus property returning the default step size for volume increments/decrements.
@@ -337,6 +393,151 @@ impl VolumeInterface {
         Ok(())
     }
 
+    /// D-Bus method to set absolute microphone volume (0-100).
+    ///
+    /// Emits `MicrophoneVolumeChanged` signal upon change.
+    ///
+    /// # Parameters
+    /// - `volume`: Absolute target microphone volume percentage.
+    ///
+    /// # Errors
+    /// Returns a D-Bus error if the capture hardware update fails.
+    #[zbus(name = "SetMicrophoneVolume")]
+    pub async fn set_microphone_volume_method(
+        &self,
+        #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
+        volume: u8,
+    ) -> zbus::fdo::Result<()> {
+        self.apply_microphone_volume(&emitter, volume).await
+    }
+
+    /// D-Bus method to increase microphone volume by the configured default step size.
+    ///
+    /// Emits `MicrophoneVolumeChanged` signal upon change.
+    ///
+    /// # Errors
+    /// Returns a D-Bus error if the microphone volume increment fails.
+    #[zbus(name = "IncreaseMicrophoneVolume")]
+    pub async fn increase_microphone_volume(
+        &self,
+        #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        // Step 1: Perform the increment via the backend
+        let new_vol = self
+            .backend
+            .increase_microphone_volume()
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        // Step 2: Emit MicrophoneVolumeChanged signal
+        if let Err(e) = Self::emit_microphone_volume_changed(&emitter, new_vol).await {
+            tracing::warn!("Failed to emit MicrophoneVolumeChanged signal: {}", e);
+        }
+
+        Ok(())
+    }
+
+    /// D-Bus method to decrease microphone volume by the configured default step size.
+    ///
+    /// Emits `MicrophoneVolumeChanged` signal upon change.
+    ///
+    /// # Errors
+    /// Returns a D-Bus error if the microphone volume decrement fails.
+    #[zbus(name = "DecreaseMicrophoneVolume")]
+    pub async fn decrease_microphone_volume(
+        &self,
+        #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        // Step 1: Perform the decrement via the backend
+        let new_vol = self
+            .backend
+            .decrease_microphone_volume()
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        // Step 2: Emit MicrophoneVolumeChanged signal
+        if let Err(e) = Self::emit_microphone_volume_changed(&emitter, new_vol).await {
+            tracing::warn!("Failed to emit MicrophoneVolumeChanged signal: {}", e);
+        }
+
+        Ok(())
+    }
+
+    /// D-Bus method to increase microphone volume by a custom step size.
+    ///
+    /// Emits `MicrophoneVolumeChanged` signal upon change.
+    ///
+    /// # Parameters
+    /// - `step`: Custom delta percentage to add.
+    ///
+    /// # Errors
+    /// Returns a D-Bus error if the microphone volume increment fails.
+    #[zbus(name = "IncreaseMicrophoneVolumeBy")]
+    pub async fn increase_microphone_volume_by(
+        &self,
+        #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
+        step: u8,
+    ) -> zbus::fdo::Result<()> {
+        // Step 1: Perform the increment with the custom step
+        let new_vol = self
+            .backend
+            .increase_microphone_volume_by(step)
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        // Step 2: Emit MicrophoneVolumeChanged signal
+        if let Err(e) = Self::emit_microphone_volume_changed(&emitter, new_vol).await {
+            tracing::warn!("Failed to emit MicrophoneVolumeChanged signal: {}", e);
+        }
+
+        Ok(())
+    }
+
+    /// D-Bus method to decrease microphone volume by a custom step size.
+    ///
+    /// Emits `MicrophoneVolumeChanged` signal upon change.
+    ///
+    /// # Parameters
+    /// - `step`: Custom delta percentage to subtract.
+    ///
+    /// # Errors
+    /// Returns a D-Bus error if the microphone volume decrement fails.
+    #[zbus(name = "DecreaseMicrophoneVolumeBy")]
+    pub async fn decrease_microphone_volume_by(
+        &self,
+        #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
+        step: u8,
+    ) -> zbus::fdo::Result<()> {
+        // Step 1: Perform the decrement with the custom step
+        let new_vol = self
+            .backend
+            .decrease_microphone_volume_by(step)
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        // Step 2: Emit MicrophoneVolumeChanged signal
+        if let Err(e) = Self::emit_microphone_volume_changed(&emitter, new_vol).await {
+            tracing::warn!("Failed to emit MicrophoneVolumeChanged signal: {}", e);
+        }
+
+        Ok(())
+    }
+
+    /// D-Bus method to get current microphone volume percentage (0-100).
+    ///
+    /// # Returns
+    /// Microphone volume percentage.
+    ///
+    /// # Errors
+    /// Returns a D-Bus error if the capture hardware query fails.
+    #[zbus(name = "GetMicrophoneVolume")]
+    pub async fn get_microphone_volume(&self) -> zbus::fdo::Result<u8> {
+        self.backend
+            .get_microphone_volume()
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+    }
+
     /// D-Bus method to toggle master mute state.
     ///
     /// Inverts current mute status and emits `MuteChanged` signal.
@@ -434,6 +635,16 @@ impl VolumeInterface {
         signal_emitter: &zbus::object_server::SignalEmitter<'_>,
         muted: bool,
     ) -> zbus::Result<()>;
+
+    /// D-Bus signal emitted whenever the microphone volume percentage changes.
+    ///
+    /// # Parameters
+    /// - `new_volume`: Resulting microphone volume percentage (0-100).
+    #[zbus(signal, name = "MicrophoneVolumeChanged")]
+    pub async fn emit_microphone_volume_changed(
+        signal_emitter: &zbus::object_server::SignalEmitter<'_>,
+        new_volume: u8,
+    ) -> zbus::Result<()>;
 }
 
 #[cfg(test)]
@@ -452,6 +663,7 @@ mod tests {
         let iface = create_test_iface(45, false);
 
         assert_eq!(iface.volume().await.unwrap(), 45);
+        assert_eq!(iface.microphone_volume().await.unwrap(), 45);
         assert!(!iface.muted().await.unwrap());
         assert_eq!(iface.min_volume().unwrap(), 0);
         assert_eq!(iface.max_volume().unwrap(), 100);
@@ -468,5 +680,6 @@ mod tests {
 
         assert_eq!(iface.get_volume().await.unwrap(), 60);
         assert!(iface.get_mute_state().await.unwrap());
+        assert_eq!(iface.get_microphone_volume().await.unwrap(), 60);
     }
 }
