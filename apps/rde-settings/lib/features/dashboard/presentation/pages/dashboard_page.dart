@@ -78,6 +78,25 @@ class DashboardPage extends StatelessWidget {
 class DashboardView extends StatelessWidget {
   const DashboardView({super.key});
 
+  Widget _animatedSection({required Widget child}) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        final eased = Curves.easeOutCubic.transform(value);
+        return Opacity(
+          opacity: eased,
+          child: Transform.translate(
+            offset: Offset(0, (1 - eased) * 18),
+            child: child,
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -91,20 +110,26 @@ class DashboardView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header Title
-            Text(
-              'Dashboard',
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: colorScheme.onSurface,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'System status and quick toggles',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+            _animatedSection(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Dashboard',
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: colorScheme.onSurface,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'System status and quick toggles',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 28),
@@ -115,41 +140,45 @@ class DashboardView extends StatelessWidget {
                 final isWide = constraints.maxWidth > 800;
 
                 if (isWide) {
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Left Column: Actions & Health
-                      Expanded(
-                        flex: 3,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const DashboardQuickActions(),
-                            const SizedBox(height: 32),
-                            const DashboardSystemHealth(),
-                          ],
+                  return _animatedSection(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Left Column: Actions & Health
+                        Expanded(
+                          flex: 3,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const DashboardQuickActions(),
+                              const SizedBox(height: 32),
+                              const DashboardSystemHealth(),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 32),
-                      // Right Column: Personalization
-                      Expanded(
-                        flex: 2,
-                        child: const DashboardPersonalization(),
-                      ),
-                    ],
+                        const SizedBox(width: 32),
+                        // Right Column: Personalization
+                        Expanded(
+                          flex: 2,
+                          child: const DashboardPersonalization(),
+                        ),
+                      ],
+                    ),
                   );
                 }
 
                 // Stacked layout for narrow screens
-                return const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    DashboardQuickActions(),
-                    SizedBox(height: 32),
-                    DashboardSystemHealth(),
-                    SizedBox(height: 32),
-                    DashboardPersonalization(),
-                  ],
+                return _animatedSection(
+                  child: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      DashboardQuickActions(),
+                      SizedBox(height: 32),
+                      DashboardSystemHealth(),
+                      SizedBox(height: 32),
+                      DashboardPersonalization(),
+                    ],
+                  ),
                 );
               },
             ),
