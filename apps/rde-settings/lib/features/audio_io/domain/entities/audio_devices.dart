@@ -52,10 +52,10 @@ class AudioInput {
 
 /// The outputs and inputs the page controls.
 ///
-/// `org.rde.Volume` owns the master output level, but it does not name the
-/// device it drives, cannot switch devices and has no capture control, so the
-/// device lists and the microphone live here. They are read from
-/// PulseAudio-compatible PipeWire.
+/// `org.rde.Volume` owns the master output level and the microphone capture
+/// level, but it does not name the device it drives and cannot switch devices,
+/// so the device lists and the microphone mute switch live here. They are read
+/// from PulseAudio-compatible PipeWire.
 class AudioDevices {
   const AudioDevices({
     this.outputName,

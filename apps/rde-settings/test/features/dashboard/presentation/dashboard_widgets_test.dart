@@ -176,6 +176,10 @@ class _FakeVolumeRepository implements MasterVolumeRepository {
   }
 
   @override
+  Future<Either<Failure, void>> setMicrophoneVolume(int value) async =>
+      const Right(null);
+
+  @override
   Future<Either<Failure, void>> setMuted(bool muted) async =>
       const Right(null);
 

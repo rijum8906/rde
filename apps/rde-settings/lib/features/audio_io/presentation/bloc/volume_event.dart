@@ -21,6 +21,13 @@ class VolumeSetEvent extends VolumeEvent {
   const VolumeSetEvent(this.volume);
 }
 
+/// Writes [volume] to the microphone capture control now.
+class VolumeMicrophoneSetEvent extends VolumeEvent {
+  final int volume;
+
+  const VolumeMicrophoneSetEvent(this.volume);
+}
+
 /// Mutes playback, or unmutes it again.
 class ToggleVolumeMuteEvent extends VolumeEvent {
   const ToggleVolumeMuteEvent();

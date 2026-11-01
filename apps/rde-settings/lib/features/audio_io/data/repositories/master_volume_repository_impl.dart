@@ -22,6 +22,12 @@ class MasterVolumeRepositoryImpl implements MasterVolumeRepository {
   }
 
   @override
+  Future<Either<Failure, void>> setMicrophoneVolume(int volume) async {
+    final result = await _proxy.setMicrophoneVolume(volume);
+    return result.mapLeft((error) => Failure(error.message));
+  }
+
+  @override
   Future<Either<Failure, void>> setMuted(bool muted) async {
     final result = await _proxy.setMuted(muted);
     return result.mapLeft((error) => Failure(error.message));

@@ -51,8 +51,40 @@ class VolumeProxy {
         step: _int(properties, 'Step') ?? 5,
         minVolume: _int(properties, 'MinVolume') ?? 0,
         maxVolume: _int(properties, 'MaxVolume') ?? 100,
+        microphoneVolume: await _readMicrophoneVolume(),
       );
     });
+  }
+
+  /// Reads the microphone capture level, or `null` when the service has none.
+  ///
+  /// This is a separate `Get` instead of part of the `GetAll` above: the
+  /// service answers that property with an error on machines without a capture
+  /// control, and that error must not blank the master volume card.
+  Future<int?> _readMicrophoneVolume() async {
+    try {
+      final response = await client.callMethod(
+        destination: serviceName,
+        path: objectPath,
+        interface: propertiesInterface,
+        name: 'Get',
+        values: const [DBusString(interface), DBusString('MicrophoneVolume')],
+        replySignature: DBusSignature('v'),
+      );
+      final value = response.returnValues.first.asVariant();
+      if (value is DBusByte) {
+        return value.value;
+      }
+      if (value is DBusInt32) {
+        return value.value;
+      }
+      if (value is DBusUint32) {
+        return value.value;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Sets the master volume to [volume] percent; the service clamps it.
@@ -68,6 +100,24 @@ class VolumeProxy {
         path: objectPath,
         interface: interface,
         name: 'SetVolume',
+        values: [DBusByte(volume)],
+      ),
+    );
+  }
+
+  /// Sets the microphone capture volume to [volume] percent.
+  ///
+  /// # Errors
+  /// Returns an [RdeError] when the service is not running, the device has no
+  /// capture control, or the write is rejected.
+  Future<Either<RdeError, void>> setMicrophoneVolume(int volume) {
+    return _write(
+      'change the microphone volume',
+      () => client.callMethod(
+        destination: serviceName,
+        path: objectPath,
+        interface: interface,
+        name: 'SetMicrophoneVolume',
         values: [DBusByte(volume)],
       ),
     );
@@ -133,6 +183,15 @@ class VolumeProxy {
             name: 'MuteChanged',
             path: objectPath,
             signature: DBusSignature('b'),
+          ).listen((_) => emit(), onError: (Object _) {}),
+        );
+        subscriptions.add(
+          DBusSignalStream(
+            client,
+            interface: interface,
+            name: 'MicrophoneVolumeChanged',
+            path: objectPath,
+            signature: DBusSignature('y'),
           ).listen((_) => emit(), onError: (Object _) {}),
         );
       },

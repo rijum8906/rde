@@ -9,6 +9,7 @@ class MasterVolume {
     required this.step,
     required this.minVolume,
     required this.maxVolume,
+    this.microphoneVolume,
   });
 
   /// Current master volume percentage.
@@ -26,17 +27,30 @@ class MasterVolume {
   /// Highest volume the service accepts, normally `100`.
   final int maxVolume;
 
+  /// Capture volume percentage, or `null` when no microphone capture control
+  /// exists (for example on an output-only device).
+  final int? microphoneVolume;
+
   /// Whether the slider has a range to move over.
   bool get hasRange => maxVolume > minVolume;
 
+  /// Whether the service reports a usable microphone capture level.
+  bool get hasMicrophone => microphoneVolume != null;
+
   /// Returns a copy with the given fields replaced.
-  MasterVolume copyWith({int? volume, bool? muted, int? step}) {
+  MasterVolume copyWith({
+    int? volume,
+    bool? muted,
+    int? step,
+    int? microphoneVolume,
+  }) {
     return MasterVolume(
       volume: volume ?? this.volume,
       muted: muted ?? this.muted,
       step: step ?? this.step,
       minVolume: minVolume,
       maxVolume: maxVolume,
+      microphoneVolume: microphoneVolume ?? this.microphoneVolume,
     );
   }
 }

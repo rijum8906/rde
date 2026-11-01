@@ -3,12 +3,21 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:core/core.dart';
 import 'package:rde_settings/core/widgets/rde_slider.dart';
 import 'package:rde_settings/features/audio_io/domain/entities/audio_devices.dart';
+import 'package:rde_settings/features/audio_io/domain/entities/master_volume.dart';
 import 'package:rde_settings/features/audio_io/presentation/bloc/audio_devices_bloc.dart';
 import 'package:rde_settings/features/audio_io/presentation/bloc/audio_devices_event.dart';
 import 'package:rde_settings/features/audio_io/presentation/bloc/audio_devices_state.dart';
+import 'package:rde_settings/features/audio_io/presentation/bloc/volume_bloc.dart';
+import 'package:rde_settings/features/audio_io/presentation/bloc/volume_event.dart';
+import 'package:rde_settings/features/audio_io/presentation/bloc/volume_state.dart';
 
-import 'audio_device_picker.dart'; // <-- Import the new picker
+import 'audio_device_picker.dart';
 
+/// Microphone card.
+///
+/// The capture level comes from `org.rde.Volume` (the service owns the ALSA
+/// capture control), while device selection and the mute switch stay with the
+/// PipeWire device list, which the volume service does not expose.
 class MicrophoneCard extends StatelessWidget {
   const MicrophoneCard({super.key});
 
@@ -18,10 +27,15 @@ class MicrophoneCard extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     final state = context.watch<AudioDevicesBloc>().state;
+    final volumeState = context.watch<VolumeBloc>().state;
+    final master = volumeState.master;
+
     final devices = state.devices;
     final hasInput = devices?.hasInput ?? false;
     final isReady = state.status == AudioDevicesStatus.success && hasInput;
     final inputs = devices?.inputs ?? const <AudioInput>[];
+
+    final errorMessage = state.errorMessage ?? volumeState.errorMessage;
 
     return Card(
       child: Container(
@@ -52,7 +66,6 @@ class MicrophoneCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                // Use the new picker
                 if (inputs.isNotEmpty) AudioInputPicker(inputs: inputs),
               ],
             ),
@@ -69,12 +82,18 @@ class MicrophoneCard extends StatelessWidget {
                 ),
               )
             else
-              _MicControls(devices: devices!, state: state, isReady: isReady),
+              _MicControls(
+                devices: devices!,
+                state: state,
+                isReady: isReady,
+                master: master,
+                volumeState: volumeState,
+              ),
 
-            if (state.errorMessage != null) ...[
+            if (errorMessage != null) ...[
               const SizedBox(height: 16),
               Text(
-                state.errorMessage!,
+                errorMessage,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: colorScheme.error,
                 ),
@@ -87,34 +106,45 @@ class MicrophoneCard extends StatelessWidget {
   }
 }
 
-// ... (_MicControls stays exactly the same as before)
-
 class _MicControls extends StatelessWidget {
   const _MicControls({
     required this.devices,
     required this.state,
     required this.isReady,
+    required this.master,
+    required this.volumeState,
   });
 
   final AudioDevices devices;
   final AudioDevicesState state;
   final bool isReady;
+  final MasterVolume? master;
+  final VolumeState volumeState;
 
   @override
   Widget build(BuildContext context) {
-    final bloc = context.read<AudioDevicesBloc>();
+    final devicesBloc = context.read<AudioDevicesBloc>();
+    final volumeBloc = context.read<VolumeBloc>();
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
     final isMuted = devices.inputMuted;
-    final volume = devices.inputVolume;
+    final micVolume = master?.microphoneVolume;
+
+    final min = (master?.minVolume ?? 0).toDouble();
+    final max = (master?.maxVolume ?? 100).toDouble();
+    final value = (micVolume ?? 0).toDouble().clamp(min, max);
+    final canControlVolume =
+        isReady &&
+        micVolume != null &&
+        volumeState.status == VolumeStatus.success;
 
     return Row(
       children: [
         // Clickable Mute Icon
         IconButton.filledTonal(
           onPressed: isReady && !state.isBusy
-              ? () => bloc.add(const ToggleMicrophoneMuteEvent())
+              ? () => devicesBloc.add(const ToggleMicrophoneMuteEvent())
               : null,
           icon: AnimatedSwitcher(
             duration: const Duration(milliseconds: 200),
@@ -141,14 +171,14 @@ class _MicControls extends StatelessWidget {
         // Slider
         Expanded(
           child: RdeSlider(
-            value: volume.toDouble(),
-            min: 0,
-            max: 100,
+            value: value,
+            min: min,
+            max: max,
             divisions: 100,
-            label: '$volume%',
-            isEnabled: isReady,
+            label: micVolume == null ? 'Unavailable' : '$micVolume%',
+            isEnabled: canControlVolume,
             onChanged: (value) =>
-                bloc.add(MicrophoneVolumeSetEvent(value.round())),
+                volumeBloc.add(VolumeMicrophoneSetEvent(value.round())),
           ),
         ),
 
@@ -160,7 +190,7 @@ class _MicControls extends StatelessWidget {
           child: state.isBusy
               ? const Center(child: RdeLoadingIndicator(size: 18))
               : Text(
-                  '$volume%',
+                  micVolume == null ? '—' : '$micVolume%',
                   textAlign: TextAlign.right,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
