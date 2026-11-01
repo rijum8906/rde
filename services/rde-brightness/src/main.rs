@@ -1,62 +1,88 @@
-//! # Main Binary Entry Point (`rde-brightness`)
+//! # Brightness Service Entry Point
 //!
-//! Entry point for the brightness control service. Initializes the application singleton
-//! and runs the main event loop for D-Bus brightness control and daemon supervision.
-//!
-//! ## Execution Flow
-//! 1. Initialize application singleton (logger, backend, D-Bus setup)
-//! 2. Spawn background daemon supervisor task
-//! 3. Register D-Bus interface and service name
-//! 4. Run event loop (handle D-Bus requests and OS signals)
-//! 5. Graceful shutdown (cleanup resources, daemon notification)
-//!
-//! ## Features
-//! - Current-thread Tokio runtime (single-threaded, efficient for I/O bound tasks)
-//! - Application singleton with thread-safe state management
-//! - Comprehensive logging throughout lifecycle
-//!
-//! ## Related
-//! - [`rde_brightness::app::App`](rde_brightness::app::App)
-//! - [`rde_brightness::backend::BrightnessBackend`](rde_brightness::backend::BrightnessBackend)
-//! - [`rde_brightness::dbus::iface::BrightnessInterface`](rde_brightness::dbus::iface::BrightnessInterface)
-//!
-//! ## Authors
-//! - Riju Mondal <rijum8906@gmail.com>
-//!
-//! ## License
-//! MIT License (see LICENSE file for details)
-//!
-//! ## Copyright
-//! Copyright (c) 2026 Riju Mondal. All rights reserved.
+//! Initialises logging, builds the application service, and runs the D-Bus
+//! server alongside `rde-daemon` supervision until a shutdown is requested.
 
-use rde_brightness::app::App;
-use rde_core::errors::RdeResult;
+use std::sync::Arc;
 
-/// Main entry point powered by single-threaded Tokio runtime.
-///
-/// # Execution
-/// 1. Acquires global App singleton
-/// 2. Enters event loop via App::run()
-/// 3. Handles graceful shutdown on `SIGINT`, `SIGTERM`, or a supervisor request
+use rde_brightness::{
+    SERVICE_NAME, SERVICE_VERSION,
+    application::BrightnessService,
+    infrastructure::{dbus, ipc},
+};
+use rde_core::{
+    fs::rde_service_logs_dir,
+    logger::{LogLevel, Logger},
+};
+use tokio::signal::unix::{SignalKind, signal};
+use tokio_util::sync::CancellationToken;
+use tracing::{debug, error, info};
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> anyhow::Result<()> {
+    // Step 1: Install structured logging to stdout and the service log file.
+    init_tracing()?;
+    info!(
+        service = SERVICE_NAME,
+        version = SERVICE_VERSION,
+        "Starting the brightness service"
+    );
+
+    // Step 2: Build the application service and start daemon supervision.
+    let service = Arc::new(BrightnessService::new());
+    let shutdown = CancellationToken::new();
+    let supervision = ipc::spawn(shutdown.clone());
+
+    // Step 3: Serve D-Bus until a signal, the supervisor, or an error stops us.
+    let result = {
+        let serving = dbus::serve(Arc::clone(&service), shutdown.clone());
+        tokio::pin!(serving);
+
+        tokio::select! {
+            result = &mut serving => result,
+            signal = wait_for_shutdown_signal() => {
+                signal?;
+                info!("Termination signal received, shutting down");
+                shutdown.cancel();
+                serving.await
+            }
+        }
+    };
+
+    // Step 4: Release the supervision socket and report the outcome.
+    ipc::stop(supervision).await;
+
+    if let Err(error) = &result {
+        error!(%error, "Brightness service stopped with an error");
+    } else {
+        info!("Brightness service stopped");
+    }
+
+    result
+}
+
+/// Installs the shared RDE logger for the brightness service.
 ///
 /// # Errors
-/// Returns `RdeError` if:
-/// - Application initialization fails (logger setup, backend init, etc.)
-/// - D-Bus connection or service registration fails
-/// - Runtime execution encounters fatal failure
-///
-/// # Logging
-/// Comprehensive logging is emitted throughout execution at levels:
-/// - STDOUT: Service startup confirmation
-/// - Log Files: All operational events (in rde_service_logs_dir("brightness"))
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> RdeResult<()> {
-    println!("Starting RDE Brightness Service...");
+/// Returns an error when the log directory cannot be created or the global
+/// subscriber is already installed.
+fn init_tracing() -> anyhow::Result<()> {
+    let log_dir = rde_service_logs_dir(SERVICE_NAME)?;
+    Logger::new(LogLevel::Info, log_dir, SERVICE_NAME).init()?;
+    debug!("Tracing initialised");
 
-    // Acquire exclusive access to the global application singleton instance
-    let mut app = App::global()?.lock().await;
-    app.run().await?;
-
-    println!("RDE Brightness Service exited successfully");
     Ok(())
+}
+
+/// Waits for `SIGINT` (Ctrl+C) or `SIGTERM` (session exit / `systemctl stop`).
+///
+/// # Errors
+/// Returns an error when the signal handlers cannot be registered.
+async fn wait_for_shutdown_signal() -> anyhow::Result<()> {
+    let mut terminate = signal(SignalKind::terminate())?;
+
+    tokio::select! {
+        result = tokio::signal::ctrl_c() => result.map_err(anyhow::Error::from),
+        _ = terminate.recv() => Ok(()),
+    }
 }

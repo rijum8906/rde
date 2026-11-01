@@ -3,21 +3,28 @@ name = "rde-brightness"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "rde_brightness"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rde-brightness"
+path = "src/main.rs"
+
+[[bin]]
+name = "rde-brightness-helper"
+path = "src/bin/rde-brightness-helper.rs"
+
 [dependencies]
 rde-core = { path = "../../crates/rde-core" }
 rde-ipc = { path = "../../crates/rde-ipc" }
 
-zbus = { workspace = true }
-tokio = { workspace = true }
 anyhow = { workspace = true }
-futures-util = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
+tokio = { workspace = true }
 tokio-util = { workspace = true }
-
+zbus = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.27.0"
-
-[[bin]]
-path = "src/bin/rde-brightness-helper.rs"
-name = "rde-brightness-helper"

@@ -854,10 +854,10 @@ name = "rde-brightness"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "futures-util",
  "rde-core",
  "rde-ipc",
  "tempfile",
+ "thiserror",
  "tokio",
  "tokio-util",
  "tracing",
