@@ -1,5 +1,5 @@
 [package]
-name = "rde-cli"
+name = "rdectl"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -7,3 +7,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+# Internal crates
+rde-core.workspace = true
+
+clap = { version = "4.6.7", features = ["derive"] }
