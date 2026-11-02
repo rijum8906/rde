@@ -18,8 +18,8 @@
 //! Copyright (c) 2026 Riju Mondal. All rights reserved.
 
 use rde_core::errors::RdeResult;
-use rde_ipc::socket::UnixIpcClient;
 use rde_ipc::message::DaemonResponse;
+use rde_ipc::socket::UnixIpcClient;
 use tracing::{debug, error, info};
 
 use crate::constants::SERVICE_NAME;
@@ -53,10 +53,7 @@ pub async fn handle_daemon_response(
             }
         }
         DaemonResponse::Success => {
-            debug!(
-                service = SERVICE_NAME,
-                "Supervisor acknowledged a request"
-            );
+            debug!(service = SERVICE_NAME, "Supervisor acknowledged a request");
         }
     }
 

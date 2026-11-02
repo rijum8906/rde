@@ -11,7 +11,7 @@ use std::{
     process::Command,
 };
 
-use tracing::{info, warn};
+use tracing::{debug, warn};
 
 use super::error::DomainError;
 
@@ -154,7 +154,7 @@ pub fn resolve_backlight_path(root: &Path) -> Result<PathBuf, DomainError> {
     for candidate in PREFERRED_BACKLIGHTS {
         let path = root.join(candidate);
         if path.is_dir() {
-            info!(device = %path.display(), "Using preferred backlight device");
+            debug!(device = %path.display(), "Using preferred backlight device");
             return Ok(path);
         }
     }
@@ -191,7 +191,7 @@ pub fn resolve_backlight_path(root: &Path) -> Result<PathBuf, DomainError> {
 
     match selected {
         Some(path) => {
-            info!(device = %path.display(), "Using backlight device");
+            debug!(device = %path.display(), "Using backlight device");
             Ok(path)
         }
         None => Err(DomainError::BacklightNotFound(root.display().to_string())),
@@ -280,7 +280,7 @@ pub fn write_internal_level(device: &Path, percent: u8) -> Result<(), DomainErro
         }
     }
 
-    info!(
+    debug!(
         percent,
         raw,
         max,
@@ -354,7 +354,7 @@ pub fn set_external_brightness(output_name: &str, percent: u8) -> Result<(), Dom
         });
     }
 
-    info!(
+    debug!(
         output = output_name,
         percent, bus, "Applied external brightness"
     );

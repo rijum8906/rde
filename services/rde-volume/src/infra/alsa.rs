@@ -93,7 +93,7 @@ impl AlsaController {
             let id = SelemId::new(candidate, 0);
             if let Some(selem) = mixer.find_selem(&id) {
                 if selem.has_playback_volume() {
-                    tracing::info!(
+                    tracing::debug!(
                         "Using ALSA mixer control: '{}' (card: '{}')",
                         candidate,
                         card_name
@@ -113,7 +113,7 @@ impl AlsaController {
                     if let Some(selem) = alsa::mixer::Selem::new(elem) {
                         if selem.has_playback_volume() {
                             let id = selem.get_id();
-                            tracing::info!(
+                            tracing::debug!(
                                 "Selected fallback ALSA mixer control: '{}' (index: {})",
                                 id.get_name().unwrap_or_default(),
                                 id.get_index()
@@ -136,7 +136,7 @@ impl AlsaController {
         let capture_selem_id = Self::find_capture_selem(&mixer);
 
         if let Some(id) = &capture_selem_id {
-            tracing::info!(
+            tracing::debug!(
                 "Using ALSA capture control: '{}' (card: '{}')",
                 id.get_name().unwrap_or_default(),
                 card_name

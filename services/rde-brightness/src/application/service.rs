@@ -144,7 +144,7 @@ impl BrightnessService {
                 let level = apply(&display, *percent)?;
                 state.display = Some(display);
                 state.level = level;
-                info!(percent = *percent, "Brightness set");
+                debug!(percent = *percent, "Brightness set");
             }
 
             BrightnessCommand::Increase(_) | BrightnessCommand::Decrease(_) => {
@@ -163,7 +163,7 @@ impl BrightnessService {
                 let level = apply(&display, target)?;
                 state.display = Some(display);
                 state.level = level;
-                info!(from = current.percent(), to = target, "Brightness adjusted");
+                debug!(from = current.percent(), to = target, "Brightness adjusted");
             }
         }
 

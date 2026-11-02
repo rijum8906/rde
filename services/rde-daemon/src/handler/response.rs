@@ -33,7 +33,7 @@ pub fn handle_client_response(response: ServiceResponse) {
             tracing::debug!("Received liveness confirmation from service");
         }
         ServiceResponse::Status(status) => {
-            tracing::info!(status = ?status, "Received status response from service");
+            tracing::debug!(status = ?status, "Received status response from service");
         }
         ServiceResponse::ShutdownAck(ack) => {
             tracing::info!(

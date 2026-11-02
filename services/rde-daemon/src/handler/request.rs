@@ -70,7 +70,7 @@ pub async fn handle_client_request(
             // 3. Insert the entry, reporting any stale entry that it replaced.
             let replaced = App::with_global(|app| app.register(service))?;
             if let Some(previous) = replaced {
-                tracing::warn!(
+                tracing::debug!(
                     service = %registration.name,
                     previous_pid = previous.id.pid,
                     pid = registration.pid,
@@ -131,7 +131,7 @@ pub async fn handle_client_request(
                 App::with_global(|app| app.update_status(&service_name, update.status.clone()))?;
 
             if updated {
-                tracing::info!(
+                tracing::debug!(
                     service = %service_name,
                     status = ?update.status,
                     message = update.message.as_deref().unwrap_or_default(),

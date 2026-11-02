@@ -3,7 +3,7 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 use tracing::{Level, subscriber::set_global_default};
-use tracing_subscriber::{EnvFilter, Registry, fmt, layer::SubscriberExt};
+use tracing_subscriber::{EnvFilter, Layer, Registry, fmt, layer::SubscriberExt};
 
 use crate::errors::{RdeError, RdeResult};
 
@@ -35,6 +35,38 @@ impl LogLevel {
     }
 }
 
+/// Returns the filter directive used when `RUST_LOG` is not set.
+///
+/// `error`, `warn` and `info` are recorded in every build, while `debug` and
+/// `trace` are only recorded in debug builds: a released service must not write
+/// per-operation diagnostics into a user's log files. A service can still ask
+/// for a quieter level than the build allows, but never for a more verbose one.
+///
+/// # Parameters
+/// - `configured`: level requested by the service
+fn default_filter(configured: Level) -> &'static str {
+    let requested = match configured {
+        Level::ERROR => "error",
+        Level::WARN => "warn",
+        Level::INFO => "info",
+        Level::DEBUG => "debug",
+        Level::TRACE => "trace",
+    };
+
+    // Step 1: Release builds stop at `info`, whatever the service asked for.
+    if !cfg!(debug_assertions) && matches!(configured, Level::DEBUG | Level::TRACE) {
+        return "info";
+    }
+
+    // Step 2: Debug builds record every diagnostic, so a service that only asks
+    // for `info` still exposes its `debug` events while developing.
+    if cfg!(debug_assertions) && matches!(configured, Level::INFO) {
+        return "debug";
+    }
+
+    requested
+}
+
 #[derive(Debug)]
 pub struct Logger {
     pub log_dir: PathBuf,
@@ -62,7 +94,7 @@ impl Logger {
         }
     }
 
-    pub fn init(&self) -> RdeResult<()> {
+    pub fn init(&self, is_release_mode: bool) -> RdeResult<()> {
         // ============================================
         // 1. Create log directory if it doesn't exist
         // ============================================
@@ -77,17 +109,18 @@ impl Logger {
         let mut init_err = None;
         LOGGER_STATE.get_or_init(|| {
             // Create a filter that respects RUST_LOG environment variable
-            // Default to configured level if not set
+            // Default to the build-aware level if not set
             let filter = EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new(self.level.as_str()));
+                .unwrap_or_else(|_| EnvFilter::new(default_filter(self.level)));
 
             // Wrap filter in reloadable layer
-            let (reload_filter, reload_handle) = tracing_subscriber::reload::Layer::new(filter);
+            let (reload_filter, reload_handle) =
+                tracing_subscriber::reload::Layer::new(filter.clone());
 
             // Console subscriber with pretty formatting
             let console_subscriber = fmt::layer()
                 .with_writer(std::io::stdout)
-                .with_line_number(true)
+                .with_line_number(!is_release_mode)
                 .with_thread_ids(false)
                 .with_thread_names(false)
                 .with_file(true)
@@ -100,10 +133,11 @@ impl Logger {
 
             let file_subscriber = fmt::layer()
                 .with_writer(non_blocking)
-                .with_line_number(true)
+                .with_line_number(!is_release_mode)
                 .with_file(true)
                 .with_target(true)
-                .with_ansi(false); // No colors in file
+                .with_ansi(false)
+                .with_filter(filter); // No colors in file
 
             // Combine both subscribers into a registry
             let subscriber = Registry::default()
@@ -160,6 +194,24 @@ mod tests {
     use tracing::{debug, error, info, trace, warn};
 
     #[test]
+    fn default_filter_hides_debug_outside_debug_builds() {
+        // A service asking for the default level gets diagnostics only while
+        // developing, and never a more verbose filter than the build allows.
+        if cfg!(debug_assertions) {
+            assert_eq!(default_filter(Level::INFO), "debug");
+            assert_eq!(default_filter(Level::DEBUG), "debug");
+        } else {
+            assert_eq!(default_filter(Level::INFO), "info");
+            assert_eq!(default_filter(Level::DEBUG), "info");
+            assert_eq!(default_filter(Level::TRACE), "info");
+        }
+
+        // Error and warning records survive in every build.
+        assert_eq!(default_filter(Level::WARN), "warn");
+        assert_eq!(default_filter(Level::ERROR), "error");
+    }
+
+    #[test]
     fn test_logger_functionality() -> RdeResult<()> {
         // Create a temporary directory for logs
         let temp_dir = tempdir()?;
@@ -167,7 +219,7 @@ mod tests {
 
         // Initialize logger with DEBUG level
         let logger = Logger::new(LogLevel::Debug, log_dir.clone(), "test-log");
-        logger.init()?;
+        logger.init(false)?;
 
         // Helper to wait for expected content to be flushed to the file
         let read_with_retry = |path: &std::path::Path, expected: &str| -> String {

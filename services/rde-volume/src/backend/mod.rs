@@ -104,7 +104,7 @@ impl VolumeBackend {
         // Step 2: Update hardware state
         self.controller.set_volume(target)?;
 
-        tracing::info!("Master volume updated to {}%", target);
+        tracing::debug!("Master volume updated to {}%", target);
         Ok(target)
     }
 
@@ -128,7 +128,7 @@ impl VolumeBackend {
     /// Returns `RdeError` if setting the hardware switch fails.
     pub async fn set_mute(&self, muted: bool) -> RdeResult<()> {
         self.controller.set_mute(muted)?;
-        tracing::info!("Master playback mute set to {}", muted);
+        tracing::debug!("Master playback mute set to {}", muted);
         Ok(())
     }
 
@@ -149,7 +149,7 @@ impl VolumeBackend {
         // Step 3: Write new state back to hardware
         self.set_mute(new_muted).await?;
 
-        tracing::info!(
+        tracing::debug!(
             "Master mute toggled from {} to {}",
             current_muted,
             new_muted
@@ -171,7 +171,7 @@ impl VolumeBackend {
     pub fn set_step(&self, step: u8) {
         let sanitized = step.max(1);
         self.step.store(sanitized, Ordering::Relaxed);
-        tracing::info!("Default volume step updated to {}", sanitized);
+        tracing::debug!("Default volume step updated to {}", sanitized);
     }
 
     /// Increases master volume by the configured default step size.
@@ -278,7 +278,7 @@ impl VolumeBackend {
         // Step 2: Update the capture hardware state
         self.controller.set_microphone_volume(target)?;
 
-        tracing::info!("Microphone volume updated to {}%", target);
+        tracing::debug!("Microphone volume updated to {}%", target);
         Ok(target)
     }
 
@@ -304,7 +304,7 @@ impl VolumeBackend {
     /// write fails.
     pub async fn set_microphone_mute(&self, muted: bool) -> RdeResult<()> {
         self.controller.set_microphone_mute(muted)?;
-        tracing::info!("Microphone capture mute set to {}", muted);
+        tracing::debug!("Microphone capture mute set to {}", muted);
         Ok(())
     }
 

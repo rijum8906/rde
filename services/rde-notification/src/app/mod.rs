@@ -97,8 +97,13 @@ impl App {
         debug!("Initialising logger for the notification service");
 
         // Step 1: Install structured logging before any other work happens.
+        let is_release_mode = cfg!(not(debug_assertions));
         let log_dir = rde_service_logs_dir(SERVICE_NAME)?;
-        Logger::new(LogLevel::Info, log_dir, SERVICE_NAME).init()?;
+        let log_level = match is_release_mode {
+            true => LogLevel::Warn,
+            false => LogLevel::Debug,
+        };
+        Logger::new(log_level, log_dir, SERVICE_NAME).init(is_release_mode)?;
 
         Ok(Self {
             version: env!("CARGO_PKG_VERSION").to_string(),
