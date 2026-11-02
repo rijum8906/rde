@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:core/core.dart';
+import 'package:rde_settings/features/display/domain/entities/brightness_level.dart';
 import 'package:rde_settings/features/display/domain/repositories/brightness_repository.dart';
 import 'package:rde_settings/features/display/presentation/bloc/brightness_event.dart';
 import 'package:rde_settings/features/display/presentation/bloc/brightness_state.dart';
@@ -10,10 +11,11 @@ import 'package:rde_settings/features/display/presentation/bloc/brightness_state
 /// Keeps the display page and the dashboard quick actions in step with the
 /// `org.rde.Brightness` service.
 ///
-/// The service owns the backlight, so the card reads the state back after every
-/// write instead of trusting its own guess. A drag is the one exception: the
-/// slider follows the pointer immediately, and the value is committed once the
-/// drag settles, because writing every pixel of a drag would flood the service.
+/// A write is shown immediately: the slider moves to the requested level as
+/// soon as the write succeeds, without reading the service back. A rejected
+/// write restores the previous level and reports the failure. A drag still
+/// commits once it settles, because writing every pixel of a drag would flood
+/// the service.
 ///
 /// Signals from the service mean another client changed the brightness - media
 /// keys, the shell's OSD - so the card reloads for those as well.
@@ -106,10 +108,7 @@ class BrightnessBloc extends Bloc<BrightnessEvent, BrightnessState> {
 
     final percent = event.percent.clamp(0, 100).toInt();
     emit(
-      state.copyWith(
-        level: level.copyWith(percent: percent),
-        errorMessage: null,
-      ),
+      state.copyWith(level: _withPercent(level, percent), errorMessage: null),
     );
 
     _commit?.cancel();
@@ -129,21 +128,14 @@ class BrightnessBloc extends Bloc<BrightnessEvent, BrightnessState> {
 
     final percent = event.percent.clamp(0, 100).toInt();
     emit(
-      state.copyWith(
-        level: level.copyWith(percent: percent),
-        errorMessage: null,
-      ),
+      state.copyWith(level: _withPercent(level, percent), errorMessage: null),
     );
 
-    final result = await _repository.setPercent(percent);
-    final failure = _failureOf(result);
-
-    // The service is the truth: a rejected write snaps the slider back.
-    await _refresh(emit);
-
-    // Report the write failure after the refresh, which clears the message.
+    // A successful write is the new level: no read-back and no waiting for the
+    // republished property. A rejection snaps the slider back.
+    final failure = _failureOf(await _repository.setPercent(percent));
     if (failure != null) {
-      emit(state.copyWith(errorMessage: failure.message));
+      emit(state.copyWith(level: level, errorMessage: failure.message));
     }
   }
 
@@ -153,23 +145,38 @@ class BrightnessBloc extends Bloc<BrightnessEvent, BrightnessState> {
     bool increase,
     Emitter<BrightnessState> emit,
   ) async {
-    if (state.level == null || state.isBusy) {
+    final level = state.level;
+    if (level == null || state.isBusy) {
       return;
     }
 
-    emit(state.copyWith(isBusy: true, errorMessage: null));
+    // Move the level now; the service applies the same clamp.
+    final percent = increase
+        ? (level.percent + step).clamp(0, 100).toInt()
+        : (level.percent - step).clamp(0, 100).toInt();
+    emit(
+      state.copyWith(
+        isBusy: true,
+        level: _withPercent(level, percent),
+        errorMessage: null,
+      ),
+    );
 
-    final result = increase
-        ? await _repository.increase(step)
-        : await _repository.decrease(step);
-    final failure = _failureOf(result);
+    final failure = increase
+        ? _failureOf(await _repository.increase(step))
+        : _failureOf(await _repository.decrease(step));
     if (failure != null) {
-      emit(state.copyWith(isBusy: false, errorMessage: failure.message));
+      emit(
+        state.copyWith(
+          isBusy: false,
+          level: level,
+          errorMessage: failure.message,
+        ),
+      );
       return;
     }
 
-    // The service clamps the result, so read it back instead of adding locally.
-    await _refresh(emit);
+    emit(state.copyWith(isBusy: false));
   }
 
   /// Reloads after another client changed the brightness.
@@ -220,6 +227,19 @@ class BrightnessBloc extends Bloc<BrightnessEvent, BrightnessState> {
           ),
         );
     }
+  }
+
+  /// Returns [level] moved to [percent], carrying the raw value with it.
+  ///
+  /// The service divides the scale the same way, so the card can show the raw
+  /// value without waiting for the republished property.
+  BrightnessLevel _withPercent(BrightnessLevel level, int percent) {
+    if (!level.hasRange) {
+      return level.copyWith(percent: percent);
+    }
+
+    final raw = (percent * level.max) ~/ 100;
+    return level.copyWith(percent: percent, raw: raw);
   }
 
   /// Extracts the failure of a void result, or `null` on success.
