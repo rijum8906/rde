@@ -67,8 +67,13 @@ async fn main() -> anyhow::Result<()> {
 /// Returns an error when the log directory cannot be created or the global
 /// subscriber is already installed.
 fn init_tracing() -> anyhow::Result<()> {
+    let is_release_mode = cfg!(not(debug_assertions));
     let log_dir = rde_service_logs_dir(SERVICE_NAME)?;
-    Logger::new(LogLevel::Info, log_dir, SERVICE_NAME).init()?;
+    let log_level = match is_release_mode {
+        true => LogLevel::Warn,
+        false => LogLevel::Debug,
+    };
+    Logger::new(log_level, log_dir, SERVICE_NAME).init(is_release_mode)?;
     debug!("Tracing initialised");
 
     Ok(())

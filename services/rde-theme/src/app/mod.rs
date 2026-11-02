@@ -50,9 +50,14 @@ impl App {
     /// Returns [`RdeError`] if logging cannot be initialized or the repository fails.
     pub async fn new() -> RdeResult<Self> {
         // Step 1: Initialize logger
+        let is_release_mode = cfg!(not(debug_assertions));
+        let log_level = match is_release_mode {
+            true => LogLevel::Warn,
+            false => LogLevel::Debug,
+        };
         let log_dir = rde_service_logs_dir(SERVICE_NAME)?;
-        Logger::new(LogLevel::Debug, log_dir, SERVICE_NAME)
-            .init()
+        Logger::new(log_level, log_dir, SERVICE_NAME)
+            .init(is_release_mode)
             .map_err(|e| RdeError::Internal(e.to_string()))?;
 
         info!("Initializing RDE Theme Service...");

@@ -20,7 +20,7 @@ use std::{
     time::Duration,
 };
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, trace, warn};
 
 use crate::{
     adapter::{AdapterRegistry, kde::KDE_ADAPTER_NAME, unique_theme_name},
@@ -352,7 +352,7 @@ impl ThemeService {
 
         // Step 2: The Material 3 palette is the published payload every other
         // surface derives from, so it is reported as its own surface.
-        info!(
+        debug!(
             surface = "material",
             theme = %resolved.theme_id,
             variant = %resolved.variant,
@@ -375,7 +375,7 @@ impl ThemeService {
                         match write_atomic(&file_path, &bytes) {
                             Ok(()) => {
                                 written += 1;
-                                debug!(
+                                trace!(
                                     adapter = %adapter.name(),
                                     path = %file_path.display(),
                                     "Wrote adapter file"
@@ -402,7 +402,7 @@ impl ThemeService {
                     }
 
                     // Step 6: Report the updated surface, one line per adapter.
-                    info!(
+                    debug!(
                         adapter = %adapter.name(),
                         theme = %resolved.theme_id,
                         variant = %resolved.variant,

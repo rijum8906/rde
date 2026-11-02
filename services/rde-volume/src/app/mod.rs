@@ -101,8 +101,9 @@ impl App {
         debug!("Initialising logger for the volume service");
 
         // Step 1: Install structured logging before touching audio hardware.
+        let is_release_mode = cfg!(not(debug_assertions));
         let log_dir = rde_service_logs_dir(SERVICE_NAME)?;
-        Logger::new(LogLevel::Info, log_dir, SERVICE_NAME).init()?;
+        Logger::new(LogLevel::Info, log_dir, SERVICE_NAME).init(is_release_mode)?;
 
         // Step 2: Build the interface; this also opens the ALSA mixer.
         let interface = VolumeInterface::new()?;
