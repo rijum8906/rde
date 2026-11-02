@@ -11,7 +11,7 @@ enum AppearanceMode {
 
   const AppearanceMode(this.dbusValue);
 
-  /// Value used on the wire for the `Mode` property and `SetMode` argument.
+  /// Value used on the wire for the `Appearance` property.
   final String dbusValue;
 
   /// Whether this appearance is the dark variant.
@@ -44,8 +44,8 @@ enum AppearanceMode {
 
   /// Infers the appearance from a surface color.
   ///
-  /// Used only as a fallback when the authoritative `Mode` property cannot be
-  /// read, so a transient bus error does not leave the app on the wrong
+  /// Used only as a fallback when the authoritative `Appearance` property cannot
+  /// be read, so a transient bus error does not leave the app on the wrong
   /// brightness.
   static AppearanceMode fromSurface(ThemeColor surface) {
     return surface.toColor().computeLuminance() < 0.5
