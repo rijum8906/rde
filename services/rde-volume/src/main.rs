@@ -33,14 +33,12 @@ use rde_volume::app::App;
 /// or a signal handler cannot be registered.
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> RdeResult<()> {
-    println!("Starting RDE Volume Service...");
-
-    // Step 1: Initialise logging and the audio-backed D-Bus object.
+    // Step 1: Initialise logging and the audio-backed D-Bus object. The app
+    // logs the startup event once the subscriber is installed.
     let mut app = App::global()?.lock().await;
 
     // Step 2: Serve D-Bus and supervision until shutdown is requested.
     app.run().await?;
 
-    println!("RDE Volume Service exited successfully");
     Ok(())
 }

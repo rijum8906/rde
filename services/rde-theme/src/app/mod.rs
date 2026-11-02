@@ -51,8 +51,11 @@ impl App {
     pub async fn new() -> RdeResult<Self> {
         // Step 1: Initialize logger
         let is_release_mode = cfg!(not(debug_assertions));
+
+        // Release builds keep lifecycle events (start, register, shutdown);
+        // debug builds add per-operation diagnostics. See `docs/logging-guide.md`.
         let log_level = match is_release_mode {
-            true => LogLevel::Warn,
+            true => LogLevel::Info,
             false => LogLevel::Debug,
         };
         let log_dir = rde_service_logs_dir(SERVICE_NAME)?;
@@ -128,7 +131,9 @@ impl App {
         let iface = ThemeInterface::new(self.service.clone());
         let portal = PortalSettingsInterface::new(self.service.clone());
 
-        let connection = zbus::connection::Builder::session()
+        // The connection must outlive the serving loop: dropping it releases the
+        // bus name and unregisters both object paths.
+        let _connection = zbus::connection::Builder::session()
             .name(DBUS_SERVICE_NAME)
             .serve_at(THEME_OBJECT_PATH, iface)
             .serve_at(PORTAL_OBJECT_PATH, portal)

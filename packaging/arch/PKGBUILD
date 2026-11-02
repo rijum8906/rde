@@ -1,7 +1,7 @@
 # Maintainer: Riju Mondal <rijum8906@gmail.com>
 
 pkgname=rde
-pkgver=0.1.0
+pkgver=0.0.4
 pkgrel=1
 pkgdesc="Riju Desktop Environment: modular Rust desktop services (daemon, volume, brightness, theme, notifications)"
 arch=('x86_64' 'aarch64')
@@ -23,7 +23,7 @@ options=('!lto')
 # this with the release tarball source and its checksum.
 _repo="$startdir/../.."
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('1dc8ce8295ec863a6173eccab6fb60b9274c797173f197df8aa461a2f01c5d97')
+sha256sums=('ac09409f1c349d3b803dabf8cd0ca1b6ddabd7921be787ec4424d0a1eb022f58')
 
 build() {
   cd "$_repo"
@@ -45,8 +45,6 @@ package() {
     "$pkgdir/usr/bin/rde-daemon"
   install -Dm755 target/release/rde-brightness \
     "$pkgdir/usr/bin/rde-brightness"
-  install -Dm755 target/release/rde-brightness-helper \
-    "$pkgdir/usr/bin/rde-brightness-helper"
   install -Dm755 target/release/rde-volume \
     "$pkgdir/usr/bin/rde-volume"
   install -Dm755 target/release/rde-theme \
@@ -75,9 +73,7 @@ package() {
   # ---------------------------------------------------------------------------
   # polkit
   # ---------------------------------------------------------------------------
-  # Actions authorize the privileged helper and the D-Bus services.
-  install -Dm644 assets/polkit/org.rde.brightness.policy \
-    "$pkgdir/usr/share/polkit-1/actions/org.rde.brightness.policy"
+  # Actions authorize the D-Bus services that still need them.
   install -Dm644 assets/polkit/org.rde.volume.policy \
     "$pkgdir/usr/share/polkit-1/actions/org.rde.volume.policy"
   install -Dm644 assets/polkit/org.rde.theme.policy \
@@ -86,6 +82,8 @@ package() {
   # Rules (as opposed to actions) live in rules.d and are read by polkitd.
   install -Dm644 assets/polkit/org.rde.wifi.rules \
     "$pkgdir/usr/share/polkit-1/rules.d/10-org.rde.wifi.rules"
+  install -Dm644 assets/udev/org.rde.brightness.rules \
+    "$pkgdir/usr/lib/udev/rules.d/90-org.rde.brightness.rules"
 
   # ---------------------------------------------------------------------------
   # Documentation
