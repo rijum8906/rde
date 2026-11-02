@@ -186,7 +186,7 @@ pub mod tests {
     use super::*;
     use crate::domain::{
         identity::VariantId,
-        manifest::{ContrastLevel, RelativePath, ThemeMode, VariantDescriptor},
+        manifest::{Appearance, ContrastLevel, RelativePath, VariantDescriptor},
     };
     use std::collections::BTreeMap;
 
@@ -249,7 +249,7 @@ pub mod tests {
         variants.insert(
             VariantId::new("dark").unwrap(),
             VariantDescriptor {
-                mode: ThemeMode::Dark,
+                mode: Appearance::Dark,
                 contrast: ContrastLevel::Normal,
                 display_name: None.into(),
                 file_path: RelativePath::new("dark.json").unwrap(),
@@ -280,7 +280,7 @@ pub mod tests {
         variants.insert(
             VariantId::new("dark-1").unwrap(),
             VariantDescriptor {
-                mode: ThemeMode::Dark,
+                mode: Appearance::Dark,
                 contrast: ContrastLevel::Normal,
                 display_name: None.into(),
                 file_path: RelativePath::new("dark1.json").unwrap(),
@@ -290,7 +290,7 @@ pub mod tests {
         variants.insert(
             VariantId::new("dark-2").unwrap(),
             VariantDescriptor {
-                mode: ThemeMode::Dark,
+                mode: Appearance::Dark,
                 contrast: ContrastLevel::Normal,
                 display_name: None.into(),
                 file_path: RelativePath::new("dark2.json").unwrap(),
@@ -325,7 +325,7 @@ pub mod tests {
         variants.insert(
             dark_id.clone(),
             VariantDescriptor {
-                mode: ThemeMode::Dark,
+                mode: Appearance::Dark,
                 contrast: ContrastLevel::Normal,
                 display_name: None.into(),
                 file_path: RelativePath::new("dark.json").unwrap(),
@@ -363,7 +363,7 @@ pub mod tests {
         variants.insert(
             dark_id.clone(),
             VariantDescriptor {
-                mode: ThemeMode::Dark,
+                mode: Appearance::Dark,
                 contrast: ContrastLevel::Normal,
                 display_name: None.into(),
                 file_path: RelativePath::new("dark.json").unwrap(),

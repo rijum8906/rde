@@ -1,15 +1,21 @@
 import 'package:fpdart/fpdart.dart';
 import 'package:core/core.dart';
-import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 
 /// Domain boundary for the `org.rde.Theme` service.
 ///
 /// The UI never talks to D-Bus directly; every theme read or mutation goes
-/// through this repository so presentation code stays testable.
+/// through this repository so presentation code stays testable. Reads are split
+/// per resource — payload, manifests, properties — so a change to one never
+/// costs a read of the others.
 abstract interface class ThemeRepository {
-  /// Reads the service state, the installed themes' manifests, and the payload
-  /// the desktop currently renders.
-  Future<Either<Failure, ThemeCatalog>> loadCatalog();
+  /// Reads the service properties: active theme, appearance, registry, version.
+  Future<Either<Failure, ThemeSnapshot>> loadSnapshot();
+
+  /// Reads the payload the desktop currently renders.
+  Future<Either<Failure, ResolvedTheme>> getResolvedTheme();
+
+  /// Reads the manifests of every theme the picker offers.
+  Future<Either<Failure, List<ThemeManifest>>> loadThemes();
 
   /// Resolves [theme] for [mode] without committing it.
   Future<Either<Failure, ResolvedTheme>> preview(
@@ -41,6 +47,9 @@ abstract interface class ThemeRepository {
   /// Re-reads manifests, variant files, and settings on the service.
   Future<Either<Failure, void>> reload();
 
-  /// Emits whenever the service publishes a theme or changes the registry.
-  Stream<void> watchThemeChanges();
+  /// Emits the payload the service publishes, once per change.
+  Stream<ResolvedTheme> watchResolvedTheme();
+
+  /// Emits the registry identifiers, once per change.
+  Stream<List<String>> watchThemeList();
 }

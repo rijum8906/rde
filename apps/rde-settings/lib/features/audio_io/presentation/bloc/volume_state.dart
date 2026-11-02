@@ -40,9 +40,7 @@ class VolumeState {
   }) {
     return VolumeState(
       status: status ?? this.status,
-      master: identical(master, _unset)
-          ? this.master
-          : master as MasterVolume?,
+      master: identical(master, _unset) ? this.master : master as MasterVolume?,
       isBusy: isBusy ?? this.isBusy,
       errorMessage: identical(errorMessage, _unset)
           ? this.errorMessage

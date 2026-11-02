@@ -1,5 +1,4 @@
 import 'package:core/core.dart';
-import 'package:core/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +13,10 @@ import 'package:rde_settings/features/bluetooth/domain/repositories/bluetooth_re
 import 'package:rde_settings/features/bluetooth/presentation/bloc/bluetooth_bloc.dart';
 import 'package:rde_settings/features/bluetooth/presentation/bloc/bluetooth_event.dart';
 import 'package:rde_settings/features/dashboard/presentation/widgets/dashboard_personalization.dart';
+import 'package:rde_settings/features/display/domain/entities/brightness_level.dart';
+import 'package:rde_settings/features/display/domain/repositories/brightness_repository.dart';
+import 'package:rde_settings/features/display/presentation/bloc/brightness_bloc.dart';
+import 'package:rde_settings/features/display/presentation/bloc/brightness_event.dart';
 import 'package:rde_settings/features/dashboard/presentation/widgets/dashboard_quick_actions.dart';
 import 'package:rde_settings/features/dashboard/presentation/widgets/dashboard_system_health.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
@@ -68,9 +71,8 @@ class _FakeWifiRepository implements WifiRepository {
   ) async => const Right(null);
 
   @override
-  Future<Either<Failure, int>> getNetworkPriority(
-    WifiNetwork network,
-  ) async => const Right(0);
+  Future<Either<Failure, int>> getNetworkPriority(WifiNetwork network) async =>
+      const Right(0);
 
   @override
   Future<Either<Failure, bool>> isWifiEnabled() async => Right(enabled);
@@ -180,8 +182,52 @@ class _FakeVolumeRepository implements MasterVolumeRepository {
       const Right(null);
 
   @override
-  Future<Either<Failure, void>> setMuted(bool muted) async =>
-      const Right(null);
+  Future<Either<Failure, void>> setMuted(bool muted) async => const Right(null);
+
+  @override
+  Stream<void> watchChanges() => const Stream<void>.empty();
+}
+
+/// In-memory stand-in for the `org.rde.Brightness` repository.
+class _FakeBrightnessRepository implements BrightnessRepository {
+  int percent = 65;
+
+  final List<int> setValues = [];
+  final List<int> increases = [];
+  final List<int> decreases = [];
+
+  @override
+  Future<Either<Failure, BrightnessLevel>> read() async {
+    return Right(
+      BrightnessLevel(
+        percent: percent,
+        raw: percent,
+        max: 100,
+        version: 'test',
+      ),
+    );
+  }
+
+  @override
+  Future<Either<Failure, void>> setPercent(int value) async {
+    setValues.add(value);
+    percent = value.clamp(0, 100).toInt();
+    return const Right(null);
+  }
+
+  @override
+  Future<Either<Failure, void>> increase(int step) async {
+    increases.add(step);
+    percent = (percent + step).clamp(0, 100).toInt();
+    return const Right(null);
+  }
+
+  @override
+  Future<Either<Failure, void>> decrease(int step) async {
+    decreases.add(step);
+    percent = (percent - step).clamp(0, 100).toInt();
+    return const Right(null);
+  }
 
   @override
   Stream<void> watchChanges() => const Stream<void>.empty();
@@ -193,17 +239,20 @@ class _Harness {
     wifiBloc = WifiBloc(wifiRepository: wifi);
     bluetoothBloc = BluetoothBloc(bluetoothRepository: bluetooth);
     volumeBloc = VolumeBloc(repository: volume);
+    brightnessBloc = BrightnessBloc(repository: brightness);
     themeBloc = ThemeBloc(repository: themes);
   }
 
   final _FakeWifiRepository wifi = _FakeWifiRepository();
   final _FakeBluetoothRepository bluetooth = _FakeBluetoothRepository();
   final _FakeVolumeRepository volume = _FakeVolumeRepository();
+  final _FakeBrightnessRepository brightness = _FakeBrightnessRepository();
   final FakeThemeRepository themes = FakeThemeRepository();
 
   late final WifiBloc wifiBloc;
   late final BluetoothBloc bluetoothBloc;
   late final VolumeBloc volumeBloc;
+  late final BrightnessBloc brightnessBloc;
   late final ThemeBloc themeBloc;
 
   /// Pumps [child] with every dashboard bloc loaded from the fakes.
@@ -214,6 +263,7 @@ class _Harness {
           BlocProvider.value(value: wifiBloc),
           BlocProvider.value(value: bluetoothBloc),
           BlocProvider.value(value: volumeBloc),
+          BlocProvider.value(value: brightnessBloc),
           BlocProvider.value(value: themeBloc),
         ],
         child: MaterialApp(home: Scaffold(body: child)),
@@ -224,8 +274,13 @@ class _Harness {
     wifiBloc.add(const WifiInitEvent());
     bluetoothBloc.add(const BluetoothInitEvent());
     volumeBloc.add(const VolumeInitEvent());
+    brightnessBloc.add(const BrightnessInitEvent());
     themeBloc.add(const ThemeInitEvent());
     await tester.pumpAndSettle();
+    debugPrint('DBG vol=${volumeBloc.state.status}/${volumeBloc.state.master?.volume}'
+        ' bri=${brightnessBloc.state.status}/${brightnessBloc.state.level?.percent}'
+        ' bt=${bluetoothBloc.state.isEnabled}/${bluetoothBloc.state.isAvailable}'
+        ' wifi=${wifiBloc.state.isWifiEnabled}');
   }
 
   /// Releases the blocs and their repositories.
@@ -233,6 +288,7 @@ class _Harness {
     await wifiBloc.close();
     await bluetoothBloc.close();
     await volumeBloc.close();
+    await brightnessBloc.close();
     await themeBloc.close();
     await themes.dispose();
   }
@@ -254,19 +310,43 @@ void main() {
     setUp(() => harness = _Harness());
     tearDown(() => harness.dispose());
 
-    testWidgets('reads volume and brightness from their sources', (
+    testWidgets('reads volume and brightness from their services', (
       tester,
     ) async {
       await harness.pump(tester, const DashboardQuickActions());
-      debugPrint('VOL=${harness.volumeBloc.state.master?.volume} '
-          'WIFI=${harness.wifiBloc.state.isWifiEnabled}');
+      debugPrint(
+        'VOL=${harness.volumeBloc.state.master?.volume} '
+        'WIFI=${harness.wifiBloc.state.isWifiEnabled}',
+      );
 
-      // Step 1: Volume comes from the volume service, brightness is local.
+      // Step 1: Volume and brightness both come from their services.
       expect(find.text('42%'), findsOneWidget);
       expect(find.text('65%'), findsOneWidget);
 
       // Step 2: The volume icon reflects the reported level.
       expect(find.byIcon(Icons.volume_down_rounded), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('brightness changes go through the brightness service', (
+      tester,
+    ) async {
+      await harness.pump(tester, const DashboardQuickActions());
+
+      // Step 1: The icon raises the service by one step.
+      await tester.tap(find.byTooltip('Increase brightness'));
+      await tester.pumpAndSettle();
+
+      expect(harness.brightness.increases, [10]);
+      expect(find.text('75%'), findsOneWidget);
+
+      // Step 2: A direct set is written and read back from the service.
+      harness.brightnessBloc.add(const BrightnessSetEvent(30));
+      await tester.pumpAndSettle();
+
+      expect(harness.brightness.setValues, [30]);
+      expect(find.text('30%'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox());
     });
@@ -351,16 +431,15 @@ void main() {
       await tester.tap(_accentDot(const Color(0xFF006E3C)));
       await tester.pumpAndSettle();
 
-      expect(
-        harness.themes.calls,
-        contains('updateDynamicTheme:#006E3C:::'),
-      );
+      expect(harness.themes.calls, contains('updateDynamicTheme:#006E3C:::'));
       expect(harness.themes.dynamicSeeds.primary, '#006E3C');
     });
   });
 
   group('DashboardSystemHealth', () {
-    testWidgets('renders the gauges and samples them over time', (tester) async {
+    testWidgets('renders the gauges and samples them over time', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         const MaterialApp(home: Scaffold(body: DashboardSystemHealth())),
       );

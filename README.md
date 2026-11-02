@@ -66,7 +66,7 @@ graph TD
 | **`rde-config`** | Crate | Config parsing and XDG path resolution. | `serde`, `toml` |
 | **`rde-ipc`** | Crate | Internal message payloads and Unix socket transport. | `tokio`, `serde` |
 | **`rde-cli`** | Binary | Lightweight CLI for sending commands to the daemon/services. | `clap` |
-| **`rde-brightness`** | Service | Screen backlight control with percentage-based logic. | Sysfs, `pkexec` |
+| **`rde-brightness`** | Service | Screen backlight control with percentage-based logic. | Sysfs, DDC/CI |
 | **`rde-volume`** | Service | Audio management with real-time signal feedback. | ALSA, `zbus` |
 | **`rde-theme`** | Service | Persistent theme management and mode switching. | JSON Storage, `serde` |
 | **`rde-notification`** | Service | *(WIP)* Lightweight desktop notification daemon. | D-Bus |

@@ -17,8 +17,8 @@ class ThemeStylingPage extends StatelessWidget {
     );
 
     return BlocProvider(
-      create: (_) => ThemeBloc(repository: repository)
-        ..add(const ThemeInitEvent()),
+      create: (_) =>
+          ThemeBloc(repository: repository)..add(const ThemeInitEvent()),
       child: const ThemeStylingView(),
     );
   }

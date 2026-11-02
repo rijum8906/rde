@@ -13,9 +13,9 @@ This table will be expanded with a real support window once RDE reaches 1.0.
 
 ## What Counts as a Security Issue
 
-Given RDE's scope — a desktop daemon suite with a privileged component (`rde-brightness` via `pkexec`/polkit) and a D-Bus surface reachable by any local session client — the following are in scope:
+Given RDE's scope — a desktop daemon suite whose services write hardware interfaces directly and a D-Bus surface reachable by any local session client — the following are in scope:
 
-- Privilege escalation via `rde-brightness`'s polkit-gated sysfs writes.
+- Privilege escalation or unauthorized hardware access through a service's direct sysfs/I2C writes, including a service running with broader permissions than its users.
 - Any D-Bus method that can be called without appropriate authorization to perform a privileged action.
 - Memory-safety issues in `unsafe` blocks (should be rare — flag any `unsafe` usage you find suspicious even without a working exploit).
 - Path traversal or injection in `rde-config`/`rde-core`'s filesystem handling (e.g. via a maliciously crafted config or theme file).

@@ -11,7 +11,7 @@ mod scheme;
 use crate::{
     domain::{
         identity::{ThemeId, VariantId},
-        manifest::{ContrastLevel, ThemeMode},
+        manifest::{Appearance, ContrastLevel},
         resolved::{
             Color, ColorRoles, ColorSeeds, Motion, ResolvedTheme, Shape, Typography, VariantKind,
         },
@@ -26,7 +26,7 @@ pub(crate) static KDE_COLOR_SCHEM_NAME: &str = "RdeM3";
 pub(crate) fn roles() -> ColorRoles {
     compute_color_roles(
         &ColorSeeds::uniform(&Color::new("#6750a4").unwrap()),
-        ThemeMode::Dark,
+        Appearance::Dark,
         ContrastLevel::Normal,
     )
 }

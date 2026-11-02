@@ -426,7 +426,7 @@ impl ThemeRepository for DiskThemeRepository {
 mod tests {
     use super::*;
     use crate::domain::{
-        ContrastLevel, ThemeMode,
+        Appearance, ContrastLevel,
         resolved::{Color, ColorSeeds, Motion, Shape, Typography, VariantKind},
     };
 
@@ -446,7 +446,7 @@ mod tests {
         let dark_json_path = ocean_dir.join("dark.json");
         let dark_roles = compute_color_roles(
             &ColorSeeds::uniform(&Color::new("#006a6a").unwrap()),
-            ThemeMode::Dark,
+            Appearance::Dark,
             ContrastLevel::Normal,
         );
         let resolved = ResolvedTheme {
@@ -547,7 +547,7 @@ file_path = "dark.json"
                 tertiary: Color::new("#b52700").unwrap(),
                 error: Color::new("#b90063").unwrap(),
             },
-            ThemeMode::Dark,
+            Appearance::Dark,
             ContrastLevel::High,
         );
         assert_eq!(resolved.colors, expected);
@@ -592,7 +592,7 @@ file_path = "dark.json"
 
         let expected = compute_color_roles(
             &ColorSeeds::fallback(),
-            ThemeMode::Dark,
+            Appearance::Dark,
             ContrastLevel::Normal,
         );
         assert_eq!(resolved.colors, expected);

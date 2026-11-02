@@ -10,7 +10,7 @@ mod palette;
 use crate::{
     domain::{
         identity::{ThemeId, VariantId},
-        manifest::{ContrastLevel, ThemeMode},
+        manifest::{Appearance, ContrastLevel},
         resolved::{
             Color, ColorRoles, ColorSeeds, Motion, ResolvedTheme, Shape, Typography, VariantKind,
         },
@@ -22,7 +22,7 @@ use crate::{
 pub(crate) fn roles() -> ColorRoles {
     compute_color_roles(
         &ColorSeeds::uniform(&Color::new("#6750a4").unwrap()),
-        ThemeMode::Dark,
+        Appearance::Dark,
         ContrastLevel::Normal,
     )
 }

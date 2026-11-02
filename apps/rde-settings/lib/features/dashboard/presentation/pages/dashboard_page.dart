@@ -11,6 +11,10 @@ import 'package:rde_settings/features/bluetooth/data/datasources/dbus_bluetooth_
 import 'package:rde_settings/features/bluetooth/domain/repositories/bluetooth_repository_impl.dart';
 import 'package:rde_settings/features/bluetooth/presentation/bloc/bluetooth_bloc.dart';
 import 'package:rde_settings/features/bluetooth/presentation/bloc/bluetooth_event.dart';
+import 'package:rde_settings/features/display/data/datasources/dbus/brightness_proxy.dart';
+import 'package:rde_settings/features/display/data/repositories/brightness_repository_impl.dart';
+import 'package:rde_settings/features/display/presentation/bloc/brightness_bloc.dart';
+import 'package:rde_settings/features/display/presentation/bloc/brightness_event.dart';
 import 'package:rde_settings/features/theme_styling/data/datasources/dbus_theme_datasource.dart';
 import 'package:rde_settings/features/theme_styling/domain/repositories/theme_repository_impl.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
@@ -37,6 +41,7 @@ class DashboardPage extends StatelessWidget {
     );
 
     final volumeRepository = MasterVolumeRepositoryImpl(VolumeProxy());
+    final brightnessRepository = BrightnessRepositoryImpl(BrightnessProxy());
     final bluetoothRepository = BluetoothRepositoryImpl(
       DbusBluetoothDatasource(BluezProxy()),
     );
@@ -52,6 +57,11 @@ class DashboardPage extends StatelessWidget {
           create: (context) =>
               VolumeBloc(repository: volumeRepository)
                 ..add(const VolumeInitEvent()),
+        ),
+        BlocProvider(
+          create: (context) =>
+              BrightnessBloc(repository: brightnessRepository)
+                ..add(const BrightnessInitEvent()),
         ),
         BlocProvider(
           create: (context) =>

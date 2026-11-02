@@ -1,12 +1,15 @@
 //! # Application Theme Service
 //!
-//! Orchestrates theme resolution, atomic publishing transactions, file watching,
-//! and broadcast notifications.
+//! Orchestrates theme resolution, atomic publishing transactions, and file watching.
+//!
+//! The service owns no transport: it never emits D-Bus signals itself. Mutations
+//! return once the new state is durable, and the presentation layer announces the
+//! change afterwards.
 //!
 //! # Publishing Invariant
-//! **Write the file first, then bump the generation, then emit the signal.**
-//! Never emit before the file is durable on disk, ensuring subscribers that
-//! read `default_theme.json` upon signal receipt observe the updated state.
+//! **Write the file first, then bump the generation, then return.**
+//! Never return before the file is durable on disk, ensuring consumers that read
+//! `default_theme.json` when they hear about a change observe the updated state.
 
 use std::{
     path::{Path, PathBuf},
@@ -16,7 +19,7 @@ use std::{
     },
     time::Duration,
 };
-use tokio::sync::{Mutex, RwLock, broadcast};
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 
 use crate::{
@@ -24,7 +27,7 @@ use crate::{
     detect::SessionEnv,
     domain::{
         identity::{ThemeId, VariantId},
-        manifest::{ContrastLevel, ThemeManifest, ThemeMode},
+        manifest::{Appearance, ContrastLevel, ThemeManifest},
         registry::ThemeRegistry,
         resolved::{
             ColorSeeds, Motion, ResolvedTheme, SUPPORTED_RESOLVED_SCHEMA_VERSION, Shape,
@@ -52,7 +55,7 @@ pub struct PublishedState {
     pub active: Option<ThemeId>,
 
     /// Active appearance mode (Light or Dark).
-    pub mode: ThemeMode,
+    pub mode: Appearance,
 }
 
 /// The central theme service coordinating the desktop appearance lifecycle.
@@ -91,10 +94,6 @@ pub struct ThemeService {
 
     /// Serializes publication transactions.
     publish_guard: Mutex<()>,
-
-    theme_changed_tx: broadcast::Sender<ResolvedTheme>,
-    reloaded_tx: broadcast::Sender<()>,
-    theme_list_changed_tx: broadcast::Sender<Vec<ThemeId>>,
 }
 
 impl ThemeService {
@@ -115,7 +114,6 @@ impl ThemeService {
     /// 5. Establish the in-memory publication state.
     /// 6. Render every adapter and atomically write its configuration files.
     /// 7. Shell out to KDE color scheme application if running KDE.
-    /// 8. Emit initial `ThemeChanged` notification.
     ///
     /// # Errors
     /// Returns [`ThemeError`] for repository failures that prevent the initial
@@ -123,7 +121,7 @@ impl ThemeService {
     /// degrade to defaults instead.
     ///
     /// # Hard Invariant
-    /// **Write the file first, then bump the generation, then emit the signal.**
+    /// **Write the file first, then bump the generation, then return.**
     pub async fn startup(
         repo: Arc<dyn ThemeRepository>,
         adapter_registry: AdapterRegistry,
@@ -198,14 +196,6 @@ impl ThemeService {
             Self::maybe_apply_kde(&session_env, &scheme_name);
         }
 
-        // Broadcast channels (capacity 32)
-        let (theme_changed_tx, _) = broadcast::channel(32);
-        let (reloaded_tx, _) = broadcast::channel(32);
-        let (theme_list_changed_tx, _) = broadcast::channel(32);
-
-        // Step 9: Invariant Step C: Emit signal after files are durable.
-        let _ = theme_changed_tx.send(resolved.clone());
-
         debug!("ThemeService startup transaction completed successfully");
 
         Ok(Self {
@@ -222,9 +212,6 @@ impl ThemeService {
             themes_dir,
             generation: AtomicU32::new(generation),
             publish_guard: Mutex::new(()),
-            theme_changed_tx,
-            reloaded_tx,
-            theme_list_changed_tx,
         })
     }
 
@@ -272,7 +259,7 @@ impl ThemeService {
     async fn resolve_with_fallback(
         repo: &dyn ThemeRepository,
         theme_id: &ThemeId,
-        mode: ThemeMode,
+        mode: Appearance,
         contrast: ContrastLevel,
     ) -> ResolvedTheme {
         // Step 1: Load the manifest, falling back to the built-in dynamic manifest.
@@ -314,7 +301,7 @@ impl ThemeService {
     ///
     /// # Returns
     /// A deterministic payload derived from [`Color::fallback`].
-    fn in_memory_fallback(mode: ThemeMode, contrast: ContrastLevel) -> ResolvedTheme {
+    fn in_memory_fallback(mode: Appearance, contrast: ContrastLevel) -> ResolvedTheme {
         let dynamic = ThemeManifest::builtin_dynamic();
         let (variant, _) = dynamic.select_variant(mode, contrast);
 
@@ -495,21 +482,6 @@ impl ThemeService {
         }
     }
 
-    /// Subscribes to `ThemeChanged` signals broadcast across the service.
-    pub fn subscribe_theme_changed(&self) -> broadcast::Receiver<ResolvedTheme> {
-        self.theme_changed_tx.subscribe()
-    }
-
-    /// Subscribes to `Reloaded` completion signals.
-    pub fn subscribe_reloaded(&self) -> broadcast::Receiver<()> {
-        self.reloaded_tx.subscribe()
-    }
-
-    /// Subscribes to `ThemeListChanged` registry changes.
-    pub fn subscribe_theme_list_changed(&self) -> broadcast::Receiver<Vec<ThemeId>> {
-        self.theme_list_changed_tx.subscribe()
-    }
-
     /// Returns a snapshot of the current publication state.
     pub async fn current_state(&self) -> PublishedState {
         let settings = self.theme_settings.read().await;
@@ -545,7 +517,7 @@ impl ThemeService {
     }
 
     /// Returns the persisted appearance mode.
-    pub async fn theme_mode(&self) -> ThemeMode {
+    pub async fn theme_mode(&self) -> Appearance {
         self.theme_settings.read().await.mode
     }
 
@@ -679,7 +651,7 @@ impl ThemeService {
     /// # Hard Invariant
     /// The preference is persisted before the resolved payload is written, the
     /// generation is bumped, and `ThemeChanged` is emitted.
-    pub async fn set_mode(&self, mode: ThemeMode) -> Result<(), ThemeError> {
+    pub async fn set_mode(&self, mode: Appearance) -> Result<(), ThemeError> {
         debug!(mode = ?mode, "Setting appearance mode");
 
         // Step 1: Read the persisted settings and stop early when nothing changes.
@@ -710,7 +682,8 @@ impl ThemeService {
 
     /// Re-reads the installed-theme registry, the active manifest, and the variant.
     ///
-    /// Emits `ThemeChanged` only if the payload changed, and always emits `Reloaded`.
+    /// Republishing happens only when the payload changed; callers that need to
+    /// announce the result compare [`Self::current_state`] before and after.
     pub async fn reload(&self) -> Result<(), ThemeError> {
         debug!("Reloading theme service...");
 
@@ -748,8 +721,6 @@ impl ThemeService {
             self.publish_transaction(resolved).await?;
         }
 
-        // Always emit Reloaded signal
-        let _ = self.reloaded_tx.send(());
         Ok(())
     }
 
@@ -759,7 +730,7 @@ impl ThemeService {
     pub async fn preview(
         &self,
         id: &ThemeId,
-        mode: ThemeMode,
+        mode: Appearance,
         contrast: ContrastLevel,
     ) -> Result<ResolvedTheme, ThemeError> {
         Ok(Self::resolve_with_fallback(self.repo.as_ref(), id, mode, contrast).await)
@@ -841,7 +812,7 @@ impl ThemeService {
     }
 
     /// Performs the atomic publication transaction honoring the hard ordering invariant:
-    /// **Write file first, then bump generation, then emit signal.**
+    /// **Write file first, then bump generation, then return.**
     ///
     /// # Parameters
     /// - `resolved`: new palette to publish
@@ -849,6 +820,11 @@ impl ThemeService {
     /// # Errors
     /// Returns [`ThemeError::Serialization`] only when the cache payload cannot
     /// be encoded; adapter failures are logged and do not abort publication.
+    ///
+    /// # Postconditions
+    /// When this returns successfully the cache file is durable and the
+    /// generation is bumped, so the caller may announce the change over its own
+    /// transport.
     async fn publish_transaction(&self, resolved: ResolvedTheme) -> Result<(), ThemeError> {
         // Step 0: Serialize publications. Two requests must never interleave
         // their renders, deletions, and desktop notifications, or the desktop
@@ -874,17 +850,24 @@ impl ThemeService {
             Self::maybe_apply_kde(&self.session_env, &scheme_name);
         }
 
-        // Step 5: Invariant Step C: Emit ThemeChanged signal.
-        let _ = self.theme_changed_tx.send(resolved);
-
+        // Step 5: The cache file is durable and the generation is bumped, so the
+        // publication is complete; announcing it is the caller's job.
         Ok(())
     }
 
     /// Spawns a background task watching configuration files and themes directories.
-    pub fn start_watcher(self: &Arc<Self>) {
+    ///
+    /// # Parameters
+    /// - `on_reload`: callback invoked after every successful watcher-driven
+    ///   reload, so the transport layer can announce the refreshed state (for
+    ///   example by emitting D-Bus signals) without the service knowing about it
+    pub fn start_watcher<F>(self: &Arc<Self>, on_reload: F)
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
         let service = self.clone();
         tokio::spawn(async move {
-            service.watch_loop().await;
+            service.watch_loop(on_reload).await;
         });
     }
 
@@ -901,7 +884,14 @@ impl ThemeService {
     }
 
     /// Internal debounced watch loop using `notify`.
-    async fn watch_loop(&self) {
+    ///
+    /// # Parameters
+    /// - `on_reload`: invoked after each successful reload so the caller can
+    ///   announce the refreshed state on its own transport
+    async fn watch_loop<F>(&self, on_reload: F)
+    where
+        F: Fn() + Send + Sync,
+    {
         use notify::{Event, RecursiveMode, Watcher};
 
         let (tx, mut rx) = tokio::sync::mpsc::channel(64);
@@ -940,7 +930,15 @@ impl ThemeService {
             while rx.try_recv().is_ok() {}
 
             debug!("Filesystem change detected after debounce; reloading theme service");
-            let _ = self.reload().await;
+
+            // Step 1: Reload from disk, then let the caller announce the result.
+            // A failed reload is logged and the loop keeps watching.
+            match self.reload().await {
+                Ok(()) => on_reload(),
+                Err(err) => {
+                    warn!(error = %err, "Watcher-triggered reload failed; ignoring this event")
+                }
+            }
         }
     }
 }
@@ -952,7 +950,7 @@ mod tests {
         adapter::KdeAdapter,
         domain::{
             identity::{AdapterId, VariantId},
-            manifest::{ContrastLevel, RelativePath, ThemeMode, VariantDescriptor},
+            manifest::{Appearance, ContrastLevel, RelativePath, VariantDescriptor},
             registry::{ThemeEntry, ThemeLocation, ThemeRegistry, ThemeSource},
             resolved::{Color, ColorSeeds, Motion, Shape, Typography, VariantKind},
         },
@@ -1047,7 +1045,7 @@ mod tests {
             let seeds = settings.dynamic.color_seeds();
             let colors = crate::material::compute_color_roles(
                 &seeds,
-                ThemeMode::Dark,
+                Appearance::Dark,
                 ContrastLevel::Normal,
             );
             Ok(ResolvedTheme {
@@ -1074,7 +1072,7 @@ mod tests {
     fn sample_resolved(theme_id: &ThemeId, variant_id: &VariantId) -> ResolvedTheme {
         let colors = crate::material::compute_color_roles(
             &ColorSeeds::uniform(&Color::new("#123456").unwrap()),
-            ThemeMode::Dark,
+            Appearance::Dark,
             ContrastLevel::Normal,
         );
         ResolvedTheme {
@@ -1113,7 +1111,7 @@ mod tests {
         variants.insert(
             dark_var.clone(),
             VariantDescriptor {
-                mode: ThemeMode::Dark,
+                mode: Appearance::Dark,
                 contrast: ContrastLevel::Normal,
                 display_name: None.into(),
                 file_path: RelativePath::new("dark.json").unwrap(),
@@ -1160,15 +1158,11 @@ mod tests {
         let state_after_first = service.current_state().await;
         let gen_first = state_after_first.generation;
 
-        let mut sub = service.subscribe_theme_changed();
-
-        // Calling set_active again with the same theme must be idempotent!
+        // Calling set_active again with the same theme must be idempotent: no
+        // generation bump means the D-Bus layer announces nothing either.
         service.set_active(theme_a.clone()).await.unwrap();
         let state_after_second = service.current_state().await;
         assert_eq!(state_after_second.generation, gen_first);
-
-        // No signal emitted on idempotent call
-        assert!(sub.try_recv().is_err());
     }
 
     #[tokio::test]
@@ -1186,7 +1180,10 @@ mod tests {
             .themes
             .insert(theme_a.clone(), ThemeEntry::default());
         let mut variants = BTreeMap::new();
-        for (variant, mode) in [(&dark_var, ThemeMode::Dark), (&light_var, ThemeMode::Light)] {
+        for (variant, mode) in [
+            (&dark_var, Appearance::Dark),
+            (&light_var, Appearance::Light),
+        ] {
             variants.insert(
                 variant.clone(),
                 VariantDescriptor {
@@ -1237,10 +1234,10 @@ mod tests {
 
         let state = service.current_state().await;
         assert_eq!(state.active.as_ref(), Some(&theme_a));
-        assert_eq!(state.mode, ThemeMode::Light);
+        assert_eq!(state.mode, Appearance::Light);
         assert_eq!(state.resolved.variant, light_var);
         assert_eq!(state.generation, generation_before + 1);
-        assert_eq!(service.theme_mode().await, ThemeMode::Light);
+        assert_eq!(service.theme_mode().await, Appearance::Light);
         assert_eq!(service.theme_manifest().await.name, theme_a);
         assert_eq!(repo.settings.lock().unwrap().active_theme, Some(theme_a));
 
@@ -1280,7 +1277,6 @@ mod tests {
 
         // The built-in dynamic theme is active right after startup.
         let generation_before = service.current_state().await.generation;
-        let mut sub = service.subscribe_theme_changed();
 
         // Step 1: Update every seed and expect a republish.
         let settings = service
@@ -1299,11 +1295,11 @@ mod tests {
 
         let state_after = service.current_state().await;
         assert_eq!(state_after.generation, generation_before + 1);
-        let received = sub.try_recv().expect("republished dynamic theme");
-        assert_eq!(received, state_after.resolved);
-        assert_eq!(received.kind, VariantKind::Dynamic);
+        let published = state_after.resolved.clone();
+        assert_eq!(published, service.resolved_theme().await);
+        assert_eq!(published.kind, VariantKind::Dynamic);
         assert_eq!(
-            received.colors,
+            published.colors,
             crate::material::compute_color_roles(
                 &ColorSeeds {
                     primary: Color::new("#006a6a").unwrap(),
@@ -1311,7 +1307,7 @@ mod tests {
                     tertiary: Color::new("#b52700").unwrap(),
                     error: Color::new("#b90063").unwrap(),
                 },
-                ThemeMode::Dark,
+                Appearance::Dark,
                 ContrastLevel::Normal,
             )
         );
@@ -1345,30 +1341,27 @@ mod tests {
 
         // Startup publishes the default dark appearance.
         let generation_before = service.current_state().await.generation;
-        let mut sub = service.subscribe_theme_changed();
 
         // Step 1: Switching to light persists the preference and republishes.
-        service.set_mode(ThemeMode::Light).await.unwrap();
-        assert_eq!(service.settings().await.mode, ThemeMode::Light);
-        assert_eq!(repo.settings.lock().unwrap().mode, ThemeMode::Light);
+        service.set_mode(Appearance::Light).await.unwrap();
+        assert_eq!(service.settings().await.mode, Appearance::Light);
+        assert_eq!(repo.settings.lock().unwrap().mode, Appearance::Light);
 
         let published = service.current_state().await;
-        assert_eq!(published.mode, ThemeMode::Light);
+        assert_eq!(published.mode, Appearance::Light);
         assert_eq!(published.generation, generation_before + 1);
-        let received = sub.try_recv().expect("republished theme on mode change");
-        assert_eq!(received, published.resolved);
+        assert_eq!(service.resolved_theme().await, published.resolved);
 
-        // Step 2: Selecting the same mode again neither bumps nor signals.
-        service.set_mode(ThemeMode::Light).await.unwrap();
+        // Step 2: Selecting the same mode again neither bumps nor republishes.
+        service.set_mode(Appearance::Light).await.unwrap();
         assert_eq!(
             service.current_state().await.generation,
             published.generation
         );
-        assert!(sub.try_recv().is_err());
     }
 
     #[tokio::test]
-    async fn test_publish_ordering_file_durable_before_signal() {
+    async fn test_publish_writes_the_cache_file_before_returning() {
         let temp = tempfile::tempdir().unwrap();
         let cache_file = temp.path().join("current.json");
         let settings_file = temp.path().join("settings.toml");
@@ -1387,7 +1380,7 @@ mod tests {
         variants.insert(
             dark_var.clone(),
             VariantDescriptor {
-                mode: ThemeMode::Dark,
+                mode: Appearance::Dark,
                 contrast: ContrastLevel::Normal,
                 display_name: None.into(),
                 file_path: RelativePath::new("dark.json").unwrap(),
@@ -1427,21 +1420,14 @@ mod tests {
             .unwrap(),
         );
 
-        let mut sub = service.subscribe_theme_changed();
-        let target_cache = cache_file.clone();
-
-        // Spawn a task that verifies file is already durable the moment signal arrives
-        let verify_task = tokio::spawn(async move {
-            let received = sub.recv().await.unwrap();
-            // Invariant verification: file exists and matches payload!
-            assert!(target_cache.exists());
-            let file_content = std::fs::read_to_string(&target_cache).unwrap();
-            let parsed_file: ResolvedTheme = serde_json::from_str(&file_content).unwrap();
-            assert_eq!(parsed_file, received);
-        });
-
+        // Invariant verification: once the publication returns, the cache file is
+        // durable and matches the payload the D-Bus layer is about to announce.
         service.set_active(theme_b).await.unwrap();
-        verify_task.await.unwrap();
+
+        assert!(cache_file.exists());
+        let file_content = std::fs::read_to_string(&cache_file).unwrap();
+        let parsed_file: ResolvedTheme = serde_json::from_str(&file_content).unwrap();
+        assert_eq!(parsed_file, service.resolved_theme().await);
     }
 
     #[tokio::test]
@@ -1485,14 +1471,14 @@ mod tests {
 
         // Step 2: Another variant is published under its own name and does not
         // disturb the scheme of the variant that stays on disk.
-        service.set_mode(ThemeMode::Light).await.unwrap();
+        service.set_mode(Appearance::Light).await.unwrap();
         let light = schemes.join("rde-dynamic-light-v2.colors");
         assert!(light.exists(), "the light variant gets its own scheme");
         assert!(first_dark.exists(), "the dark scheme is still installed");
 
         // Step 3: Regenerating the dark variant installs generation 3 and deletes
         // the superseded scheme of generation 1.
-        service.set_mode(ThemeMode::Dark).await.unwrap();
+        service.set_mode(Appearance::Dark).await.unwrap();
         let second_dark = schemes.join("rde-dynamic-dark-v3.colors");
         assert!(
             second_dark.exists(),

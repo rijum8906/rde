@@ -8,27 +8,26 @@ import 'package:core/theme.dart';
 /// Keeps the settings app in sync with the theme published by `org.rde.Theme`.
 ///
 /// Startup reads the on-disk cache in `main()` before the first frame, so this
-/// sync only has to follow later publications. The `ThemeChanged` signal is
-/// treated as a notification, not as the payload: every signal triggers a fresh
-/// `GetResolvedTheme` call, which always observes the durable payload the
-/// service wrote before signalling.
+/// sync only has to follow later publications. Each `PropertiesChanged`
+/// notification carries the payload the service read back for it, and the
+/// appearance is the variant that payload was resolved for.
 ///
 /// # Parameters
 /// - [appThemeBloc]: global bloc wrapping the `MaterialApp` theme
 ///
 /// # Returns
-/// The signal subscription, or `null` when the session bus rejected it.
-Future<StreamSubscription<ThemeChangedSignal>?> syncSystemTheme(
+/// The payload subscription, or `null` when the session bus rejected it.
+Future<StreamSubscription<ResolvedTheme>?> syncSystemTheme(
   AppThemeBloc appThemeBloc,
 ) async {
   final proxy = RdeThemeProxy();
 
   // Step 1: Subscribe before any read, so a publication that lands between the
   // startup read and the subscription is not missed.
-  StreamSubscription<ThemeChangedSignal>? subscription;
+  StreamSubscription<ResolvedTheme>? subscription;
   try {
-    subscription = proxy.watchThemeChanges().listen(
-      (signal) => _reloadFromSignal(appThemeBloc, proxy, signal),
+    subscription = proxy.watchResolvedTheme().listen(
+      (resolved) => _apply(appThemeBloc, resolved),
       onError: (Object error) {
         debugPrint('org.rde.Theme signal subscription failed: $error');
       },
@@ -44,36 +43,7 @@ Future<StreamSubscription<ThemeChangedSignal>?> syncSystemTheme(
   return subscription;
 }
 
-/// Reloads the published theme after a `ThemeChanged` signal.
-///
-/// The service writes the payload to disk before signalling, so the
-/// authoritative read is `GetResolvedTheme`; the signal JSON is only a fallback
-/// for a transient call failure.
-Future<void> _reloadFromSignal(
-  AppThemeBloc appThemeBloc,
-  RdeThemeProxy proxy,
-  ThemeChangedSignal signal,
-) async {
-  // Step 1: Prefer the service read, exactly like a cold startup.
-  final result = await proxy.fetchResolvedTheme();
-  final resolved = result.fold((failure) {
-    debugPrint(
-      'Unable to read the published theme after a signal, using the signal '
-      'payload: ${failure.message}',
-    );
-    return ResolvedTheme.tryFromJsonString(signal.resolvedJson);
-  }, (resolved) => resolved);
-
-  if (resolved == null) {
-    debugPrint('Ignoring an unreadable org.rde.Theme payload');
-    return;
-  }
-
-  // Step 2: Apply it with the appearance it was resolved for.
-  await _apply(appThemeBloc, proxy, resolved);
-}
-
-/// Reads the current payload and appearance from the service.
+/// Reads the current payload from the service.
 Future<void> _reloadFromService(
   AppThemeBloc appThemeBloc,
   RdeThemeProxy proxy,
@@ -88,26 +58,15 @@ Future<void> _reloadFromService(
     return;
   }
 
-  await _apply(appThemeBloc, proxy, resolved);
+  await _apply(appThemeBloc, resolved);
 }
 
-/// Applies [resolved] together with the appearance the service publishes.
-Future<void> _apply(
-  AppThemeBloc appThemeBloc,
-  RdeThemeProxy proxy,
-  ResolvedTheme resolved,
-) async {
-  // Step 1: Ask for the appearance; fall back to the surface luminance when
-  // the property cannot be read so a transient bus error cannot flip the app.
-  final modeResult = await proxy.fetchMode();
-  final mode = modeResult.fold((failure) {
-    debugPrint(
-      'Unable to read the org.rde.Theme mode, inferring it from the surface '
-      'color: ${failure.message}',
-    );
-    return AppearanceMode.fromSurface(resolved.colors.surface);
-  }, (mode) => mode);
-
-  // Step 2: Hand the complete payload to the app theme bloc.
-  appThemeBloc.add(ApplyResolvedThemeEvent(resolved: resolved, mode: mode));
+/// Applies [resolved] with the appearance it was resolved for.
+Future<void> _apply(AppThemeBloc appThemeBloc, ResolvedTheme resolved) async {
+  appThemeBloc.add(
+    ApplyResolvedThemeEvent(
+      resolved: resolved,
+      mode: AppearanceMode.fromDbus(resolved.variant),
+    ),
+  );
 }

@@ -32,9 +32,7 @@ Future<void> _wheel(WidgetTester tester, double deltaY) async {
   final center = tester.getCenter(find.byType(RdeSlider));
   final pointer = TestPointer(1, PointerDeviceKind.mouse);
   pointer.hover(center);
-  await tester.sendEventToBinding(
-    pointer.scroll(Offset(0, deltaY)),
-  );
+  await tester.sendEventToBinding(pointer.scroll(Offset(0, deltaY)));
 }
 
 void main() {

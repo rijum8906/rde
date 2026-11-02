@@ -4,18 +4,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:core/core.dart';
-import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 import 'package:rde_settings/features/theme_styling/domain/repositories/theme_repository.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_state.dart';
 
-/// Aggregates the `org.rde.Theme` operations for the Theme & Styling page.
+/// Drives the Theme & Styling page from the `org.rde.Theme` service.
 ///
-/// Reads and mutations go straight through [ThemeRepository]; every mutation
-/// is followed by a catalog reload, so the UI reflects the service's
-/// authoritative state instead of optimistic guesses. The bloc also subscribes
-/// to the service's `ThemeChanged` and `ThemeListChanged` signals so theme
-/// switches made by other RDE applications appear here immediately.
+/// Every refresh touches only the slice that changed: a published payload
+/// updates the colors without re-reading manifests, and the manifests are
+/// re-read only when the registry itself changes.
 class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
   ThemeBloc({required this._repository}) : super(ThemeState.initial()) {
     on<ThemeInitEvent>(_onInit);
@@ -28,65 +25,153 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     on<SetDynamicAccentEvent>(_onSetDynamicAccent);
     on<ExtractWallpaperSeedsEvent>(_onExtractWallpaperSeeds);
 
-    // Live sync is best effort: when the session bus cannot deliver the
-    // signals, explicit actions and the refresh button still work.
-    _subscription = _repository.watchThemeChanges().listen(
-      (_) => add(const ThemeServiceChangedEvent()),
+    // Listen for property changes. The payload and the registry are separate
+    // streams, and both are debounced by 50ms so a burst of signals caused by a
+    // single write is delivered once.
+    _resolvedSubscription = _repository.watchResolvedTheme().listen(
+      (resolved) => _scheduleChange(resolved: resolved),
       onError: (Object error) {
-        debugPrint('org.rde.Theme signal subscription failed: $error');
+        debugPrint('org.rde.Theme payload signal failed: $error');
+      },
+    );
+    _registrySubscription = _repository.watchThemeList().listen(
+      (ids) => _scheduleChange(availableThemes: ids),
+      onError: (Object error) {
+        debugPrint('org.rde.Theme registry signal failed: $error');
       },
     );
   }
 
-  /// Service-backed repository this page reads and mutates.
   final ThemeRepository _repository;
+  StreamSubscription<ResolvedTheme>? _resolvedSubscription;
+  StreamSubscription<List<String>>? _registrySubscription;
+  Timer? _debounce;
+  ResolvedTheme? _pendingResolved;
+  List<String>? _pendingThemes;
 
-  StreamSubscription<void>? _subscription;
-  bool _isLoading = false;
+  // ==========================================
+  // INITIAL LOAD
+  // ==========================================
 
-  Future<void> _onInit(ThemeInitEvent event, Emitter<ThemeState> emit) {
-    return _load(emit, showLoading: true);
+  /// Reads every slice once, because the page renders all of them on open.
+  Future<void> _onInit(ThemeInitEvent event, Emitter<ThemeState> emit) async {
+    emit(state.copyWith(status: ThemeStatus.loading, clearError: true));
+
+    // Step 1: Read the service properties (version, active theme, appearance).
+    final snapshot = await _read(emit, _repository.loadSnapshot(), fatal: true);
+    if (snapshot == null) return;
+
+    // Step 2: Read the payload the desktop currently renders.
+    final resolved = await _read(
+      emit,
+      _repository.getResolvedTheme(),
+      fatal: true,
+    );
+    if (resolved == null) return;
+
+    // Step 3: Read the manifests of the installed themes.
+    final themes = await _read(emit, _repository.loadThemes(), fatal: true);
+    if (themes == null) return;
+
+    emit(
+      state.copyWith(
+        status: ThemeStatus.success,
+        version: snapshot.version,
+        currentTheme: resolved.themeId.isEmpty
+            ? snapshot.activeThemeId
+            : resolved.themeId,
+        mode: snapshot.mode,
+        resolved: resolved,
+        themes: themes,
+        previewMode: snapshot.mode,
+        previewResolved: resolved,
+        isBusy: false,
+        clearError: true,
+      ),
+    );
   }
 
-  Future<void> _onReload(
-    ReloadThemeDatabaseEvent event,
-    Emitter<ThemeState> emit,
-  ) async {
-    // Step 1: Ask the service to reconcile manifests, variant files, and
-    // settings with what is durable on disk.
-    emit(state.copyWith(isBusy: true, clearError: true));
-    final failure = _failureOf(await _repository.reload());
-    if (failure != null) {
-      emit(state.copyWith(isBusy: false, errorMessage: failure.message));
-      return;
-    }
+  // ==========================================
+  // BACKGROUND UPDATES (The Fast Path)
+  // ==========================================
 
-    // Step 2: Re-read everything the page renders.
-    await _load(emit);
-  }
-
+  /// Applies the slice the service reported, without touching the others.
   Future<void> _onServiceChanged(
     ThemeServiceChangedEvent event,
     Emitter<ThemeState> emit,
   ) async {
-    // A mutation in progress reloads explicitly; skipping avoids racing it.
-    if (state.isBusy) {
-      return;
+    // Without a first load there is nothing to patch, so take the full path.
+    if (!state.hasData) {
+      return _onInit(const ThemeInitEvent(), emit);
     }
-    await _load(emit);
+
+    // Step 1: The payload arrives with the notification. Only a notification
+    // that could not deliver it costs one small `GetResolvedTheme` call.
+    var resolved = event.resolved;
+    if (resolved == null) {
+      resolved = await _read(emit, _repository.getResolvedTheme());
+      if (resolved == null) {
+        // Ignore background errors to avoid flashing the UI.
+        debugPrint('Failed to refresh theme colors: ${state.errorMessage}');
+        return;
+      }
+    }
+    _applyPayload(emit, resolved);
+
+    // Step 2: Manifests are the expensive read, so they are refreshed only when
+    // the registry list really differs from the one on screen.
+    final registry = event.availableThemes;
+    if (registry == null || _sameRegistry(registry)) return;
+
+    final themes = await _read(emit, _repository.loadThemes());
+    if (themes == null || isClosed) return;
+    emit(state.copyWith(themes: themes));
   }
 
-  void _onDismissError(DismissThemeErrorEvent event, Emitter<ThemeState> emit) {
-    emit(state.copyWith(clearError: true));
+  // ==========================================
+  // ACTIONS (Optimistic UI)
+  // ==========================================
+
+  Future<void> _onSetAppearance(
+    SetAppearanceEvent event,
+    Emitter<ThemeState> emit,
+  ) async {
+    if (state.isBusy || state.mode == event.mode) return;
+
+    // Step 1: OPTIMISTIC UPDATE: switch the UI instantly. No waiting for D-Bus.
+    emit(
+      state.copyWith(isBusy: true, clearError: true, previewMode: event.mode),
+    );
+
+    final failure = _failureOf(await _repository.setMode(event.mode));
+    if (failure != null) {
+      // Step 2: ROLLBACK: revert the preview to the mode the desktop renders.
+      emit(
+        state.copyWith(
+          isBusy: false,
+          errorMessage: failure.message,
+          previewMode: state.mode,
+        ),
+      );
+      return;
+    }
+
+    // Step 3: Read just the republished payload, so the colors match the new
+    // appearance without waiting for the signal round trip.
+    final resolved = await _read(emit, _repository.getResolvedTheme());
+    if (resolved == null) {
+      emit(state.copyWith(isBusy: false));
+      return;
+    }
+    emit(state.copyWith(isBusy: false));
+    _applyPayload(emit, resolved);
   }
 
   Future<void> _onSelectTheme(
     SelectThemeEvent event,
     Emitter<ThemeState> emit,
   ) async {
-    if (state.isBusy) {
-      return;
-    }
+    if (state.isBusy) return;
 
     emit(state.copyWith(isBusy: true, clearError: true));
     final failure = _failureOf(await _repository.setTheme(event.theme));
@@ -95,56 +180,23 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
       return;
     }
 
-    await _load(emit);
-  }
-
-  Future<void> _onSetAppearance(
-    SetAppearanceEvent event,
-    Emitter<ThemeState> emit,
-  ) async {
-    if (state.isBusy || state.mode == event.mode) {
-      return;
+    // Only the payload changed, so only the payload is read back.
+    final resolved = await _read(emit, _repository.getResolvedTheme());
+    emit(state.copyWith(isBusy: false));
+    if (resolved != null) {
+      _applyPayload(emit, resolved);
     }
-
-    emit(
-      state.copyWith(isBusy: true, clearError: true, previewMode: event.mode),
-    );
-    final failure = _failureOf(await _repository.setMode(event.mode));
-    if (failure != null) {
-      emit(state.copyWith(isBusy: false, errorMessage: failure.message));
-      return;
-    }
-
-    await _load(emit);
-  }
-
-  Future<void> _onSetPreviewMode(
-    SetPreviewModeEvent event,
-    Emitter<ThemeState> emit,
-  ) async {
-    if (state.previewMode == event.mode) {
-      return;
-    }
-
-    emit(state.copyWith(previewMode: event.mode));
-    await _loadPreview(emit);
   }
 
   Future<void> _onSetDynamicAccent(
     SetDynamicAccentEvent event,
     Emitter<ThemeState> emit,
   ) async {
-    if (state.isBusy) {
-      return;
-    }
+    if (state.isBusy) return;
 
-    // Step 1: Derive every family from the picked accent. The helper also
-    // normalizes the hex form and falls back when the value is malformed.
     final seeds = seedsFromAccent(event.accent);
-
     emit(state.copyWith(isBusy: true, clearError: true));
 
-    // Step 2: Send all four seeds; the service regenerates each palette.
     final failure = _failureOf(
       await _repository.updateDynamicTheme(
         primary: seeds.primary,
@@ -153,30 +205,24 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
         error: seeds.error,
       ),
     );
+
     if (failure != null) {
       emit(state.copyWith(isBusy: false, errorMessage: failure.message));
-      return;
+    } else {
+      emit(state.copyWith(isBusy: false, dynamicSeeds: seeds));
     }
-
-    // Step 3: Mirror the derived seeds and refresh the catalog.
-    emit(state.copyWith(dynamicSeeds: seeds));
-    await _load(emit);
   }
 
   Future<void> _onExtractWallpaperSeeds(
     ExtractWallpaperSeedsEvent event,
     Emitter<ThemeState> emit,
   ) async {
-    if (state.isBusy) {
-      return;
-    }
+    if (state.isBusy) return;
 
     emit(state.copyWith(isBusy: true, clearError: true));
 
-    // Step 1: The app owns wallpaper decoding; ask it for the four seeds.
     final extracted = await _repository.seedsFromWallpaper();
 
-    // Step 2: Hand the seeds to the service, which regenerates every family.
     return extracted.fold(
       (failure) async =>
           emit(state.copyWith(isBusy: false, errorMessage: failure.message)),
@@ -191,103 +237,36 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
         );
         if (failure != null) {
           emit(state.copyWith(isBusy: false, errorMessage: failure.message));
-          return;
+        } else {
+          emit(state.copyWith(isBusy: false, dynamicSeeds: seeds));
         }
-
-        // Step 3: Mirror the extracted seeds and refresh the catalog.
-        emit(state.copyWith(dynamicSeeds: seeds));
-        await _load(emit);
       },
     );
   }
 
-  /// Loads the catalog and publishes it as the new state.
-  ///
-  /// Concurrent loads are dropped; the last emitted state always reflects a
-  /// complete read of the service.
-  Future<void> _load(
-    Emitter<ThemeState> emit, {
-    bool showLoading = false,
-  }) async {
-    if (_isLoading) {
-      return;
-    }
-    _isLoading = true;
+  // ==========================================
+  // PREVIEWS & MISC
+  // ==========================================
 
-    try {
-      // Step 1: Show a spinner only for the very first load, otherwise keep
-      // the current content visible while refreshing.
-      if (showLoading && !state.hasCatalog) {
-        emit(state.copyWith(status: ThemeStatus.loading, clearError: true));
-      } else {
-        emit(state.copyWith(isBusy: true, clearError: true));
-      }
+  Future<void> _onSetPreviewMode(
+    SetPreviewModeEvent event,
+    Emitter<ThemeState> emit,
+  ) async {
+    if (state.previewMode == event.mode) return;
+    emit(state.copyWith(previewMode: event.mode));
 
-      // Step 2: Read the theme catalog.
-      Failure? failure;
-      ThemeCatalog? catalog;
-      final result = await _repository.loadCatalog();
-      result.fold((value) => failure = value, (value) => catalog = value);
+    final rendered = state.resolved;
+    if (rendered == null) return;
 
-      if (failure != null || catalog == null) {
-        emit(
-          state.copyWith(
-            status: state.hasCatalog
-                ? ThemeStatus.success
-                : ThemeStatus.failure,
-            isBusy: false,
-            errorMessage: failure?.message,
-          ),
-        );
-        return;
-      }
-
-      // Step 3: Publish the new catalog. The preview follows the desktop
-      // appearance on the first load and keeps the user's choice afterwards.
-      final loaded = catalog!;
-      final firstLoad = !state.hasCatalog;
-      final previewMode = firstLoad ? loaded.mode : state.previewMode;
-      emit(
-        state.copyWith(
-          status: ThemeStatus.success,
-          catalog: loaded,
-          previewMode: previewMode,
-          previewResolved: previewMode == loaded.mode
-              ? loaded.resolved
-              : state.previewResolved,
-          isBusy: false,
-          clearError: true,
-        ),
-      );
-
-      // Step 4: Re-resolve the preview when it shows the other appearance.
-      if (previewMode != loaded.mode) {
-        await _loadPreview(emit);
-      }
-    } finally {
-      _isLoading = false;
-    }
-  }
-
-  /// Resolves the payload the live preview renders.
-  ///
-  /// The active appearance is served from the loaded catalog; the other one is
-  /// computed by the service through `Preview` without committing it.
-  Future<void> _loadPreview(Emitter<ThemeState> emit) async {
-    final catalog = state.catalog;
-    if (catalog == null) {
+    // Previewing the appearance the desktop already renders needs no service
+    // call: the payload on screen is the answer.
+    if (state.previewMode == state.mode) {
+      emit(state.copyWith(previewResolved: rendered));
       return;
     }
 
-    // Step 1: Reuse the published payload when the preview shows it.
-    if (state.previewMode == catalog.mode) {
-      emit(state.copyWith(previewResolved: catalog.resolved));
-      return;
-    }
-
-    // Step 2: Ask the service for a preview of the other appearance.
     final result = await _repository.preview(
-      catalog.currentTheme,
+      state.currentTheme,
       state.previewMode,
     );
     result.fold(
@@ -296,14 +275,123 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     );
   }
 
-  /// Extracts the failure of a void result, or `null` on success.
+  Future<void> _onReload(
+    ReloadThemeDatabaseEvent event,
+    Emitter<ThemeState> emit,
+  ) async {
+    emit(state.copyWith(isBusy: true, clearError: true));
+    final failure = _failureOf(await _repository.reload());
+
+    if (failure != null) {
+      emit(state.copyWith(isBusy: false, errorMessage: failure.message));
+      return;
+    }
+
+    // The service may have picked up manifests and settings, so this is the one
+    // path that re-reads every slice.
+    final snapshot = await _read(emit, _repository.loadSnapshot());
+    final resolved = await _read(emit, _repository.getResolvedTheme());
+    final themes = await _read(emit, _repository.loadThemes());
+
+    emit(
+      state.copyWith(
+        version: snapshot?.version,
+        currentTheme: resolved?.themeId,
+        mode: snapshot?.mode,
+        resolved: resolved,
+        themes: themes,
+        isBusy: false,
+      ),
+    );
+    if (resolved != null) {
+      _applyPayload(emit, resolved);
+    }
+  }
+
+  void _onDismissError(DismissThemeErrorEvent event, Emitter<ThemeState> emit) {
+    emit(state.copyWith(clearError: true));
+  }
+
+  // ==========================================
+  // HELPERS
+  // ==========================================
+
+  /// Applies a published payload: its theme id and variant are the active theme
+  /// and the rendered appearance, so no property read is needed.
+  void _applyPayload(Emitter<ThemeState> emit, ResolvedTheme resolved) {
+    final mode = AppearanceMode.fromDbus(resolved.variant);
+    emit(
+      state.copyWith(
+        status: ThemeStatus.success,
+        currentTheme: resolved.themeId,
+        mode: mode,
+        resolved: resolved,
+        previewResolved: state.previewMode == mode
+            ? resolved
+            : state.previewResolved,
+      ),
+    );
+  }
+
+  /// Awaits [request] and reports its failure, returning `null` on error.
+  ///
+  /// [fatal] marks a read the page cannot render without, which moves the state
+  /// to [ThemeStatus.failure]; every other failure only sets the inline message.
+  Future<T?> _read<T>(
+    Emitter<ThemeState> emit,
+    Future<Either<Failure, T>> request, {
+    bool fatal = false,
+  }) async {
+    final result = await request;
+    return result.fold((failure) {
+      emit(
+        state.copyWith(
+          status: fatal ? ThemeStatus.failure : state.status,
+          errorMessage: failure.message,
+        ),
+      );
+      return null;
+    }, (value) => value);
+  }
+
+  /// Whether [ids] matches the registry the page already shows.
+  bool _sameRegistry(List<String> ids) {
+    final installed = state.themes
+        .map((theme) => theme.name)
+        .where((name) => name != ThemeManifest.dynamicId)
+        .toSet();
+    return installed.length == ids.toSet().length && installed.containsAll(ids);
+  }
+
+  /// Coalesces a burst of service notifications into one change event.
+  void _scheduleChange({
+    ResolvedTheme? resolved,
+    List<String>? availableThemes,
+  }) {
+    _pendingResolved = resolved ?? _pendingResolved;
+    _pendingThemes = availableThemes ?? _pendingThemes;
+
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 50), () {
+      final pending = ThemeServiceChangedEvent(
+        resolved: _pendingResolved,
+        availableThemes: _pendingThemes,
+      );
+      _pendingResolved = null;
+      _pendingThemes = null;
+      add(pending);
+    });
+  }
+
   Failure? _failureOf(Either<Failure, void> result) {
     return result.fold((failure) => failure, (_) => null);
   }
 
   @override
   Future<void> close() async {
-    await _subscription?.cancel();
+    _debounce?.cancel();
+    await _resolvedSubscription?.cancel();
+    await _registrySubscription?.cancel();
     return super.close();
   }
 }

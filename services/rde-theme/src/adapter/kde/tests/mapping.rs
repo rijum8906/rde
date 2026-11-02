@@ -7,7 +7,7 @@ use super::{KDE_COLOR_SCHEM_NAME, relative_luminance, roles, section};
 use crate::{
     adapter::kde::{color::to_kde_rgb, render_color_scheme},
     domain::{
-        manifest::{ContrastLevel, ThemeMode},
+        manifest::{Appearance, ContrastLevel},
         resolved::{Color, ColorSeeds},
     },
     material::compute_color_roles,
@@ -175,13 +175,13 @@ fn background_ladder_is_monotonic() {
     // the container tiers climb with elevation in the dark appearance and fall
     // in the light one, because a raised surface is lighter on dark and darker
     // on light. The test guards against reading the tiers out of order.
-    let dark = compute_color_roles(&seeds, ThemeMode::Dark, ContrastLevel::Normal);
+    let dark = compute_color_roles(&seeds, Appearance::Dark, ContrastLevel::Normal);
     let luminance = |color: &Color| relative_luminance(color);
     assert!(luminance(&dark.surface_container_high) >= luminance(&dark.surface_container));
     assert!(luminance(&dark.surface_container) >= luminance(&dark.surface_container_low));
     assert!(luminance(&dark.surface_container_low) >= luminance(&dark.surface_container_lowest));
 
-    let light = compute_color_roles(&seeds, ThemeMode::Light, ContrastLevel::Normal);
+    let light = compute_color_roles(&seeds, Appearance::Light, ContrastLevel::Normal);
     assert!(luminance(&light.surface_container_lowest) >= luminance(&light.surface_container_low));
     assert!(luminance(&light.surface_container_low) >= luminance(&light.surface_container));
     assert!(luminance(&light.surface_container) >= luminance(&light.surface_container_high));

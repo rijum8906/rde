@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:fpdart/fpdart.dart';
 import 'package:core/core.dart';
-import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 import 'package:rde_settings/features/theme_styling/domain/repositories/theme_repository.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
 
@@ -63,7 +62,10 @@ class FakeThemeRepository implements ThemeRepository {
   };
 
   final List<String> calls = [];
-  final StreamController<void> _changes = StreamController<void>.broadcast();
+  final StreamController<ResolvedTheme> _payloads =
+      StreamController<ResolvedTheme>.broadcast();
+  final StreamController<List<String>> _registry =
+      StreamController<List<String>>.broadcast();
 
   final Map<String, ThemeManifest> manifests = {
     'default': const ThemeManifest(
@@ -133,13 +135,31 @@ class FakeThemeRepository implements ThemeRepository {
   DynamicSeeds? wallpaperSeeds;
   bool failWallpaper = false;
   bool failLoad = false;
-  int loadCalls = 0;
 
-  /// Emits a service change.
-  void notifyChanged() => _changes.add(null);
+  /// Number of property snapshots read.
+  int snapshotReads = 0;
 
-  /// Releases the signal stream.
-  Future<void> dispose() => _changes.close();
+  /// Number of payloads read.
+  int resolvedReads = 0;
+
+  /// Number of manifest lists read.
+  int themeLoads = 0;
+
+  /// Registry identifiers, excluding the built-in dynamic theme.
+  List<String> get registryIds =>
+      manifests.keys.where((name) => name != ThemeManifest.dynamicId).toList();
+
+  /// Emits a service change carrying the new payload and registry.
+  void notifyChanged() {
+    _payloads.add(resolvedFor(currentTheme, mode));
+    _registry.add(registryIds);
+  }
+
+  /// Releases the signal streams.
+  Future<void> dispose() async {
+    await _payloads.close();
+    await _registry.close();
+  }
 
   /// Returns the payload the service would publish for [theme] and [mode].
   ResolvedTheme resolvedFor(String theme, AppearanceMode mode) {
@@ -150,31 +170,39 @@ class FakeThemeRepository implements ThemeRepository {
     );
   }
 
-  ThemeCatalog _catalog() {
-    return ThemeCatalog(
-      snapshot: ThemeSnapshot(
-        version: 1,
-        activeTheme: currentTheme == ThemeManifest.dynamicId
-            ? ''
-            : currentTheme,
-        mode: mode,
-        availableThemes: manifests.keys
-            .where((name) => name != ThemeManifest.dynamicId)
-            .toList(),
-        generation: loadCalls,
-      ),
-      themes: manifests.values.toList(),
-      resolved: resolvedFor(currentTheme, mode),
+  ThemeSnapshot _snapshot() {
+    return ThemeSnapshot(
+      version: 1,
+      activeTheme: currentTheme == ThemeManifest.dynamicId ? '' : currentTheme,
+      mode: mode,
+      availableThemes: registryIds,
+      generation: resolvedReads,
     );
   }
 
-  @override
-  Future<Either<Failure, ThemeCatalog>> loadCatalog() async {
-    loadCalls++;
+  Either<Failure, T> _guard<T>(T Function() read) {
     if (failLoad) {
       return Left(Failure('The theme service is offline.'));
     }
-    return Right(_catalog());
+    return Right(read());
+  }
+
+  @override
+  Future<Either<Failure, ThemeSnapshot>> loadSnapshot() async {
+    snapshotReads++;
+    return _guard(_snapshot);
+  }
+
+  @override
+  Future<Either<Failure, ResolvedTheme>> getResolvedTheme() async {
+    resolvedReads++;
+    return _guard(() => resolvedFor(currentTheme, mode));
+  }
+
+  @override
+  Future<Either<Failure, List<ThemeManifest>>> loadThemes() async {
+    themeLoads++;
+    return _guard(() => manifests.values.toList());
   }
 
   @override
@@ -237,5 +265,8 @@ class FakeThemeRepository implements ThemeRepository {
   }
 
   @override
-  Stream<void> watchThemeChanges() => _changes.stream;
+  Stream<ResolvedTheme> watchResolvedTheme() => _payloads.stream;
+
+  @override
+  Stream<List<String>> watchThemeList() => _registry.stream;
 }

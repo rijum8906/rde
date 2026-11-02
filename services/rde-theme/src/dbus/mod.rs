@@ -6,5 +6,5 @@ pub mod iface;
 
 pub use iface::{
     PORTAL_INTERFACE_NAME, PORTAL_OBJECT_PATH, PortalSettingsInterface, THEME_INTERFACE_NAME,
-    THEME_OBJECT_PATH, ThemeInterface, spawn_dbus_signal_broadcaster,
+    THEME_OBJECT_PATH, ThemeInterface,
 };

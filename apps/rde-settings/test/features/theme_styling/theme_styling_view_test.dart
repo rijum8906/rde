@@ -61,7 +61,9 @@ void main() {
     );
   }
 
-  testWidgets('renders the installed themes from the catalog', (tester) async {
+  testWidgets('renders the installed themes from the manifest list', (
+    tester,
+  ) async {
     await pumpView(tester);
 
     expect(find.text('Theme & Styling'), findsOneWidget);
@@ -79,7 +81,7 @@ void main() {
     final harness = await pumpView(tester);
 
     expect(
-      harness.themeBloc.state.catalog?.resolved.colors.primary.toColor(),
+      harness.themeBloc.state.resolved?.colors.primary.toColor(),
       const Color(0xFF6DD6DA),
     );
     expect(
@@ -95,7 +97,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(harness.repository.calls, contains('setTheme:ocean'));
-    expect(harness.themeBloc.state.catalog?.currentTheme, 'ocean');
+    expect(harness.themeBloc.state.currentTheme, 'ocean');
   });
 
   testWidgets('picking a custom accent derives all four seeds', (tester) async {

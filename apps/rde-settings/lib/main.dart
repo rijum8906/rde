@@ -36,7 +36,7 @@ Future<void> main() async {
 
   // Step 2: Listen for service publications and reconcile the cached payload
   // with the service; later changes are read with GetResolvedTheme after the
-  // ThemeChanged signal.
+  // service reports a changed property.
   unawaited(syncSystemTheme(appThemeBloc));
 
   runApp(const SettingsApp());

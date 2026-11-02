@@ -40,7 +40,9 @@ class AudioDevicesState {
   }) {
     return AudioDevicesState(
       status: status ?? this.status,
-      devices: identical(devices, _unset) ? this.devices : devices as AudioDevices?,
+      devices: identical(devices, _unset)
+          ? this.devices
+          : devices as AudioDevices?,
       isBusy: isBusy ?? this.isBusy,
       errorMessage: identical(errorMessage, _unset)
           ? this.errorMessage

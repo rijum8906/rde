@@ -26,10 +26,7 @@ use tracing::info;
 use crate::{
     adapter::{AdapterRegistry, GtkEmitter, KdeAdapter, QtAdapter},
     constants::{DBUS_SERVICE_NAME, SERVICE_NAME, SHUTDOWN_TIMEOUT},
-    dbus::{
-        PORTAL_OBJECT_PATH, PortalSettingsInterface, THEME_OBJECT_PATH, ThemeInterface,
-        spawn_dbus_signal_broadcaster,
-    },
+    dbus::{PORTAL_OBJECT_PATH, PortalSettingsInterface, THEME_OBJECT_PATH, ThemeInterface},
     paths::{ThemePaths, xdg_config_home, xdg_data_home},
     service::ThemeService,
     theme_store::DiskThemeRepository,
@@ -122,10 +119,7 @@ impl App {
     pub async fn run(&mut self) -> RdeResult<()> {
         self.is_running.store(true, Ordering::SeqCst);
 
-        // Step 1: Start file change watcher
-        self.service.start_watcher();
-
-        // Step 2: Connect to session bus and export D-Bus interfaces
+        // Step 1: Connect to session bus and export D-Bus interfaces
         let iface = ThemeInterface::new(self.service.clone());
         let portal = PortalSettingsInterface::new(self.service.clone());
 
@@ -139,13 +133,10 @@ impl App {
 
         info!(name = DBUS_SERVICE_NAME, "Registered D-Bus service");
 
-        // Step 3: Connect broadcast channels to D-Bus signal emitter
-        spawn_dbus_signal_broadcaster(connection, self.service.clone());
-
-        // Step 4: Spawn supervisor IPC thread
+        // Step 2: Spawn supervisor IPC thread
         self.spawn_daemon_thread();
 
-        // Step 5: Register Unix OS termination signals
+        // Step 3: Register Unix OS termination signals
         let mut sigint = signal(SignalKind::interrupt()).map_err(RdeError::Io)?;
         let mut sigterm = signal(SignalKind::terminate()).map_err(RdeError::Io)?;
 

@@ -12,7 +12,6 @@ class InstalledThemesCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final catalog = state.catalog!;
 
     return Card(
       child: Padding(
@@ -28,14 +27,14 @@ class InstalledThemesCard extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              '${catalog.themes.length} theme'
-              '${catalog.themes.length == 1 ? '' : 's'} available',
+              '${state.themes.length} theme'
+              '${state.themes.length == 1 ? '' : 's'} available',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 16),
-            if (catalog.themes.isEmpty)
+            if (state.themes.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
@@ -48,9 +47,9 @@ class InstalledThemesCard extends StatelessWidget {
               )
             else
               Column(
-                children: List.generate(catalog.themes.length, (index) {
-                  final info = catalog.themes[index];
-                  final isActive = info.name == catalog.currentTheme;
+                children: List.generate(state.themes.length, (index) {
+                  final info = state.themes[index];
+                  final isActive = info.name == state.currentTheme;
                   return Column(
                     children: [
                       if (index > 0) const Divider(),
