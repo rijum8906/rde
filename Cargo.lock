@@ -914,6 +914,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "rde-media"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "rde-core",
+ "rde-ipc",
+ "serde",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "zbus",
+]
+
+[[package]]
 name = "rde-notification"
 version = "0.1.0"
 dependencies = [

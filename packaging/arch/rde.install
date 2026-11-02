@@ -11,8 +11,11 @@ rde-volume, rde-theme) and spawns them itself, so the per-service units
 shipped in the repository are optional and should not be enabled alongside
 it.
 
-Brightness changes go through /usr/bin/rde-brightness-helper, authorized by
-the polkit action org.rde.brightness.set.
+Brightness changes are written directly to sysfs by rde-brightness. Add your
+user to the video group so the service can write /sys/class/backlight:
+  sudo usermod -aG video $USER
+For external monitors, also grant access to /dev/i2c-* (commonly the i2c
+group), then log out and back in.
 EOF
 }
 

@@ -1,8 +1,14 @@
+//! # IPC Socket Path Helpers
+//!
+//! Resolves the per-user runtime directory and prepares the Unix socket path
+//! shared by the daemon and the services it supervises.
+
 use std::{
     env, fs,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
 };
+use tracing::{debug, warn};
 
 use crate::errors::RdeResult;
 
@@ -59,11 +65,10 @@ fn get_xdg_runtime_dir() -> RdeResult<PathBuf> {
     }
 
     // Last resort: /tmp (with warning)
-    eprintln!(
-        "⚠️  XDG_RUNTIME_DIR not set and /run/user/{} not found!",
-        uid
+    warn!(
+        uid,
+        "XDG_RUNTIME_DIR is not set and the per-user runtime directory is missing; falling back to /tmp (insecure)"
     );
-    eprintln!("⚠️  Falling back to /tmp (insecure!)");
     Ok(PathBuf::from("/tmp"))
 }
 
@@ -85,12 +90,13 @@ fn ensure_directory(path: &Path) -> RdeResult<()> {
 
     // Only check if it's not 0o700
     if mode & 0o777 != 0o700 {
-        eprintln!(
-            "⚠️  Directory {} has wrong permissions: {:o}",
-            path.display(),
-            mode
+        // A world-writable socket directory would leak supervision traffic, so
+        // reset it to user-only access instead of only reporting the problem.
+        warn!(
+            path = %path.display(),
+            mode = format!("{:o}", mode),
+            "Socket directory has wrong permissions; resetting to 0o700"
         );
-        eprintln!("⚠️  Fixing to 0o700...");
         let perms = fs::Permissions::from_mode(0o700);
         fs::set_permissions(path, perms)?;
     }
@@ -102,7 +108,7 @@ fn ensure_directory(path: &Path) -> RdeResult<()> {
 pub fn cleanup_socket(socket_path: &Path) -> RdeResult<()> {
     if socket_path.exists() {
         fs::remove_file(socket_path)?;
-        println!("🧹 Cleaned up socket: {}", socket_path.display());
+        debug!(path = %socket_path.display(), "Removed the stale socket file");
     }
     Ok(())
 }

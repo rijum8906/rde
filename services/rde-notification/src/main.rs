@@ -32,14 +32,12 @@ use rde_notification::app::App;
 /// a signal handler cannot be registered.
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> RdeResult<()> {
-    println!("Starting RDE Notification Service...");
-
-    // Step 1: Initialise logging and the runtime state.
+    // Step 1: Initialise logging and the runtime state. The app logs the startup
+    // event once the subscriber is installed.
     let mut app = App::global()?.lock().await;
 
     // Step 2: Serve supervision until shutdown is requested.
     app.run().await?;
 
-    println!("RDE Notification Service exited successfully");
     Ok(())
 }

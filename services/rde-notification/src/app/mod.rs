@@ -99,8 +99,11 @@ impl App {
         // Step 1: Install structured logging before any other work happens.
         let is_release_mode = cfg!(not(debug_assertions));
         let log_dir = rde_service_logs_dir(SERVICE_NAME)?;
+
+        // Release builds keep lifecycle events (start, register, shutdown);
+        // debug builds add per-operation diagnostics. See `docs/logging-guide.md`.
         let log_level = match is_release_mode {
-            true => LogLevel::Warn,
+            true => LogLevel::Info,
             false => LogLevel::Debug,
         };
         Logger::new(log_level, log_dir, SERVICE_NAME).init(is_release_mode)?;

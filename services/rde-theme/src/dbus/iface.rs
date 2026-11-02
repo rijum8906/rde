@@ -150,9 +150,11 @@ impl ThemeInterface {
             .await
             .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
 
-        // zbus automatically emits PropertiesChanged for ActiveTheme.
-        // We manually emit the generation bump and the ThemeChanged struct.
-        self.active_theme_changed(&emitter).await;
+        // zbus automatically emits PropertiesChanged for ActiveTheme. A failed
+        // emission is logged rather than returned: the theme already switched.
+        if let Err(err) = self.active_theme_changed(&emitter).await {
+            warn!(error = %err, "Failed to emit ActiveTheme PropertiesChanged signal");
+        }
 
         Ok(())
     }
@@ -201,7 +203,9 @@ impl ThemeInterface {
 
         // zbus automatically emits PropertiesChanged for Appearance.
         // We manually emit the generation bump and the portal signal.
-        self.generation_changed(&emitter).await;
+        if let Err(err) = self.generation_changed(&emitter).await {
+            warn!(error = %err, "Failed to emit Generation PropertiesChanged signal");
+        }
         Self::emit_portal_color_scheme(&emitter, target).await;
 
         Ok(())
@@ -272,8 +276,11 @@ impl ThemeInterface {
                 other => zbus::fdo::Error::Failed(other.to_string()),
             })?;
 
-        // Manually emit generation bump since the Method changes it.
-        self.generation_changed(&emitter).await;
+        // Manually emit generation bump since the Method changes it. A failed
+        // emission is not fatal: the property already changed in memory.
+        if let Err(err) = self.generation_changed(&emitter).await {
+            warn!(error = %err, "Failed to emit Generation PropertiesChanged signal");
+        }
 
         Ok(())
     }
@@ -288,10 +295,17 @@ impl ThemeInterface {
             .await
             .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
 
-        // Emit updated properties
-        self.active_theme_changed(&emitter).await;
-        self.generation_changed(&emitter).await;
-        self.available_themes_changed(&emitter).await;
+        // Emit updated properties. Each failure is logged and skipped so one
+        // broken signal does not hide the others or fail the reload.
+        if let Err(err) = self.active_theme_changed(&emitter).await {
+            warn!(error = %err, "Failed to emit ActiveTheme PropertiesChanged signal");
+        }
+        if let Err(err) = self.generation_changed(&emitter).await {
+            warn!(error = %err, "Failed to emit Generation PropertiesChanged signal");
+        }
+        if let Err(err) = self.available_themes_changed(&emitter).await {
+            warn!(error = %err, "Failed to emit AvailableThemes PropertiesChanged signal");
+        }
 
         // Emit custom reload signal
         if let Err(err) = Self::reloaded(&emitter).await {

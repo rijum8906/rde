@@ -6,7 +6,7 @@
 use std::sync::Mutex;
 
 use anyhow::anyhow;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use super::commands::BrightnessCommand;
 use crate::{
@@ -79,7 +79,8 @@ impl BrightnessService {
                     }
                 }
 
-                info!(
+                // Detection runs on every refresh, so it stays at `debug`.
+                debug!(
                     display = %active.name,
                     internal = active.is_internal,
                     "Active display detected"

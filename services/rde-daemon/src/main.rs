@@ -44,8 +44,11 @@ async fn main() -> RdeResult<()> {
     // 1. Install structured logging before anything else can fail.
     let is_release_mode = cfg!(not(debug_assertions));
     let log_dir = rde_service_logs_dir("daemon")?;
+
+    // Release builds keep lifecycle events (start, register, shutdown); debug
+    // builds add per-operation diagnostics. See `docs/logging-guide.md`.
     let log_level = match is_release_mode {
-        true => LogLevel::Warn,
+        true => LogLevel::Info,
         false => LogLevel::Debug,
     };
     Logger::new(log_level, log_dir, "daemon").init(is_release_mode)?;
