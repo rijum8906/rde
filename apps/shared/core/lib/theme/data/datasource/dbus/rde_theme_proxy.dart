@@ -7,20 +7,6 @@ import 'package:core/theme/domain/entities/theme_snapshot.dart';
 import 'package:dbus/dbus.dart';
 import 'package:fpdart/fpdart.dart';
 
-/// Payload of the `ThemeChanged` signal.
-class ThemeChangedSignal {
-  const ThemeChangedSignal({
-    required this.resolvedJson,
-    required this.generation,
-  });
-
-  /// JSON encoded [ResolvedTheme] that was just published.
-  final String resolvedJson;
-
-  /// Generation the published payload reached.
-  final int generation;
-}
-
 /// Thin D-Bus client for the `org.rde.Theme` service.
 ///
 /// The service owns author manifests, the installed-theme registry, user
@@ -44,8 +30,11 @@ class RdeThemeProxy {
   /// Object path exporting the `org.rde.Theme` interface.
   static final DBusObjectPath objectPath = DBusObjectPath('/org/rde/Theme');
 
-  /// Interface carrying the theme properties, methods, and signals.
+  /// Interface carrying the theme properties and methods.
   static const String interfaceName = 'org.rde.Theme';
+
+  /// Interface carrying the standard D-Bus property machinery.
+  static const String _propertiesInterface = 'org.freedesktop.DBus.Properties';
 
   /// Signature of the struct returned by `GetResolvedTheme`.
   static final DBusSignature _resolvedSignature = DBusSignature(
@@ -62,7 +51,7 @@ class RdeThemeProxy {
 
   late final DBusRemoteObject _object;
 
-  /// Reads the read-only properties of the theme service in one round trip.
+  /// Reads the properties of the theme service in one round trip.
   ///
   /// # Returns
   /// A [ThemeSnapshot] with the contract version, active theme, appearance,
@@ -81,7 +70,7 @@ class RdeThemeProxy {
       return ThemeSnapshot(
         version: _readUint32(properties, 'Version'),
         activeTheme: _readString(properties, 'ActiveTheme'),
-        mode: AppearanceMode.fromDbus(_readString(properties, 'Mode')),
+        mode: AppearanceMode.fromDbus(_readString(properties, 'Appearance')),
         availableThemes:
             _readValue(properties['AvailableThemes'])
                 ?.asStringArray()
@@ -89,17 +78,6 @@ class RdeThemeProxy {
             const <String>[],
         generation: _readUint32(properties, 'Generation'),
       );
-    });
-  }
-
-  /// Reads the appearance the desktop currently renders.
-  ///
-  /// # Errors
-  /// Returns an [RdeError] when the property cannot be read.
-  Future<Either<RdeError, AppearanceMode>> fetchMode() {
-    return _read('read the appearance mode', () async {
-      final value = await _object.getProperty(interfaceName, 'Mode');
-      return AppearanceMode.fromDbus(_readValue(value)?.asString() ?? '');
     });
   }
 
@@ -155,25 +133,30 @@ class RdeThemeProxy {
     });
   }
 
-  /// Activates an installed theme.
+  /// Activates an installed theme by writing the `ActiveTheme` property.
   ///
-  /// Use `rde-dynamic` to switch back to the wallpaper-derived theme.
+  /// Use `rde-dynamic` to switch back to the wallpaper-derived theme; an empty
+  /// identifier also selects the built-in theme.
   ///
   /// # Errors
   /// Returns an [RdeError] when the theme is not installed or the service
   /// cannot publish the new payload.
   Future<Either<RdeError, void>> setActiveTheme(String id) {
-    return _invoke('activate theme "$id"', 'SetActiveTheme', [DBusString(id)]);
+    return _setProperty('activate theme "$id"', 'ActiveTheme', DBusString(id));
   }
 
   /// Switches the desktop appearance between light and dark.
   ///
+  /// Writes the `Appearance` property, which also republishes the palette.
+  ///
   /// # Errors
   /// Returns an [RdeError] when the mode is rejected or cannot be persisted.
   Future<Either<RdeError, void>> setMode(AppearanceMode mode) {
-    return _invoke('set the ${mode.dbusValue} appearance', 'SetMode', [
+    return _setProperty(
+      'set the ${mode.dbusValue} appearance',
+      'Appearance',
       DBusString(mode.dbusValue),
-    ]);
+    );
   }
 
   /// Updates the seed colors of the built-in dynamic theme.
@@ -241,33 +224,68 @@ class RdeThemeProxy {
     });
   }
 
-  /// Emits the freshly published theme whenever the desktop appearance changes.
+  /// Emits the payload the service published, once per change.
   ///
-  /// The service writes the payload to disk before signalling, so a listener
-  /// that reacts to a change always observes a durable state.
-  Stream<ThemeChangedSignal> watchThemeChanges() {
-    return DBusRemoteObjectSignalStream(
-      object: _object,
-      interface: interfaceName,
-      name: 'ThemeChanged',
-      signature: DBusSignature('su'),
-    ).map((signal) {
-      return ThemeChangedSignal(
-        resolvedJson: signal.values[0].asString(),
-        generation: signal.values[1].asUint32(),
-      );
+  /// The service announces publications through the standard `PropertiesChanged`
+  /// signal and writes the payload before bumping `Generation`, so every
+  /// notification re-reads `GetResolvedTheme` and therefore always observes a
+  /// durable state. Notifications whose read fails are skipped instead of
+  /// ending the stream.
+  Stream<ResolvedTheme> watchResolvedTheme() {
+    return _watchPropertyChanges()
+        .asyncMap(
+          (_) async => (await fetchResolvedTheme()).fold<ResolvedTheme?>(
+            (_) => null,
+            (theme) => theme,
+          ),
+        )
+        .where((theme) => theme != null)
+        .cast<ResolvedTheme>();
+  }
+
+  /// Emits the registry identifiers, once per change.
+  ///
+  /// Installs and removals surface through the `AvailableThemes` property, so
+  /// every change re-reads it instead of decoding the signal payload.
+  Stream<List<String>> watchThemeList() {
+    return _watchPropertyChanges().asyncMap((_) async {
+      final value = await _object.getProperty(interfaceName, 'AvailableThemes');
+      return _readValue(value)?.asStringArray().toList() ?? const <String>[];
     });
   }
 
-  /// Emits the registry identifiers whenever an installed theme appears or
-  /// disappears.
-  Stream<List<String>> watchThemeListChanges() {
+  /// Emits once per `PropertiesChanged` signal of the theme interface.
+  Stream<void> _watchPropertyChanges() {
     return DBusRemoteObjectSignalStream(
-      object: _object,
-      interface: interfaceName,
-      name: 'ThemeListChanged',
-      signature: DBusSignature('as'),
-    ).map((signal) => signal.values.first.asStringArray().toList());
+          object: _object,
+          interface: _propertiesInterface,
+          name: 'PropertiesChanged',
+          signature: DBusSignature('sa{sv}as'),
+        )
+        .where(
+          (signal) =>
+              signal.values.isNotEmpty &&
+              signal.values.first.asString() == interfaceName,
+        )
+        .map<void>((_) {});
+  }
+
+  /// Writes one theme property through `org.freedesktop.DBus.Properties.Set`.
+  Future<Either<RdeError, void>> _setProperty(
+    String action,
+    String name,
+    DBusValue value,
+  ) async {
+    try {
+      await _object.callMethod(_propertiesInterface, 'Set', [
+        DBusString(interfaceName),
+        DBusString(name),
+        DBusVariant(value),
+      ]);
+      return const Right(null);
+    } catch (error) {
+      return Left(_toRdeError(action, error));
+    }
   }
 
   /// Runs a read-only request and maps thrown exceptions to an [RdeError].

@@ -237,7 +237,10 @@ class _FakeBrightnessRepository implements BrightnessRepository {
 class _Harness {
   _Harness() {
     wifiBloc = WifiBloc(wifiRepository: wifi);
-    bluetoothBloc = BluetoothBloc(bluetoothRepository: bluetooth);
+    bluetoothBloc = BluetoothBloc(
+      bluetoothRepository: bluetooth,
+      scanWindow: Duration.zero,
+    );
     volumeBloc = VolumeBloc(repository: volume);
     brightnessBloc = BrightnessBloc(repository: brightness);
     themeBloc = ThemeBloc(repository: themes);
@@ -277,13 +280,12 @@ class _Harness {
     brightnessBloc.add(const BrightnessInitEvent());
     themeBloc.add(const ThemeInitEvent());
     await tester.pumpAndSettle();
-    debugPrint('DBG vol=${volumeBloc.state.status}/${volumeBloc.state.master?.volume}'
-        ' bri=${brightnessBloc.state.status}/${brightnessBloc.state.level?.percent}'
-        ' bt=${bluetoothBloc.state.isEnabled}/${bluetoothBloc.state.isAvailable}'
-        ' wifi=${wifiBloc.state.isWifiEnabled}');
   }
 
   /// Releases the blocs and their repositories.
+  ///
+  /// Registered with `addTearDown`: closing a bloc awaits its controllers, and
+  /// an await inside a `testWidgets` body never resumes under the fake clock.
   Future<void> dispose() async {
     await wifiBloc.close();
     await bluetoothBloc.close();
@@ -305,20 +307,12 @@ Finder _accentDot(Color color) {
 
 void main() {
   group('DashboardQuickActions', () {
-    late _Harness harness;
-
-    setUp(() => harness = _Harness());
-    tearDown(() => harness.dispose());
-
     testWidgets('reads volume and brightness from their services', (
       tester,
     ) async {
+      final harness = _Harness();
+      addTearDown(harness.dispose);
       await harness.pump(tester, const DashboardQuickActions());
-      debugPrint(
-        'VOL=${harness.volumeBloc.state.master?.volume} '
-        'WIFI=${harness.wifiBloc.state.isWifiEnabled}',
-      );
-
       // Step 1: Volume and brightness both come from their services.
       expect(find.text('42%'), findsOneWidget);
       expect(find.text('65%'), findsOneWidget);
@@ -332,6 +326,8 @@ void main() {
     testWidgets('brightness changes go through the brightness service', (
       tester,
     ) async {
+      final harness = _Harness();
+      addTearDown(harness.dispose);
       await harness.pump(tester, const DashboardQuickActions());
 
       // Step 1: The icon raises the service by one step.
@@ -354,6 +350,8 @@ void main() {
     testWidgets('the Wi-Fi tile switches the radio through WifiBloc', (
       tester,
     ) async {
+      final harness = _Harness();
+      addTearDown(harness.dispose);
       await harness.pump(tester, const DashboardQuickActions());
       expect(find.byIcon(Icons.wifi), findsOneWidget);
 
@@ -369,6 +367,8 @@ void main() {
     testWidgets('the Bluetooth tile switches the radio through BluetoothBloc', (
       tester,
     ) async {
+      final harness = _Harness();
+      addTearDown(harness.dispose);
       await harness.pump(tester, const DashboardQuickActions());
       expect(find.byIcon(Icons.bluetooth), findsOneWidget);
 
@@ -384,6 +384,8 @@ void main() {
     testWidgets('the appearance tile switches the mode through ThemeBloc', (
       tester,
     ) async {
+      final harness = _Harness();
+      addTearDown(harness.dispose);
       await harness.pump(tester, const DashboardQuickActions());
 
       // The fake service starts in dark mode, so the tile shows a dark icon.
@@ -400,12 +402,9 @@ void main() {
   });
 
   group('DashboardPersonalization', () {
-    late _Harness harness;
-
-    setUp(() => harness = _Harness());
-    tearDown(() => harness.dispose());
-
     testWidgets('selects the appearance the service reports', (tester) async {
+      final harness = _Harness();
+      addTearDown(harness.dispose);
       await harness.pump(tester, const DashboardPersonalization());
 
       final segmented = tester.widget<SegmentedButton<AppearanceMode>>(
@@ -417,6 +416,8 @@ void main() {
     testWidgets('picking another appearance writes it to the service', (
       tester,
     ) async {
+      final harness = _Harness();
+      addTearDown(harness.dispose);
       await harness.pump(tester, const DashboardPersonalization());
 
       await tester.tap(find.text('Light'));
@@ -426,13 +427,24 @@ void main() {
     });
 
     testWidgets('picking an accent re-seeds through ThemeBloc', (tester) async {
+      final harness = _Harness();
+      addTearDown(harness.dispose);
       await harness.pump(tester, const DashboardPersonalization());
 
-      await tester.tap(_accentDot(const Color(0xFF006E3C)));
+      // The preset is the palette's emerald, which is the only green dot. The
+      // accent re-seeds every palette family, not just the primary one.
+      final expected = seedsFromAccent('#00695C');
+      await tester.tap(_accentDot(const Color(0xFF00695C)));
       await tester.pumpAndSettle();
 
-      expect(harness.themes.calls, contains('updateDynamicTheme:#006E3C:::'));
-      expect(harness.themes.dynamicSeeds.primary, '#006E3C');
+      expect(
+        harness.themes.calls,
+        contains(
+          'updateDynamicTheme:${expected.primary}:${expected.secondary}:'
+          '${expected.tertiary}:${expected.error}',
+        ),
+      );
+      expect(harness.themes.dynamicSeeds, expected);
     });
   });
 
@@ -443,6 +455,10 @@ void main() {
       await tester.pumpWidget(
         const MaterialApp(home: Scaffold(body: DashboardSystemHealth())),
       );
+
+      // The gauges animate in from zero, so the first sample is only readable
+      // once the entrance animation has finished.
+      await tester.pump(const Duration(milliseconds: 600));
 
       expect(find.text('System Health'), findsOneWidget);
       expect(find.text('CPU'), findsOneWidget);
