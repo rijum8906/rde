@@ -55,11 +55,15 @@ class _FakeBrightnessRepository implements BrightnessRepository {
   Stream<void> watchChanges() => const Stream<void>.empty();
 }
 
-Future<BrightnessBloc> _pumpCard(
+Future<void> _pumpCard(
   WidgetTester tester,
   _FakeBrightnessRepository repository,
 ) async {
   final bloc = BrightnessBloc(repository: repository);
+
+  // Closing a bloc awaits stream teardown, which never completes under the
+  // fake clock a test body runs in, so it is left to the teardown phase.
+  addTearDown(bloc.close);
 
   await tester.pumpWidget(
     BlocProvider.value(
@@ -69,14 +73,12 @@ Future<BrightnessBloc> _pumpCard(
   );
   bloc.add(const BrightnessInitEvent());
   await tester.pumpAndSettle();
-
-  return bloc;
 }
 
 void main() {
   testWidgets('shows the level the service reports', (tester) async {
     final repository = _FakeBrightnessRepository();
-    final bloc = await _pumpCard(tester, repository);
+    await _pumpCard(tester, repository);
 
     expect(find.text('Brightness'), findsOneWidget);
     expect(find.text('55%'), findsOneWidget);
@@ -85,12 +87,11 @@ void main() {
     expect(find.byTooltip('Brighten'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
-    await bloc.close();
   });
 
   testWidgets('the step buttons write through the service', (tester) async {
     final repository = _FakeBrightnessRepository();
-    final bloc = await _pumpCard(tester, repository);
+    await _pumpCard(tester, repository);
 
     await tester.tap(find.byTooltip('Brighten'));
     await tester.pumpAndSettle();
@@ -99,17 +100,15 @@ void main() {
     expect(find.text('65%'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
-    await bloc.close();
   });
 
   testWidgets('explains when the service is not running', (tester) async {
     final repository = _FakeBrightnessRepository()..failReads = true;
-    final bloc = await _pumpCard(tester, repository);
+    await _pumpCard(tester, repository);
 
     expect(find.text('The brightness service is not running.'), findsOneWidget);
     expect(find.byTooltip('Brighten'), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
-    await bloc.close();
   });
 }

@@ -156,15 +156,9 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
       return;
     }
 
-    // Step 3: Read just the republished payload, so the colors match the new
-    // appearance without waiting for the signal round trip.
-    final resolved = await _read(emit, _repository.getResolvedTheme());
-    if (resolved == null) {
-      emit(state.copyWith(isBusy: false));
-      return;
-    }
-    emit(state.copyWith(isBusy: false));
-    _applyPayload(emit, resolved);
+    // Step 3: COMMIT: the successful write is the new appearance. The palette
+    // follows with the published payload, so no read is made here.
+    emit(state.copyWith(isBusy: false, mode: event.mode));
   }
 
   Future<void> _onSelectTheme(
@@ -173,19 +167,23 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
   ) async {
     if (state.isBusy) return;
 
+    final previous = state.currentTheme;
     emit(state.copyWith(isBusy: true, clearError: true));
     final failure = _failureOf(await _repository.setTheme(event.theme));
     if (failure != null) {
-      emit(state.copyWith(isBusy: false, errorMessage: failure.message));
+      emit(
+        state.copyWith(
+          isBusy: false,
+          currentTheme: previous,
+          errorMessage: failure.message,
+        ),
+      );
       return;
     }
 
-    // Only the payload changed, so only the payload is read back.
-    final resolved = await _read(emit, _repository.getResolvedTheme());
-    emit(state.copyWith(isBusy: false));
-    if (resolved != null) {
-      _applyPayload(emit, resolved);
-    }
+    // COMMIT: the successful write activates the theme immediately. The payload
+    // arrives with the service notification, so the colors are not read here.
+    emit(state.copyWith(isBusy: false, currentTheme: event.theme));
   }
 
   Future<void> _onSetDynamicAccent(

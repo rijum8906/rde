@@ -10,13 +10,14 @@ import 'package:rde_settings/features/audio_io/presentation/bloc/volume_state.da
 /// Keeps the volume and microphone cards in step with the `org.rde.Volume`
 /// service.
 ///
-/// The service owns the mixer, so the card reads the state back after every
-/// write instead of trusting its own guess. A drag is the one exception: the
-/// slider follows the pointer immediately, and the value is committed once the
-/// drag settles, because writing every pixel of a drag would flood the service.
+/// A write is shown immediately: the controls move to the requested value as
+/// soon as `org.freedesktop.DBus.Properties.Set` succeeds, without waiting for
+/// the service to echo the change back. A rejected write rolls the controls
+/// back and reports the failure.
 ///
-/// Signals from the service mean another client changed the volume - media
-/// keys, the shell's OSD - so the card reloads for those as well.
+/// A drag still commits once it settles, because writing every pixel of a drag
+/// would flood the service. Signals from the service mean another client
+/// changed the volume - media keys, the shell's OSD - so those reload the card.
 class VolumeBloc extends Bloc<VolumeEvent, VolumeState> {
   VolumeBloc({
     required this._repository,
@@ -129,21 +130,18 @@ class VolumeBloc extends Bloc<VolumeEvent, VolumeState> {
       ),
     );
 
-    final result = await _repository.setVolume(volume);
-    final failure = _failureOf(result);
+    // A successful write is the new value: the slider is not read back and the
+    // signal echo must not make it jump around.
+    final failure = _failureOf(await _repository.setVolume(volume));
     if (failure != null) {
-      emit(state.copyWith(errorMessage: failure.message));
+      emit(state.copyWith(master: master, errorMessage: failure.message));
     }
-
-    // The service is the truth: a rejected write snaps the slider back.
-    await _refresh(emit);
   }
 
   /// Writes the microphone capture level through the service.
   ///
-  /// The card shows the requested value immediately and the service is read
-  /// back afterwards, because it clamps and may reject the write when the
-  /// device exposes no capture control.
+  /// The card keeps the requested value as soon as the write succeeds, and
+  /// restores the previous one when the device has no capture control.
   Future<void> _onMicrophoneSet(
     VolumeMicrophoneSetEvent event,
     Emitter<VolumeState> emit,
@@ -163,14 +161,12 @@ class VolumeBloc extends Bloc<VolumeEvent, VolumeState> {
       ),
     );
 
-    final result = await _repository.setMicrophoneVolume(volume);
-    final failure = _failureOf(result);
+    // A successful write is the new value: no read-back and no waiting for the
+    // republished property.
+    final failure = _failureOf(await _repository.setMicrophoneVolume(volume));
     if (failure != null) {
-      emit(state.copyWith(errorMessage: failure.message));
+      emit(state.copyWith(master: master, errorMessage: failure.message));
     }
-
-    // The service is the truth: a rejected write snaps the slider back.
-    await _refresh(emit);
   }
 
   Future<void> _onToggleMute(
@@ -182,16 +178,28 @@ class VolumeBloc extends Bloc<VolumeEvent, VolumeState> {
       return;
     }
 
-    emit(state.copyWith(isBusy: true, errorMessage: null));
+    // Flip the icon immediately; a rejected write flips it back.
+    emit(
+      state.copyWith(
+        isBusy: true,
+        master: master.copyWith(muted: !master.muted),
+        errorMessage: null,
+      ),
+    );
 
-    final result = await _repository.setMuted(!master.muted);
-    final failure = _failureOf(result);
+    final failure = _failureOf(await _repository.setMuted(!master.muted));
     if (failure != null) {
-      emit(state.copyWith(isBusy: false, errorMessage: failure.message));
+      emit(
+        state.copyWith(
+          isBusy: false,
+          master: master,
+          errorMessage: failure.message,
+        ),
+      );
       return;
     }
 
-    await _refresh(emit);
+    emit(state.copyWith(isBusy: false));
   }
 
   /// Reloads after another client changed the volume.

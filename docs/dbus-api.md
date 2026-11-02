@@ -26,7 +26,6 @@ Owned by `rde-brightness` on the session bus at `/org/rde/Brightness`. The servi
 | `BrightnessPercentage` | property | `u` | writable | Current brightness percentage. |
 | `MaxBrightness` | property | `u` | read-only | Maximum raw value on the target display's scale. |
 | `Version` | property | `s` | read-only | Service version. |
-| `BrightnessChanged` | signal | `u` | – | Emitted after a successful change, carrying the new percentage. |
 
 Changes are written to the internal backlight when the active connector is `eDP`, `LVDS`, or `DSI`, and to the external monitor over DDC/CI when it is `DP`, `HDMI`, or another external connector.
 
@@ -35,6 +34,6 @@ Changes are written to the internal backlight when the active connector is `eDP`
 ## Conventions
 
 - All percentage values (`u percent`) are `0–100` unless a service explicitly documents otherwise (e.g. `rde-volume` allowing amplification above 100 if configured).
-- Every mutating method emits a corresponding `*Changed` signal — clients should prefer subscribing to signals over polling `Get*` methods.
+- Readable and writable state is a property, not a method. Write it through `org.freedesktop.DBus.Properties.Set` and watch `PropertiesChanged`; `zbus` emits that signal for every setter automatically, and a method that changes a property republishes it explicitly.
 - `rde-brightness` writes sysfs and DDC/CI directly and relies on native device permissions instead of polkit: the service user must be able to write `/sys/class/backlight/*/brightness` (normally via the `video` group) and, for external monitors, access `/dev/i2c-*`.
 - Interfaces are additive-only within a major version — new methods/signals may be added, but existing signatures will not change without a major version bump, documented in [`CHANGELOG.md`](/CHANGELOG.md).

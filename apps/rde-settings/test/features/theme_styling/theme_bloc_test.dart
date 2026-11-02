@@ -61,13 +61,14 @@ void main() {
   );
 
   test(
-    'switching the appearance persists it and follows the payload',
+    'switching the appearance commits it without reading the payload back',
     () async {
       final repository = FakeThemeRepository();
       final bloc = buildThemeBloc(repository);
 
       bloc.add(const ThemeInitEvent());
       await bloc.stream.firstWhere((state) => state.hasData);
+      final resolvedReadsBefore = repository.resolvedReads;
 
       final switched = bloc.stream.firstWhere(
         (state) => state.mode == AppearanceMode.light,
@@ -77,7 +78,9 @@ void main() {
 
       expect(repository.calls, contains('setMode:light'));
       expect(state.previewMode, AppearanceMode.light);
-      expect(state.previewTheme?.variant, 'light');
+      // The successful write is the new appearance: the payload is not read
+      // again, it follows with the service notification instead.
+      expect(repository.resolvedReads, resolvedReadsBefore);
 
       await bloc.close();
       await repository.dispose();

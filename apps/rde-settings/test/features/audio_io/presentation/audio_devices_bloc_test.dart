@@ -96,7 +96,7 @@ void main() {
     expect(loaded.devices!.outputLabel, 'Speaker');
 
     final switchedState = bloc.stream.firstWhere(
-      (state) => state.devices?.outputName == 'hdmi',
+      (state) => state.devices?.outputName == 'hdmi' && !state.isBusy,
     );
     bloc.add(const SelectAudioOutputEvent('hdmi'));
     final switched = await switchedState;
@@ -124,7 +124,7 @@ void main() {
     expect(loaded.devices!.inputLabel, 'Microphone');
 
     final switchedState = bloc.stream.firstWhere(
-      (state) => state.devices?.inputName == 'usb',
+      (state) => state.devices?.inputName == 'usb' && !state.isBusy,
     );
     bloc.add(const SelectAudioInputEvent('usb'));
     final switched = await switchedState;

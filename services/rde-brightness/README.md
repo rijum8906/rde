@@ -66,4 +66,8 @@ No `pkexec`, polkit policy, or root helper binary is used.
 | BrightnessPercentage | property | u | writable | Current brightness percentage. |
 | MaxBrightness | property | u | read-only | Maximum raw brightness value on the target display's scale. |
 | Version | property | s | read-only | Version of the service. |
-| BrightnessChanged | signal | u | - | Emitted when brightness changes. |
+
+Properties are written through `org.freedesktop.DBus.Properties.Set`; `zbus`
+emits `PropertiesChanged` for them. The two step methods change the level
+outside of the setters, so they republish `Brightness` and
+`BrightnessPercentage` manually.

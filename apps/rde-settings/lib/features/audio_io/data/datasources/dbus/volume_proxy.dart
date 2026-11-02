@@ -8,10 +8,8 @@ import 'package:rde_settings/features/audio_io/domain/entities/master_volume.dar
 /// Talks to the RDE volume service on the session bus.
 ///
 /// `org.rde.Volume` owns the ALSA mixer, so the page never guesses a value:
-/// it reads the properties, writes through the service, and listens to the
-/// `VolumeChanged` / `MuteChanged` signals for changes another client made.
-/// The service does not emit `PropertiesChanged` for its properties, which is
-/// why the custom signals are watched instead.
+/// it reads the properties, writes them through `org.freedesktop.DBus.Properties`,
+/// and listens to `PropertiesChanged` for updates another client made.
 class VolumeProxy {
   VolumeProxy();
 
@@ -48,9 +46,11 @@ class VolumeProxy {
       return MasterVolume(
         volume: _int(properties, 'Volume') ?? 0,
         muted: _bool(properties, 'Muted') ?? false,
-        step: _int(properties, 'Step') ?? 5,
-        minVolume: _int(properties, 'MinVolume') ?? 0,
-        maxVolume: _int(properties, 'MaxVolume') ?? 100,
+        // The service publishes no limit constants: 0-100 is the contract, and
+        // the default adjustment step only exists for the step methods.
+        step: 5,
+        minVolume: 0,
+        maxVolume: 100,
         microphoneVolume: await _readMicrophoneVolume(),
       );
     });
@@ -93,15 +93,10 @@ class VolumeProxy {
   /// Returns an [RdeError] when the service is not running or rejects the
   /// value.
   Future<Either<RdeError, void>> setVolume(int volume) {
-    return _write(
+    return _writeProperty(
       'change the master volume',
-      () => client.callMethod(
-        destination: serviceName,
-        path: objectPath,
-        interface: interface,
-        name: 'SetVolume',
-        values: [DBusByte(volume)],
-      ),
+      'Volume',
+      DBusByte(volume),
     );
   }
 
@@ -111,15 +106,10 @@ class VolumeProxy {
   /// Returns an [RdeError] when the service is not running, the device has no
   /// capture control, or the write is rejected.
   Future<Either<RdeError, void>> setMicrophoneVolume(int volume) {
-    return _write(
+    return _writeProperty(
       'change the microphone volume',
-      () => client.callMethod(
-        destination: serviceName,
-        path: objectPath,
-        interface: interface,
-        name: 'SetMicrophoneVolume',
-        values: [DBusByte(volume)],
-      ),
+      'MicrophoneVolume',
+      DBusByte(volume),
     );
   }
 
@@ -129,16 +119,7 @@ class VolumeProxy {
   /// Returns an [RdeError] when the service is not running or rejects the
   /// value.
   Future<Either<RdeError, void>> setMuted(bool muted) {
-    return _write(
-      'change the mute state',
-      () => client.callMethod(
-        destination: serviceName,
-        path: objectPath,
-        interface: interface,
-        name: 'SetMute',
-        values: [DBusBoolean(muted)],
-      ),
-    );
+    return _writeProperty('change the mute state', 'Muted', DBusBoolean(muted));
   }
 
   /// Watches the service for volume and mute changes.
@@ -162,7 +143,9 @@ class VolumeProxy {
       }
     }
 
-    // Step 2: Keep both signals alive for exactly as long as the card listens.
+    // Step 2: Keep the property signal alive for exactly as long as the card
+    // listens. Every setter and step method ends up here through
+    // `PropertiesChanged`.
     controller = StreamController<void>.broadcast(
       onListen: () {
         cancelled = false;
@@ -170,28 +153,10 @@ class VolumeProxy {
         subscriptions.add(
           DBusSignalStream(
             client,
-            interface: interface,
-            name: 'VolumeChanged',
+            interface: propertiesInterface,
+            name: 'PropertiesChanged',
             path: objectPath,
-            signature: DBusSignature('y'),
-          ).listen((_) => emit(), onError: (Object _) {}),
-        );
-        subscriptions.add(
-          DBusSignalStream(
-            client,
-            interface: interface,
-            name: 'MuteChanged',
-            path: objectPath,
-            signature: DBusSignature('b'),
-          ).listen((_) => emit(), onError: (Object _) {}),
-        );
-        subscriptions.add(
-          DBusSignalStream(
-            client,
-            interface: interface,
-            name: 'MicrophoneVolumeChanged',
-            path: objectPath,
-            signature: DBusSignature('y'),
+            signature: DBusSignature('sa{sv}as'),
           ).listen((_) => emit(), onError: (Object _) {}),
         );
       },
@@ -204,6 +169,32 @@ class VolumeProxy {
       },
     );
     return controller.stream;
+  }
+
+  /// Writes a single D-Bus property through the standard property interface.
+  ///
+  /// # Errors
+  /// Returns an [RdeError] when the service is not running or rejects the
+  /// value.
+  Future<Either<RdeError, void>> _writeProperty(
+    String action,
+    String name,
+    DBusValue value,
+  ) {
+    return _write(
+      action,
+      () => client.callMethod(
+        destination: serviceName,
+        path: objectPath,
+        interface: propertiesInterface,
+        name: 'Set',
+        values: [
+          const DBusString(interface),
+          DBusString(name),
+          DBusVariant(value),
+        ],
+      ),
+    );
   }
 
   /// Runs a read-only operation and maps failures onto [RdeError].

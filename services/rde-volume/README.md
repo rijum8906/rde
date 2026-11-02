@@ -37,60 +37,39 @@ The service publishes its interface on the **session bus**:
 
 | Property Name | Type | Access | Description |
 |---|---|---|---|
-| `Volume` | `uint8` | Read-write | Current master volume percentage (`0`–`100`). Setting emits `VolumeChanged`. |
-| `Muted` | `boolean` | Read-write | Whether audio playback is currently muted. Setting emits `MuteChanged`. |
-| `Step` | `uint8` | Read-write | Default step size percentage used for volume increments/decrements (typically `5`). |
-| `MinVolume` | `uint8` | Read-only | Minimum supported volume percentage (`0`). |
-| `MaxVolume` | `uint8` | Read-only | Maximum supported volume percentage (`100`). |
-| `Version` | `String` | Read-only | Returns the service package version. |
+| `Version` | `String` | Read-only | Service package version. |
+| `Volume` | `uint8` | Read-write | Current master volume percentage (`0`–`100`). |
+| `Muted` | `boolean` | Read-write | Whether audio playback is currently muted. |
+| `MicrophoneVolume` | `uint8` | Read-write | Current microphone capture percentage (`0`–`100`). |
+| `MicrophoneMuted` | `boolean` | Read-write | Whether microphone capture is currently muted. |
+
+Set any writable property through `org.freedesktop.DBus.Properties.Set`.
+`zbus` emits `PropertiesChanged` on its own, so clients never need a custom
+signal. The `0`–`100` range is part of the contract rather than a property;
+the service clamps out-of-range writes.
 
 ### Methods
 
-#### `SetVolume`
-- **Signature**: `SetVolume(volume: uint8) -> ()`
-- **Description**: Sets absolute master volume percentage (`0`–`100`). Emits a `VolumeChanged` signal.
-
-#### `IncreaseVolume`
-- **Signature**: `IncreaseVolume() -> ()`
-- **Description**: Increases master volume by the configured default step size. Emits a `VolumeChanged` signal.
-
-#### `DecreaseVolume`
-- **Signature**: `DecreaseVolume() -> ()`
-- **Description**: Decreases master volume by the configured default step size. Emits a `VolumeChanged` signal.
+Every method below changes a property outside of its setter, so the service
+republishes that property through `PropertiesChanged`.
 
 #### `IncreaseVolumeBy`
 - **Signature**: `IncreaseVolumeBy(step: uint8) -> ()`
-- **Description**: Increases master volume by a custom step percentage. Emits a `VolumeChanged` signal.
+- **Description**: Increases master volume by `step` percentage points.
 
 #### `DecreaseVolumeBy`
 - **Signature**: `DecreaseVolumeBy(step: uint8) -> ()`
-- **Description**: Decreases master volume by a custom step percentage. Emits a `VolumeChanged` signal.
+- **Description**: Decreases master volume by `step` percentage points.
 
 #### `ToggleMute`
 - **Signature**: `ToggleMute() -> ()`
-- **Description**: Inverts the current playback mute state. Emits a `MuteChanged` signal.
-
-#### `SetMute`
-- **Signature**: `SetMute(muted: boolean) -> ()`
-- **Description**: Explicitly sets the playback mute state. Emits a `MuteChanged` signal.
-
-#### `GetVolume`
-- **Signature**: `GetVolume() -> uint8`
-- **Description**: Queries and returns the current master volume percentage.
-
-#### `GetMuteState`
-- **Signature**: `GetMuteState() -> boolean`
-- **Description**: Queries and returns whether audio playback is currently muted.
+- **Description**: Inverts the current playback mute state.
 
 ### Signals
 
-#### `VolumeChanged`
-- **Signature**: `VolumeChanged(new_volume: uint8)`
-- **Description**: Emitted whenever the master volume percentage changes.
-
-#### `MuteChanged`
-- **Signature**: `MuteChanged(muted: boolean)`
-- **Description**: Emitted whenever the playback mute state transitions.
+None of the service's own. Clients watch `PropertiesChanged` on
+`org.freedesktop.DBus.Properties`, which carries `Volume`, `Muted`,
+`MicrophoneVolume`, and `MicrophoneMuted`.
 
 ---
 

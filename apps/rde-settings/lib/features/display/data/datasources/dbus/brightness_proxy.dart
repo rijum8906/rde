@@ -8,10 +8,8 @@ import 'package:rde_settings/features/display/domain/entities/brightness_level.d
 /// Talks to the RDE brightness service on the session bus.
 ///
 /// `org.rde.Brightness` owns the backlight, so the page never guesses a value:
-/// it reads the properties, writes through the service, and listens to the
-/// `BrightnessChanged` signal for changes another client made. The service does
-/// not emit `PropertiesChanged` for its properties, which is why the custom
-/// signal is watched instead.
+/// it reads the properties, writes them through `org.freedesktop.DBus.Properties`,
+/// and listens to `PropertiesChanged` for updates another client made.
 class BrightnessProxy {
   BrightnessProxy();
 
@@ -137,17 +135,18 @@ class BrightnessProxy {
       }
     }
 
-    // Step 2: Keep the signal alive for exactly as long as the card listens.
+    // Step 2: Keep the property signal alive for exactly as long as the card
+    // listens. Setters and step methods both report through `PropertiesChanged`.
     controller = StreamController<void>.broadcast(
       onListen: () {
         cancelled = false;
         subscriptions.add(
           DBusSignalStream(
             client,
-            interface: interface,
-            name: 'BrightnessChanged',
+            interface: propertiesInterface,
+            name: 'PropertiesChanged',
             path: objectPath,
-            signature: DBusSignature('u'),
+            signature: DBusSignature('sa{sv}as'),
           ).listen((_) => emit(), onError: (Object _) {}),
         );
       },

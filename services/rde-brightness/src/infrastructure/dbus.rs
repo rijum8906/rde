@@ -1,7 +1,7 @@
 //! # D-Bus Interface
 //!
-//! Serves `org.rde.Brightness` at `/org/rde/Brightness`, translating D-Bus
-//! calls into [`BrightnessCommand`]s for the application service.
+//! Serves `org.rde.Brightness` at `/org/rde/Brightness`, exposing the active
+//! display level as properties and step adjustments as methods.
 //!
 //! Sysfs and DDC/CI writes are performed directly by the service process. The
 //! service user must belong to the `video` group (and have access to
@@ -10,7 +10,7 @@
 use std::sync::Arc;
 
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use zbus::object_server::SignalEmitter;
 
 use crate::{
@@ -44,6 +44,23 @@ impl BrightnessInterface {
 
         // Step 2: Report the percentage the service recorded.
         Ok(u32::from(self.service.snapshot().percent))
+    }
+
+    /// Announces a brightness change made outside of the property setters.
+    ///
+    /// Both `Brightness` and `BrightnessPercentage` describe the same level, so
+    /// both are republished.
+    ///
+    /// # Parameters
+    /// - `emitter`: emitter bound to the served object
+    async fn publish_level(&self, emitter: &SignalEmitter<'_>) {
+        if let Err(error) = self.brightness_changed(emitter).await {
+            warn!(%error, "Failed to emit the Brightness PropertiesChanged signal");
+        }
+
+        if let Err(error) = self.brightness_percentage_changed(emitter).await {
+            warn!(%error, "Failed to emit the BrightnessPercentage PropertiesChanged signal");
+        }
     }
 }
 
@@ -86,28 +103,30 @@ fn fdo_failure(error: ApplicationError) -> zbus::fdo::Error {
 
 #[zbus::interface(name = "org.rde.Brightness")]
 impl BrightnessInterface {
-    /// Service version string.
-    #[zbus(property(emits_changed_signal = "false"))]
+    /// Read-only property holding the service version string.
+    #[zbus(property)]
     pub fn version(&self) -> String {
         SERVICE_VERSION.to_string()
     }
 
-    /// Current raw brightness value on the target display's scale.
-    #[zbus(property(emits_changed_signal = "false"))]
+    /// Read-write property holding the raw brightness value of the active
+    /// display's scale.
+    #[zbus(property)]
     pub fn brightness(&self) -> u32 {
         self.service.snapshot().raw
     }
 
     /// Sets the raw brightness value of the active display.
     ///
+    /// `zbus` emits `PropertiesChanged` automatically once this returns `Ok`.
+    ///
+    /// # Parameters
+    /// - `brightness`: raw value; values above the display maximum are clamped
+    ///
     /// # Errors
     /// Returns a D-Bus failure when the write is rejected.
     #[zbus(property)]
-    pub async fn set_brightness(
-        &self,
-        brightness: u32,
-        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
-    ) -> zbus::fdo::Result<()> {
+    pub async fn set_brightness(&self, brightness: u32) -> zbus::fdo::Result<()> {
         // Step 1: Convert the raw value into the percentage the domain expects.
         let snapshot = self.service.snapshot();
         let percent = if snapshot.max == 0 {
@@ -116,63 +135,70 @@ impl BrightnessInterface {
             (u64::from(brightness.min(snapshot.max)) * 100 / u64::from(snapshot.max)) as u8
         };
 
-        // Step 2: Apply it and notify listeners.
-        let applied = self
-            .apply(BrightnessCommand::Set {
-                output: snapshot.display.unwrap_or_default(),
-                percent,
-            })
-            .await?;
+        // Step 2: Apply it; the property getters report the resulting level.
+        self.apply(BrightnessCommand::Set {
+            output: snapshot.display.unwrap_or_default(),
+            percent,
+        })
+        .await?;
 
-        Self::brightness_changed(&emitter, applied)
-            .await
-            .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))
+        Ok(())
     }
 
-    /// Current brightness as a percentage (0-100).
-    #[zbus(property(emits_changed_signal = "false"))]
+    /// Read-write property holding the brightness as a percentage (0-100).
+    #[zbus(property)]
     pub fn brightness_percentage(&self) -> u32 {
         u32::from(self.service.snapshot().percent)
     }
 
     /// Sets the brightness percentage of the active display.
     ///
+    /// `zbus` emits `PropertiesChanged` automatically once this returns `Ok`.
+    ///
+    /// # Parameters
+    /// - `percent`: target percentage, `0..=100`
+    ///
     /// # Errors
-    /// Returns a D-Bus failure for percentages above 100 or a rejected write.
+    /// Returns `InvalidArgs` for percentages above 100 and a D-Bus failure when
+    /// the write is rejected.
     #[zbus(property)]
-    pub async fn set_brightness_percentage(
-        &self,
-        percent: u32,
-        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
-    ) -> zbus::fdo::Result<()> {
+    pub async fn set_brightness_percentage(&self, percent: u32) -> zbus::fdo::Result<()> {
         // Step 1: Percentages travel as u32 on the wire but are u8 in the domain.
+        if percent > 100 {
+            return Err(zbus::fdo::Error::InvalidArgs(format!(
+                "brightness percentage {percent} is invalid"
+            )));
+        }
         let percent = u8::try_from(percent).map_err(|_| {
             zbus::fdo::Error::InvalidArgs(format!("brightness percentage {percent} is invalid"))
         })?;
 
-        // Step 2: Apply it against the active display and notify listeners.
-        let applied = self
-            .apply(BrightnessCommand::Set {
-                output: self.service.snapshot().display.unwrap_or_default(),
-                percent,
-            })
-            .await?;
+        // Step 2: Apply it against the active display.
+        self.apply(BrightnessCommand::Set {
+            output: self.service.snapshot().display.unwrap_or_default(),
+            percent,
+        })
+        .await?;
 
-        Self::brightness_changed(&emitter, applied)
-            .await
-            .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))
+        Ok(())
     }
 
-    /// Maximum brightness value of the target display's scale.
-    #[zbus(property(emits_changed_signal = "false"))]
+    /// Read-only property holding the maximum raw value of the display scale.
+    #[zbus(property)]
     pub fn max_brightness(&self) -> u32 {
         self.service.snapshot().max
     }
 
-    /// Increases the active display brightness by `step` percentage points.
+    /// Raises the active display brightness by `step` percentage points.
+    ///
+    /// # Parameters
+    /// - `step`: percentage points to add, capped at 100
     ///
     /// # Returns
-    /// The new brightness percentage, clamped to 100.
+    /// The new brightness percentage.
+    ///
+    /// # Errors
+    /// Returns a D-Bus failure when the write is rejected.
     #[zbus(name = "IncreaseBrightness")]
     pub async fn increase_brightness(
         &self,
@@ -183,18 +209,22 @@ impl BrightnessInterface {
         let step = step.min(100) as u8;
         let applied = self.apply(BrightnessCommand::Increase(step)).await?;
 
-        // Step 2: Notify listeners of the resulting percentage.
-        Self::brightness_changed(&emitter, applied)
-            .await
-            .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?;
+        // Step 2: Republish the changed properties.
+        self.publish_level(&emitter).await;
 
         Ok(applied)
     }
 
-    /// Decreases the active display brightness by `step` percentage points.
+    /// Lowers the active display brightness by `step` percentage points.
+    ///
+    /// # Parameters
+    /// - `step`: percentage points to subtract, saturated at 0
     ///
     /// # Returns
-    /// The new brightness percentage, saturated at 0.
+    /// The new brightness percentage.
+    ///
+    /// # Errors
+    /// Returns a D-Bus failure when the write is rejected.
     #[zbus(name = "DecreaseBrightness")]
     pub async fn decrease_brightness(
         &self,
@@ -205,21 +235,9 @@ impl BrightnessInterface {
         let step = step.min(100) as u8;
         let applied = self.apply(BrightnessCommand::Decrease(step)).await?;
 
-        // Step 2: Notify listeners of the resulting percentage.
-        Self::brightness_changed(&emitter, applied)
-            .await
-            .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?;
+        // Step 2: Republish the changed properties.
+        self.publish_level(&emitter).await;
 
         Ok(applied)
     }
-
-    /// Emitted after every successful brightness change.
-    ///
-    /// # Parameters
-    /// - `percent`: new brightness percentage (0-100)
-    #[zbus(signal, name = "BrightnessChanged")]
-    pub async fn brightness_changed(
-        signal_emitter: &SignalEmitter<'_>,
-        percent: u32,
-    ) -> zbus::Result<()>;
 }

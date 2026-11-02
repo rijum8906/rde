@@ -162,8 +162,8 @@ Every service exposes its own interface directly on the session bus. Full method
 
 | Service | Bus Name | Interface | Key Methods | Signals |
 | :--- | :--- | :--- | :--- | :--- |
-| Volume | `org.rde.Volume` | `org.rde.Volume` | `IncreaseVolume`, `DecreaseVolume`, `SetVolume` | `VolumeChanged` |
-| Brightness | `org.rde.Brightness` | `org.rde.Brightness` | `SetBrightness`, `GetBrightness` | `BrightnessChanged` |
+| Volume | `org.rde.Volume` | `org.rde.Volume` | `IncreaseVolumeBy`, `DecreaseVolumeBy`, `ToggleMute` | `PropertiesChanged` |
+| Brightness | `org.rde.Brightness` | `org.rde.Brightness` | `IncreaseBrightness`, `DecreaseBrightness` | `PropertiesChanged` |
 | Theme | `org.rde.Theme` | `org.rde.Theme` | `SetTheme`, `SetMode` | `ThemeChanged` |
 | Notification | `org.rde.Notification` | `org.freedesktop.Notifications` | `Notify`, `CloseNotification` | `NotificationClosed` |
 
