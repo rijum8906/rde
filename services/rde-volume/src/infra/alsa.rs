@@ -51,6 +51,9 @@ pub struct AlsaController {
 
     /// Software mute flag fallback for devices without hardware mute switches.
     cached_mute: AtomicBool,
+
+    /// Software capture mute flag fallback for devices without a capture switch.
+    cached_microphone_mute: AtomicBool,
 }
 
 impl AlsaController {
@@ -155,11 +158,25 @@ impl AlsaController {
             }
         }
 
+        // Step 6: Cache the capture mute state so property reads are accurate
+        // before the first write on devices without a capture switch.
+        let mut initial_capture_muted = false;
+        if let Some(id) = &capture_selem_id {
+            if let Some(selem) = mixer.find_selem(id) {
+                if selem.has_capture_switch() {
+                    if let Ok(sw) = selem.get_capture_switch(SelemChannelId::mono()) {
+                        initial_capture_muted = sw == 0;
+                    }
+                }
+            }
+        }
+
         Ok(Self {
             mixer: Mutex::new(mixer),
             selem_id,
             capture_selem_id,
             cached_mute: AtomicBool::new(initial_muted),
+            cached_microphone_mute: AtomicBool::new(initial_capture_muted),
         })
     }
 
@@ -462,6 +479,80 @@ impl AudioController for AlsaController {
                 let _ = selem.set_capture_volume(SelemChannelId::FrontRight, raw_volume);
             }
         }
+
+        Ok(())
+    }
+
+    /// Queries the microphone capture mute state.
+    ///
+    /// Reads the hardware capture switch when the element exposes one, and
+    /// falls back to the cached software state otherwise.
+    ///
+    /// # Errors
+    /// Returns `RdeError::HardwareNotFound` when there is no capture control,
+    /// and `RdeError::Hardware` on ALSA query failure.
+    fn get_microphone_mute(&self) -> RdeResult<bool> {
+        let mixer_guard = self
+            .mixer
+            .lock()
+            .map_err(|e| RdeError::Hardware(format!("Failed to acquire ALSA mixer lock: {}", e)))?;
+
+        let selem = self.capture_selem(&mixer_guard)?;
+
+        // Step 1: Query the hardware capture switch when it exists.
+        if selem.has_capture_switch() {
+            let channel = if selem.is_capture_mono() {
+                SelemChannelId::mono()
+            } else if selem.has_capture_channel(SelemChannelId::FrontLeft) {
+                SelemChannelId::FrontLeft
+            } else if selem.has_capture_channel(SelemChannelId::FrontRight) {
+                SelemChannelId::FrontRight
+            } else {
+                SelemChannelId::Unknown
+            };
+
+            let switch = selem
+                .get_capture_switch(channel)
+                .map_err(|e| RdeError::Hardware(format!("Failed to get capture switch: {}", e)))?;
+
+            // 0 indicates the capture switch is off (microphone muted).
+            Ok(switch == 0)
+        } else {
+            // Step 2: Fall back to the software state.
+            Ok(self.cached_microphone_mute.load(Ordering::Relaxed))
+        }
+    }
+
+    /// Sets the microphone capture mute state.
+    ///
+    /// Updates the hardware capture switch (0 = muted, 1 = unmuted) and caches
+    /// the software state for devices without one.
+    ///
+    /// # Errors
+    /// Returns `RdeError::HardwareNotFound` when there is no capture control,
+    /// and `RdeError::Hardware` on ALSA update failure.
+    fn set_microphone_mute(&self, muted: bool) -> RdeResult<()> {
+        let mixer_guard = self
+            .mixer
+            .lock()
+            .map_err(|e| RdeError::Hardware(format!("Failed to acquire ALSA mixer lock: {}", e)))?;
+
+        let selem = self.capture_selem(&mixer_guard)?;
+        let switch_val = if muted { 0 } else { 1 };
+
+        // Step 1: Update the hardware capture switch when present.
+        if selem.has_capture_switch() && selem.set_capture_switch_all(switch_val).is_err() {
+            // Fallback: set the supported channels individually.
+            if selem.has_capture_channel(SelemChannelId::FrontLeft) {
+                let _ = selem.set_capture_switch(SelemChannelId::FrontLeft, switch_val);
+            }
+            if selem.has_capture_channel(SelemChannelId::FrontRight) {
+                let _ = selem.set_capture_switch(SelemChannelId::FrontRight, switch_val);
+            }
+        }
+
+        // Step 2: Cache the state so reads stay accurate without a switch.
+        self.cached_microphone_mute.store(muted, Ordering::Relaxed);
 
         Ok(())
     }

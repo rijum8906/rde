@@ -39,6 +39,9 @@ pub struct InMemoryAudioController {
     /// Stored microphone capture volume level (0-100).
     pub microphone_volume: AtomicU8,
 
+    /// Stored microphone capture mute state.
+    pub microphone_muted: AtomicBool,
+
     /// Simulated error trigger for error path testing.
     pub error_on_next: Mutex<Option<String>>,
 }
@@ -50,6 +53,7 @@ impl InMemoryAudioController {
             volume: AtomicU8::new(initial_volume.min(100)),
             muted: AtomicBool::new(initial_muted),
             microphone_volume: AtomicU8::new(initial_volume.min(100)),
+            microphone_muted: AtomicBool::new(false),
             error_on_next: Mutex::new(None),
         }
     }
@@ -104,6 +108,17 @@ impl AudioController for InMemoryAudioController {
         self.check_error()?;
         self.microphone_volume
             .store(percentage.min(100), Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn get_microphone_mute(&self) -> RdeResult<bool> {
+        self.check_error()?;
+        Ok(self.microphone_muted.load(Ordering::Relaxed))
+    }
+
+    fn set_microphone_mute(&self, muted: bool) -> RdeResult<()> {
+        self.check_error()?;
+        self.microphone_muted.store(muted, Ordering::Relaxed);
         Ok(())
     }
 }

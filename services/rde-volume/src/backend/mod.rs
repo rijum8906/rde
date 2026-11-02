@@ -282,6 +282,32 @@ impl VolumeBackend {
         Ok(target)
     }
 
+    /// Queries whether microphone capture is currently muted.
+    ///
+    /// # Returns
+    /// `true` when capture is muted.
+    ///
+    /// # Errors
+    /// Returns `RdeError` when the device has no capture control or the driver
+    /// query fails.
+    pub async fn get_microphone_mute(&self) -> RdeResult<bool> {
+        self.controller.get_microphone_mute()
+    }
+
+    /// Sets the microphone capture mute state.
+    ///
+    /// # Parameters
+    /// - `muted`: `true` to mute capture, `false` to unmute it.
+    ///
+    /// # Errors
+    /// Returns `RdeError` when the device has no capture control or the driver
+    /// write fails.
+    pub async fn set_microphone_mute(&self, muted: bool) -> RdeResult<()> {
+        self.controller.set_microphone_mute(muted)?;
+        tracing::info!("Microphone capture mute set to {}", muted);
+        Ok(())
+    }
+
     /// Increases microphone volume by the configured default step size.
     ///
     /// # Returns

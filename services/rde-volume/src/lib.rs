@@ -8,7 +8,7 @@
 //! - Master volume and mute state querying and mutations
 //! - Microphone capture volume querying and mutations (ALSA capture control)
 //! - Public session D-Bus interface (`org.rde.Volume`) at `/org/rde/Volume`
-//! - Reactive signals for volume and mute state transitions
+//! - Reactive `PropertiesChanged` updates for volume, mute, and capture state
 //! - Unix socket supervision task for `rde-daemon`
 //! - Pluggable audio controller abstraction supporting ALSA and test mocks
 //!
