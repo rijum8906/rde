@@ -7,7 +7,8 @@ import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_even
 /// Quick appearance and accent controls backed by the theme service.
 ///
 /// Both controls go through [ThemeBloc], which writes to `org.rde.Theme` and
-/// reloads the catalog, so the selected state always reflects the service.
+/// refreshes the published payload, so the selected state always reflects the
+/// service.
 class DashboardPersonalization extends StatelessWidget {
   const DashboardPersonalization({super.key});
 

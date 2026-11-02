@@ -31,41 +31,41 @@ pub const SUPPORTED_MANIFEST_SCHEMA_VERSION: u32 = 1;
 pub const BUILTIN_DYNAMIC_VARIANT_DIR: &str = "rde-dynamic";
 
 /// Variant definitions of the built-in dynamic theme: `(id, label, mode, contrast)`.
-const BUILTIN_DYNAMIC_VARIANTS: &[(&str, &str, ThemeMode, ContrastLevel)] = &[
+const BUILTIN_DYNAMIC_VARIANTS: &[(&str, &str, Appearance, ContrastLevel)] = &[
     (
         VariantId::LIGHT,
         "Light",
-        ThemeMode::Light,
+        Appearance::Light,
         ContrastLevel::Normal,
     ),
     (
         VariantId::LIGHT_MEDIUM_CONTRAST,
         "Light (medium contrast)",
-        ThemeMode::Light,
+        Appearance::Light,
         ContrastLevel::Medium,
     ),
     (
         VariantId::LIGHT_HIGH_CONTRAST,
         "Light (high contrast)",
-        ThemeMode::Light,
+        Appearance::Light,
         ContrastLevel::High,
     ),
     (
         VariantId::DARK,
         "Dark",
-        ThemeMode::Dark,
+        Appearance::Dark,
         ContrastLevel::Normal,
     ),
     (
         VariantId::DARK_MEDIUM_CONTRAST,
         "Dark (medium contrast)",
-        ThemeMode::Dark,
+        Appearance::Dark,
         ContrastLevel::Medium,
     ),
     (
         VariantId::DARK_HIGH_CONTRAST,
         "Dark (high contrast)",
-        ThemeMode::Dark,
+        Appearance::Dark,
         ContrastLevel::High,
     ),
 ];
@@ -92,7 +92,7 @@ pub enum ManifestError {
     /// Two variants declare the same mode and contrast combination.
     #[error("duplicate variant mode {mode:?} and contrast {contrast:?}")]
     DuplicateModeContrast {
-        mode: ThemeMode,
+        mode: Appearance,
         contrast: ContrastLevel,
     },
 
@@ -313,7 +313,7 @@ impl ThemeManifest {
     #[must_use]
     pub fn select_variant(
         &self,
-        want_mode: ThemeMode,
+        want_mode: Appearance,
         want_contrast: ContrastLevel,
     ) -> (&VariantId, &VariantDescriptor) {
         // Step 1: Check for an exact match on (mode, contrast).
@@ -353,7 +353,11 @@ impl ThemeManifest {
     /// # Returns
     /// Reference to the selected [`VariantDescriptor`].
     #[must_use]
-    pub fn select(&self, want_mode: ThemeMode, want_contrast: ContrastLevel) -> &VariantDescriptor {
+    pub fn select(
+        &self,
+        want_mode: Appearance,
+        want_contrast: ContrastLevel,
+    ) -> &VariantDescriptor {
         self.select_variant(want_mode, want_contrast).1
     }
 
@@ -421,7 +425,7 @@ impl ThemeManifest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct VariantDescriptor {
     /// Light or Dark appearance mode.
-    pub mode: ThemeMode,
+    pub mode: Appearance,
 
     /// Contrast requirement for this variant.
     pub contrast: ContrastLevel,
@@ -441,7 +445,7 @@ pub struct VariantDescriptor {
 /// Visual light/dark appearance preference.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Type)]
 #[serde(rename_all = "kebab-case")]
-pub enum ThemeMode {
+pub enum Appearance {
     /// Light appearance scheme.
     #[default]
     Light,
@@ -501,7 +505,7 @@ mod tests {
         variants.insert(
             dark_id.clone(),
             VariantDescriptor {
-                mode: ThemeMode::Dark,
+                mode: Appearance::Dark,
                 contrast: ContrastLevel::Normal,
                 display_name: None.into(),
                 file_path: RelativePath::new("dark.json").unwrap(),
@@ -511,7 +515,7 @@ mod tests {
         variants.insert(
             light_id.clone(),
             VariantDescriptor {
-                mode: ThemeMode::Light,
+                mode: Appearance::Light,
                 contrast: ContrastLevel::Normal,
                 display_name: None.into(),
                 file_path: RelativePath::new("light.json").unwrap(),
@@ -532,16 +536,16 @@ mod tests {
         };
 
         // Exact match
-        let selected = manifest.select(ThemeMode::Light, ContrastLevel::Normal);
-        assert_eq!(selected.mode, ThemeMode::Light);
+        let selected = manifest.select(Appearance::Light, ContrastLevel::Normal);
+        assert_eq!(selected.mode, Appearance::Light);
 
         // Requested Light with High contrast falls back to Light Normal
-        let selected_high = manifest.select(ThemeMode::Light, ContrastLevel::High);
-        assert_eq!(selected_high.mode, ThemeMode::Light);
+        let selected_high = manifest.select(Appearance::Light, ContrastLevel::High);
+        assert_eq!(selected_high.mode, Appearance::Light);
         assert_eq!(selected_high.contrast, ContrastLevel::Normal);
 
         // Exact match, including the selected variant identifier
-        let (id, _) = manifest.select_variant(ThemeMode::Light, ContrastLevel::Normal);
+        let (id, _) = manifest.select_variant(Appearance::Light, ContrastLevel::Normal);
         assert_eq!(id, &light_id);
 
         // Fallback to default variant when mode is missing
@@ -549,7 +553,7 @@ mod tests {
         single_variant.insert(
             dark_id.clone(),
             VariantDescriptor {
-                mode: ThemeMode::Dark,
+                mode: Appearance::Dark,
                 contrast: ContrastLevel::Normal,
                 display_name: None.into(),
                 file_path: RelativePath::new("dark.json").unwrap(),
@@ -561,8 +565,8 @@ mod tests {
             ..manifest
         };
 
-        let fallback = dark_only_manifest.select(ThemeMode::Light, ContrastLevel::Normal);
-        assert_eq!(fallback.mode, ThemeMode::Dark);
+        let fallback = dark_only_manifest.select(Appearance::Light, ContrastLevel::Normal);
+        assert_eq!(fallback.mode, Appearance::Dark);
     }
 
     #[test]
@@ -582,7 +586,7 @@ mod tests {
         }
 
         // Each mode/contrast combination selects its dedicated variant.
-        let (id, descriptor) = dynamic.select_variant(ThemeMode::Light, ContrastLevel::High);
+        let (id, descriptor) = dynamic.select_variant(Appearance::Light, ContrastLevel::High);
         assert_eq!(id.as_str(), VariantId::LIGHT_HIGH_CONTRAST);
         assert_eq!(descriptor.contrast, ContrastLevel::High);
     }

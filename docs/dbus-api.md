@@ -36,5 +36,5 @@ Changes are written to the internal backlight when the active connector is `eDP`
 
 - All percentage values (`u percent`) are `0–100` unless a service explicitly documents otherwise (e.g. `rde-volume` allowing amplification above 100 if configured).
 - Every mutating method emits a corresponding `*Changed` signal — clients should prefer subscribing to signals over polling `Get*` methods.
-- Methods that require elevated privileges are gated by polkit; the policy files live in [`assets/polkit/`](../assets/polkit/). `rde-brightness` writes sysfs directly when permitted and otherwise falls back to `pkexec /usr/bin/rde-brightness-helper <percent>` under the `org.rde.brightness.set` action, rather than issuing a D-Bus `Authorize` call.
+- `rde-brightness` writes sysfs and DDC/CI directly and relies on native device permissions instead of polkit: the service user must be able to write `/sys/class/backlight/*/brightness` (normally via the `video` group) and, for external monitors, access `/dev/i2c-*`.
 - Interfaces are additive-only within a major version — new methods/signals may be added, but existing signatures will not change without a major version bump, documented in [`CHANGELOG.md`](/CHANGELOG.md).

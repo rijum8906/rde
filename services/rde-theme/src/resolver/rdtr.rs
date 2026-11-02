@@ -22,7 +22,7 @@ impl Resolver for RdeDefaultThemeResolver {
     fn resolve(
         &self,
         seeds: &crate::domain::ColorSeeds,
-        mode: crate::domain::ThemeMode,
+        mode: crate::domain::Appearance,
     ) -> Result<ResolvedTheme, crate::theme_store::ThemeError> {
         let color_roles = compute_color_roles(seeds, mode, ContrastLevel::Normal);
 

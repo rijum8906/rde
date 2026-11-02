@@ -9,7 +9,7 @@ pub mod rdtr;
 use std::collections::HashMap;
 
 use crate::{
-    domain::{ColorSeeds, ResolvedTheme, ThemeMode, identity::ResolverId},
+    domain::{Appearance, ColorSeeds, ResolvedTheme, identity::ResolverId},
     theme_store::ThemeError,
 };
 
@@ -19,7 +19,7 @@ use crate::{
 /// `resolver/<name>.rs` — one file per algorithm.
 pub trait Resolver: Send + Sync {
     fn id(&self) -> ResolverId;
-    fn resolve(&self, seeds: &ColorSeeds, mode: ThemeMode) -> Result<ResolvedTheme, ThemeError>;
+    fn resolve(&self, seeds: &ColorSeeds, mode: Appearance) -> Result<ResolvedTheme, ThemeError>;
 }
 
 /// The registry of all resolvers known to this build.

@@ -2,35 +2,54 @@ import 'dart:async';
 
 import 'package:fpdart/fpdart.dart';
 import 'package:core/core.dart';
-import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 
-/// Combines the individual `org.rde.Theme` calls into the UI-facing catalog.
+/// Exposes the individual `org.rde.Theme` reads the page needs.
 ///
-/// The service exposes the registry, the author manifests, and the resolved
-/// payload separately, so this datasource performs the fan-out: one property
-/// read, one manifest read per installed theme, and one read of the payload the
-/// desktop currently renders.
+/// The service keeps the registry, the author manifests, and the resolved
+/// payload apart, and so does this datasource. Nothing here fans out into a
+/// combined read: the caller asks for the one thing it needs, which keeps a
+/// color update from re-reading every installed theme's manifest.
 class DbusThemeDatasource {
   DbusThemeDatasource(this._proxy);
 
   final RdeThemeProxy _proxy;
 
-  /// Loads the complete theme catalog from the service.
-  ///
-  /// # Returns
-  /// A [ThemeCatalog] with the service state, every installed theme's manifest,
-  /// and the resolved payload of the active theme.
+  /// Reads the service properties: active theme, appearance, registry, version.
   ///
   /// # Errors
-  /// Returns an [RdeError] when any required service call fails.
-  Future<Either<RdeError, ThemeCatalog>> loadCatalog() async {
-    try {
-      // Step 1: Read the service properties (active theme, appearance, list).
-      final snapshot = _unwrap(await _proxy.fetchSnapshot());
+  /// Returns an [RdeError] when the service is unreachable or a property cannot
+  /// be read.
+  Future<Either<RdeError, ThemeSnapshot>> loadSnapshot() {
+    return _proxy.fetchSnapshot();
+  }
 
-      // Step 2: Resolve the author manifest of every installed theme.
+  /// Reads the payload the desktop currently renders.
+  ///
+  /// # Errors
+  /// Returns an [RdeError] when the service is unreachable or the reply is
+  /// malformed.
+  Future<Either<RdeError, ResolvedTheme>> getResolvedTheme() {
+    return _proxy.fetchResolvedTheme();
+  }
+
+  /// Reads the author manifest of every installed theme.
+  ///
+  /// The built-in dynamic theme is not part of the machine-owned registry, so
+  /// it is appended explicitly to keep it pickable.
+  ///
+  /// # Returns
+  /// The manifests in registry order, with the built-in theme first.
+  ///
+  /// # Errors
+  /// Returns an [RdeError] when the registry or any manifest cannot be read.
+  Future<Either<RdeError, List<ThemeManifest>>> loadThemes() async {
+    try {
+      // Step 1: Read the registry identifiers.
+      final ids = _unwrap(await _proxy.listThemes());
+
+      // Step 2: Resolve the manifest of every installed theme.
       final manifests = <ThemeManifest>[];
-      for (final id in snapshot.availableThemes) {
+      for (final id in ids) {
         manifests.add(_unwrap(await _proxy.fetchThemeManifest(id)));
       }
 
@@ -43,12 +62,7 @@ class DbusThemeDatasource {
         );
       }
 
-      // Step 4: Read the payload the desktop currently renders.
-      final resolved = _unwrap(await _proxy.fetchResolvedTheme());
-
-      return Right(
-        ThemeCatalog(snapshot: snapshot, themes: manifests, resolved: resolved),
-      );
+      return Right(manifests);
     } on RdeError catch (error) {
       return Left(error);
     }
@@ -93,35 +107,18 @@ class DbusThemeDatasource {
     return _proxy.reload();
   }
 
-  /// Emits whenever the service publishes a theme or changes the registry.
+  /// Emits the payload the service published, once per change.
+  Stream<ResolvedTheme> watchResolvedTheme() => _proxy.watchResolvedTheme();
+
+  /// Emits the registry identifiers, once per change.
   ///
-  /// Only the fact that something changed matters to the UI; the bloc reloads
-  /// the catalog so every derived value stays consistent.
-  Stream<void> watchThemeChanges() {
-    final controller = StreamController<void>.broadcast();
-    final subscriptions = <StreamSubscription<Object?>>[
-      _proxy.watchThemeChanges().listen(
-        (_) => controller.add(null),
-        onError: (Object error) => controller.addError(error),
-      ),
-      _proxy.watchThemeListChanges().listen(
-        (_) => controller.add(null),
-        onError: (Object error) => controller.addError(error),
-      ),
-    ];
-
-    controller.onCancel = () async {
-      for (final subscription in subscriptions) {
-        await subscription.cancel();
-      }
-    };
-
-    return controller.stream;
-  }
+  /// Only the identifiers are shipped: the manifests are re-read by
+  /// [loadThemes] when the list actually differs from what the page shows.
+  Stream<List<String>> watchThemeList() => _proxy.watchThemeList();
 
   /// Unwraps a domain result, rethrowing the error for the local handler.
   ///
-  /// The datasource performs several dependent calls; rethrowing keeps the
+  /// The registry fan-out performs several dependent calls; rethrowing keeps the
   /// happy path sequential and funnels every failure through one return point.
   T _unwrap<T>(Either<RdeError, T> result) {
     return result.fold((error) => throw error, (value) => value);

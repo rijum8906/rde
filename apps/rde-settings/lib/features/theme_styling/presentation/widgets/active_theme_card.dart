@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:core/theme.dart';
-import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_state.dart';
 import 'package:rde_settings/features/theme_styling/presentation/widgets/appearance.dart';
 
@@ -18,7 +17,6 @@ class ActiveThemeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final catalog = state.catalog!;
     final info = state.activeTheme;
 
     return Card(
@@ -27,7 +25,7 @@ class ActiveThemeCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _IdentityRow(catalog: catalog, info: info),
+            _IdentityRow(state: state, info: info),
             if (info != null && info.description.isNotEmpty) ...[
               const SizedBox(height: 14),
               Text(
@@ -60,7 +58,7 @@ class ActiveThemeCard extends StatelessWidget {
                     label: 'Light',
                     icon: Icons.light_mode,
                     mode: AppearanceMode.light,
-                    selected: catalog.mode == AppearanceMode.light,
+                    selected: state.mode == AppearanceMode.light,
                     enabled: !state.isBusy,
                   ),
                 ),
@@ -70,7 +68,7 @@ class ActiveThemeCard extends StatelessWidget {
                     label: 'Dark',
                     icon: Icons.dark_mode,
                     mode: AppearanceMode.dark,
-                    selected: catalog.mode == AppearanceMode.dark,
+                    selected: state.mode == AppearanceMode.dark,
                     enabled: !state.isBusy,
                   ),
                 ),
@@ -94,9 +92,9 @@ class ActiveThemeCard extends StatelessWidget {
 /// so the three surfaces share a visual anchor. The palette glyph is the
 /// theme's own badge (the "theme" concept), not a specific role icon.
 class _IdentityRow extends StatelessWidget {
-  const _IdentityRow({required this.catalog, required this.info});
+  const _IdentityRow({required this.state, required this.info});
 
-  final ThemeCatalog catalog;
+  final ThemeState state;
   final ThemeManifest? info;
 
   @override
@@ -142,7 +140,7 @@ class _IdentityRow extends StatelessWidget {
                 children: [
                   Flexible(
                     child: Text(
-                      info?.displayName ?? catalog.currentTheme,
+                      info?.displayName ?? state.currentTheme,
                       style: theme.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -155,8 +153,7 @@ class _IdentityRow extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                '${catalog.currentTheme} • org.rde.Theme '
-                '${catalog.snapshot.version}',
+                '${state.currentTheme} • org.rde.Theme ${state.version}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),

@@ -6,7 +6,7 @@
 use super::contrast_ratio;
 use crate::{
     domain::{
-        manifest::{ContrastLevel, ThemeMode},
+        manifest::{Appearance, ContrastLevel},
         resolved::{Color, ColorSeeds},
     },
     material::compute_color_roles,
@@ -17,10 +17,10 @@ fn semantic_text_stays_readable_on_its_background() {
     let seeds = ColorSeeds::uniform(&Color::new("#6750a4").unwrap());
 
     for (mode, contrast) in [
-        (ThemeMode::Dark, ContrastLevel::Normal),
-        (ThemeMode::Light, ContrastLevel::Normal),
-        (ThemeMode::Dark, ContrastLevel::High),
-        (ThemeMode::Light, ContrastLevel::High),
+        (Appearance::Dark, ContrastLevel::Normal),
+        (Appearance::Light, ContrastLevel::Normal),
+        (Appearance::Dark, ContrastLevel::High),
+        (Appearance::Light, ContrastLevel::High),
     ] {
         let colors = compute_color_roles(&seeds, mode, contrast);
 

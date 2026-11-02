@@ -127,8 +127,8 @@ Bus name `org.rde.Theme`, object path `/org/rde/Theme`, interface `org.rde.Theme
 | Property | Signature | Access | Description |
 | :--- | :--- | :--- | :--- |
 | `Version` | `u` | read | Interface contract version |
-| `ActiveTheme` | `s` | read | Identifier of the active theme, empty for the built-in dynamic theme |
-| `Mode` | `s` | read | `light` or `dark` |
+| `ActiveTheme` | `s` | read/write | Identifier of the active theme, empty for the built-in dynamic theme |
+| `Appearance` | `s` | read/write | `light` or `dark` |
 | `AvailableThemes` | `as` | read | Installed theme identifiers |
 | `Generation` | `u` | read | Publication generation of the resolved payload |
 
@@ -142,8 +142,6 @@ properties.
 | `GetResolvedTheme` | `() → (ussu<roles>(ss)(ddddd)(uuuss))` | Payload the desktop currently renders |
 | `GetThemeManifest` | `s → (ussssssa{s(uusss)}s)` | Author manifest of one theme |
 | `ListThemes` | `() → as` | Installed theme identifiers |
-| `SetActiveTheme` | `s → ()` | Activate an installed theme (`rde-dynamic` for the built-in one) |
-| `SetMode` | `s → ()` | Persist `light` or `dark` and republish |
 | `UpdateDynamicTheme` | `ssss → ()` | Store `(primary, secondary, tertiary, error)` seeds and republish the dynamic theme; `primary` is required, an empty optional seed keeps the stored color |
 | `Reload` | `() → ()` | Re-read manifests, variant files, and settings |
 | `Preview` | `sss → s` | Resolve a theme for an appearance without committing it |
@@ -174,7 +172,7 @@ gdbus call --session --dest org.rde.Theme --object-path /org/rde/Theme \
 gdbus call --session --dest org.rde.Theme --object-path /org/rde/Theme \
   --method org.rde.Theme.UpdateDynamicTheme '#6750A4' '#006A6A' '#B52700' '#BA1A1A'
 gdbus call --session --dest org.rde.Theme --object-path /org/rde/Theme \
-  --method org.rde.Theme.SetActiveTheme rde-dynamic
+  --method org.freedesktop.DBus.Properties.Set org.rde.Theme ActiveTheme '<"rde-dynamic">'
 
 # Change only the primary seed
 gdbus call --session --dest org.rde.Theme --object-path /org/rde/Theme \

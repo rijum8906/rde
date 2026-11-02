@@ -5,7 +5,7 @@ abstract class ThemeEvent {
   const ThemeEvent();
 }
 
-/// Loads the theme catalog for the first time (also used to retry).
+/// Loads every slice of the theme state (also used to retry).
 class ThemeInitEvent extends ThemeEvent {
   const ThemeInitEvent();
 }
@@ -15,9 +15,19 @@ class ReloadThemeDatabaseEvent extends ThemeEvent {
   const ReloadThemeDatabaseEvent();
 }
 
-/// Internal event fired when the service publishes a new theme state.
+/// Internal event fired when the service changes one of its properties.
+///
+/// The notification carries only the slice that changed, so the bloc refreshes
+/// exactly that slice instead of reloading the whole theme state.
 class ThemeServiceChangedEvent extends ThemeEvent {
-  const ThemeServiceChangedEvent();
+  const ThemeServiceChangedEvent({this.resolved, this.availableThemes});
+
+  /// Payload the service published, `null` when the change was not a payload
+  /// publication or the payload could not be read.
+  final ResolvedTheme? resolved;
+
+  /// Registry identifiers, `null` when the change did not report the registry.
+  final List<String>? availableThemes;
 }
 
 /// Dismisses the inline error banner without touching the service.

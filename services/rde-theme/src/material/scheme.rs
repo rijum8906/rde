@@ -13,7 +13,7 @@ use material_color_utilities::{
 };
 
 use crate::domain::{
-    manifest::{ContrastLevel, ThemeMode},
+    manifest::{Appearance, ContrastLevel},
     resolved::{Color, ColorRoles, ColorSeeds},
 };
 
@@ -123,12 +123,12 @@ fn seed_family(
 /// A populated [`ColorRoles`] containing all 34 M3 semantic color roles.
 pub fn compute_color_roles(
     seeds: &ColorSeeds,
-    mode: ThemeMode,
+    mode: Appearance,
     contrast: ContrastLevel,
 ) -> ColorRoles {
     let is_dark = match mode {
-        ThemeMode::Light => false,
-        ThemeMode::Dark => true,
+        Appearance::Light => false,
+        Appearance::Dark => true,
     };
 
     let contrast_level = match contrast {
@@ -224,11 +224,11 @@ mod tests {
     #[test]
     fn test_compute_color_roles_determinism() {
         let seeds = uniform("#006a6a");
-        let roles1 = compute_color_roles(&seeds, ThemeMode::Dark, ContrastLevel::Normal);
-        let roles2 = compute_color_roles(&seeds, ThemeMode::Dark, ContrastLevel::Normal);
+        let roles1 = compute_color_roles(&seeds, Appearance::Dark, ContrastLevel::Normal);
+        let roles2 = compute_color_roles(&seeds, Appearance::Dark, ContrastLevel::Normal);
         assert_eq!(roles1, roles2);
 
-        let light = compute_color_roles(&seeds, ThemeMode::Light, ContrastLevel::Normal);
+        let light = compute_color_roles(&seeds, Appearance::Light, ContrastLevel::Normal);
         assert_ne!(roles1.surface, light.surface);
     }
 
@@ -237,14 +237,14 @@ mod tests {
         let seeds = uniform("#6750A4");
 
         // Values produced by Flutter's `ColorScheme.fromSeed` for the same seed.
-        let dark = compute_color_roles(&seeds, ThemeMode::Dark, ContrastLevel::Normal);
+        let dark = compute_color_roles(&seeds, Appearance::Dark, ContrastLevel::Normal);
         assert_eq!(dark.primary.as_str(), "#cfbdfe");
         assert_eq!(dark.on_primary.as_str(), "#36275d");
         assert_eq!(dark.primary_container.as_str(), "#4d3d75");
         assert_eq!(dark.on_primary_container.as_str(), "#e9ddff");
         assert_eq!(dark.surface.as_str(), "#141218");
 
-        let light = compute_color_roles(&seeds, ThemeMode::Light, ContrastLevel::Normal);
+        let light = compute_color_roles(&seeds, Appearance::Light, ContrastLevel::Normal);
         assert_eq!(light.primary.as_str(), "#65558f");
         assert_eq!(light.primary_container.as_str(), "#e9ddff");
         assert_eq!(light.on_primary_container.as_str(), "#4d3d75");
@@ -254,12 +254,12 @@ mod tests {
     #[test]
     fn each_family_is_generated_from_its_own_seed() {
         let base = seeds("#6750A4", "#006A6A", "#B52700", "#BA1A1A");
-        let roles = compute_color_roles(&base, ThemeMode::Dark, ContrastLevel::Normal);
+        let roles = compute_color_roles(&base, Appearance::Dark, ContrastLevel::Normal);
 
         // Changing one seed must only repaint that family.
         let other_secondary = compute_color_roles(
             &seeds("#6750A4", "#006E3C", "#B52700", "#BA1A1A"),
-            ThemeMode::Dark,
+            Appearance::Dark,
             ContrastLevel::Normal,
         );
         assert_eq!(roles.primary, other_secondary.primary);
@@ -274,7 +274,7 @@ mod tests {
         // The error family follows its seed instead of the fixed Material red.
         let other_error = compute_color_roles(
             &seeds("#6750A4", "#006A6A", "#B52700", "#B90063"),
-            ThemeMode::Dark,
+            Appearance::Dark,
             ContrastLevel::Normal,
         );
         assert_ne!(roles.error, other_error.error);
@@ -284,8 +284,8 @@ mod tests {
     #[test]
     fn high_contrast_keeps_every_family_on_its_seed() {
         let base = seeds("#6750A4", "#006A6A", "#B52700", "#BA1A1A");
-        let normal = compute_color_roles(&base, ThemeMode::Dark, ContrastLevel::Normal);
-        let high = compute_color_roles(&base, ThemeMode::Dark, ContrastLevel::High);
+        let normal = compute_color_roles(&base, Appearance::Dark, ContrastLevel::Normal);
+        let high = compute_color_roles(&base, Appearance::Dark, ContrastLevel::High);
 
         assert_ne!(normal.primary, high.primary);
         assert_ne!(normal.secondary, high.secondary);

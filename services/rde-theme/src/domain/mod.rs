@@ -15,8 +15,9 @@ pub mod validation;
 
 pub use identity::{IdError, ThemeId, VariantId};
 pub use manifest::{
-    BUILTIN_DYNAMIC_VARIANT_DIR, ContrastLevel, MAX_VARIANT_FILE_SIZE_BYTES, ManifestError,
-    RelativePath, SUPPORTED_MANIFEST_SCHEMA_VERSION, ThemeManifest, ThemeMode, VariantDescriptor,
+    Appearance, BUILTIN_DYNAMIC_VARIANT_DIR, ContrastLevel, MAX_VARIANT_FILE_SIZE_BYTES,
+    ManifestError, RelativePath, SUPPORTED_MANIFEST_SCHEMA_VERSION, ThemeManifest,
+    VariantDescriptor,
 };
 pub use registry::{
     RegistryError, SUPPORTED_REGISTRY_SCHEMA_VERSION, ThemeEntry, ThemeLocation, ThemeRegistry,

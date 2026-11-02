@@ -64,11 +64,10 @@ services/rde-brightness/src/
 ├── application/     # BrightnessCommand routing and active-display state (anyhow)
 ├── infrastructure/  # org.rde.Brightness D-Bus object and rde-daemon supervision
 ├── lib.rs           # layer exports and service constants
-├── main.rs          # tracing, D-Bus serve loop, signal handling
-└── bin/rde-brightness-helper.rs  # standalone root helper (argv[1] = percent)
+└── main.rs          # tracing, D-Bus serve loop, signal handling
 ```
 
-The domain layer never imports `zbus` or `tokio`, so hardware rules remain unit-testable. Actuation is routed by connector class: internal panels (`eDP`, `LVDS`, `DSI`) use `/sys/class/backlight`, while external outputs resolve their I2C bus from `/sys/class/drm/card0-<output>/ddc` and use `ddcutil`. Privileged writes leave the process through `pkexec`/polkit only when a direct sysfs write is denied.
+The domain layer never imports `zbus` or `tokio`, so hardware rules remain unit-testable. Actuation is routed by connector class: internal panels (`eDP`, `LVDS`, `DSI`) use `/sys/class/backlight`, while external outputs resolve their I2C bus from `/sys/class/drm/card0-<output>/ddc` and use `ddcutil`. Writes happen directly as the service user; it must be in the `video` group and have I2C access for external monitors, with no helper or polkit step.
 
 ---
 
@@ -150,7 +149,7 @@ No service crate depends on another service crate. Only `crates/*` are shared de
 
 2. **Where to Put What**:
    - **Primary Binary & Bootstrapping (`main.rs`, `app/`)**: Put process startup, logger setup (`rde_core::logger`), signal handlers (`Ctrl+C`), D-Bus session bus setup (`org.rde.<name>`), and IPC connection retry loops here.
-   - **Additional Binaries & Helper Tools (`src/bin/`, `Cargo.toml`)**: Any secondary binaries or helper tools (e.g., privileged polkit executables like `rde-brightness-helper`) must be placed in `src/bin/` (e.g., `src/bin/rde-<name>-helper.rs`). Each additional binary must be declared in `Cargo.toml` under a `[[bin]]` section:
+   - **Additional Binaries & Helper Tools (`src/bin/`, `Cargo.toml`)**: Any secondary binaries or helper tools must be placed in `src/bin/` (e.g., `src/bin/rde-<name>-helper.rs`). Each additional binary must be declared in `Cargo.toml` under a `[[bin]]` section:
      ```toml
      [[bin]]
      name = "rde-<name>-helper"

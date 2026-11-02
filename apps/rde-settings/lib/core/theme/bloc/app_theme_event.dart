@@ -26,8 +26,9 @@ class ChangeAccentColorEvent extends AppThemeEvent {
 
 /// Applies the theme published by `org.rde.Theme`.
 ///
-/// [resolved] is the payload returned by `GetResolvedTheme` or decoded from the
-/// `ThemeChanged` signal, and [mode] is the appearance it was resolved for.
+/// [resolved] is the payload returned by `GetResolvedTheme` or read back after a
+/// `PropertiesChanged` notification, and [mode] is the appearance it was
+/// resolved for.
 /// Together they rebuild the whole app theme: colors, typography, shape, and
 /// motion.
 class ApplyResolvedThemeEvent extends AppThemeEvent {

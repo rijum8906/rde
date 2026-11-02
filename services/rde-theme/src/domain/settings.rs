@@ -12,7 +12,7 @@ use tracing::warn;
 
 use crate::domain::{
     identity::ThemeId,
-    manifest::{ContrastLevel, ThemeMode},
+    manifest::{Appearance, ContrastLevel},
     registry::ThemeRegistry,
     resolved::{Color, ColorSeeds, DEFAULT_ERROR_SEED, FALLBACK_SEED_COLOR},
 };
@@ -53,7 +53,7 @@ pub struct ThemeSettings {
 
     /// Appearance scheme preference (Light or Dark).
     #[serde(default)]
-    pub mode: ThemeMode,
+    pub mode: Appearance,
 
     /// Contrast requirement (Normal, Medium, or High).
     #[serde(default)]
@@ -69,7 +69,7 @@ impl Default for ThemeSettings {
         Self {
             schema_version: SUPPORTED_SETTINGS_SCHEMA_VERSION,
             active_theme: None,
-            mode: ThemeMode::Dark,
+            mode: Appearance::Dark,
             contrast: ContrastLevel::Normal,
             dynamic: DynamicSettings::default(),
         }
@@ -286,7 +286,7 @@ mod tests {
         let mut settings = ThemeSettings {
             schema_version: 1,
             active_theme: Some(ThemeId::new("deleted-theme").unwrap()),
-            mode: ThemeMode::Dark,
+            mode: Appearance::Dark,
             contrast: ContrastLevel::Normal,
             dynamic: DynamicSettings::default(),
         };
@@ -308,7 +308,7 @@ mod tests {
         let mut settings = ThemeSettings {
             schema_version: 1,
             active_theme: Some(id.clone()),
-            mode: ThemeMode::Dark,
+            mode: Appearance::Dark,
             contrast: ContrastLevel::Normal,
             dynamic: DynamicSettings::default(),
         };
@@ -336,7 +336,7 @@ mod tests {
         let settings = ThemeSettings {
             schema_version: 1,
             active_theme: None,
-            mode: ThemeMode::Dark,
+            mode: Appearance::Dark,
             contrast: ContrastLevel::Normal,
             dynamic: DynamicSettings {
                 primary: "not-a-color".into(),

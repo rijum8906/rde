@@ -57,7 +57,9 @@ class AudioDevicesBloc extends Bloc<AudioDevicesEvent, AudioDevicesState> {
     AudioDevicesInitEvent event,
     Emitter<AudioDevicesState> emit,
   ) async {
-    emit(state.copyWith(status: AudioDevicesStatus.loading, errorMessage: null));
+    emit(
+      state.copyWith(status: AudioDevicesStatus.loading, errorMessage: null),
+    );
 
     final result = await _repository.read();
     switch (result) {

@@ -1,14 +1,21 @@
 import 'package:core/theme.dart';
-import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 
 /// Lifecycle of the theme page's data.
 enum ThemeStatus { initial, loading, success, failure }
 
 /// UI state of the Theme & Styling page.
+///
+/// The service state is kept as independent slices — the payload the desktop
+/// renders, the manifests of the installed themes, and the contract version —
+/// so refreshing one slice never forces the others to be read again.
 class ThemeState {
   const ThemeState({
     required this.status,
-    this.catalog,
+    this.version = 0,
+    this.currentTheme = '',
+    this.mode = AppearanceMode.dark,
+    this.resolved,
+    this.themes = const [],
     this.previewMode = AppearanceMode.dark,
     this.previewResolved,
     this.dynamicSeeds = DynamicSeeds.fallback,
@@ -16,6 +23,7 @@ class ThemeState {
     this.errorMessage,
   });
 
+  /// State before the first load.
   factory ThemeState.initial() {
     return const ThemeState(status: ThemeStatus.initial);
   }
@@ -23,8 +31,21 @@ class ThemeState {
   /// Whether the page is loading for the first time, ready, or failed.
   final ThemeStatus status;
 
-  /// Latest service state, `null` until the first successful load.
-  final ThemeCatalog? catalog;
+  /// Interface contract version reported by the service.
+  final int version;
+
+  /// Identifier of the active theme, empty until the first payload arrives.
+  final String currentTheme;
+
+  /// Appearance the desktop currently renders.
+  final AppearanceMode mode;
+
+  /// Payload the desktop currently renders, `null` until it is read.
+  final ResolvedTheme? resolved;
+
+  /// Manifests of every theme the picker offers, including the built-in
+  /// dynamic theme. Re-read only when the registry changes.
+  final List<ThemeManifest> themes;
 
   /// Appearance rendered by the live preview.
   final AppearanceMode previewMode;
@@ -38,30 +59,41 @@ class ThemeState {
   /// page wrote (or extracted) and starts at the service defaults.
   final DynamicSeeds dynamicSeeds;
 
-  /// True while a service mutation or catalog refresh is in flight.
+  /// True while a service mutation or refresh is in flight.
   final bool isBusy;
 
   /// Last failure message shown inline above the controls.
   final String? errorMessage;
 
-  /// Installed themes, empty until the catalog is loaded.
-  List<ThemeManifest> get themes => catalog?.themes ?? const [];
+  /// Manifest of the active theme, or `null` while manifests are missing.
+  ThemeManifest? get activeTheme {
+    for (final theme in themes) {
+      if (theme.name == currentTheme) {
+        return theme;
+      }
+    }
+    return null;
+  }
 
-  /// Manifest of the active theme.
-  ThemeManifest? get activeTheme => catalog?.activeTheme;
-
-  /// Appearance the desktop currently renders.
-  AppearanceMode get mode => catalog?.mode ?? AppearanceMode.dark;
+  /// Whether the built-in dynamic theme is active.
+  bool get isDynamicActive => currentTheme == ThemeManifest.dynamicId;
 
   /// Payload the live preview renders.
   ResolvedTheme? get previewTheme => previewResolved;
 
-  /// Whether the catalog has been loaded at least once.
-  bool get hasCatalog => catalog != null;
+  /// Whether the service payload has been read at least once.
+  ///
+  /// The manifest list is deliberately not part of this check: a machine with no
+  /// installed themes still renders its controls and says so in the picker.
+  bool get hasData => resolved != null;
 
   ThemeState copyWith({
     ThemeStatus? status,
-    ThemeCatalog? catalog,
+    int? version,
+    String? currentTheme,
+    AppearanceMode? mode,
+    ResolvedTheme? resolved,
+    List<ThemeManifest>? themes,
     AppearanceMode? previewMode,
     ResolvedTheme? previewResolved,
     DynamicSeeds? dynamicSeeds,
@@ -71,7 +103,11 @@ class ThemeState {
   }) {
     return ThemeState(
       status: status ?? this.status,
-      catalog: catalog ?? this.catalog,
+      version: version ?? this.version,
+      currentTheme: currentTheme ?? this.currentTheme,
+      mode: mode ?? this.mode,
+      resolved: resolved ?? this.resolved,
+      themes: themes ?? this.themes,
       previewMode: previewMode ?? this.previewMode,
       previewResolved: previewResolved ?? this.previewResolved,
       dynamicSeeds: dynamicSeeds ?? this.dynamicSeeds,

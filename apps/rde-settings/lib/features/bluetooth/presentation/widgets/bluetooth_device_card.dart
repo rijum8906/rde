@@ -61,7 +61,9 @@ class BluetoothDevicesCard extends StatelessWidget {
                         highlighted: true,
                       ),
                     ),
-                    if (isWide) const SizedBox(width: 20) else
+                    if (isWide)
+                      const SizedBox(width: 20)
+                    else
                       const SizedBox(height: 20),
                     Expanded(
                       flex: isWide ? 1 : 0,

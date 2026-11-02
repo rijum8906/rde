@@ -7,6 +7,8 @@ import 'package:rde_settings/features/audio_io/presentation/bloc/volume_bloc.dar
 import 'package:rde_settings/features/audio_io/presentation/bloc/volume_event.dart';
 import 'package:rde_settings/features/bluetooth/presentation/bloc/bluetooth_bloc.dart';
 import 'package:rde_settings/features/bluetooth/presentation/bloc/bluetooth_event.dart';
+import 'package:rde_settings/features/display/presentation/bloc/brightness_bloc.dart';
+import 'package:rde_settings/features/display/presentation/bloc/brightness_event.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_bloc.dart';
 import 'package:rde_settings/features/theme_styling/presentation/bloc/theme_event.dart';
 import 'package:rde_settings/features/wifi/presentation/bloc/wifi_bloc.dart';
@@ -16,28 +18,31 @@ import 'package:rde_settings/features/wifi/presentation/bloc/wifi_event.dart';
 ///
 /// Each control reads the bloc that owns the service behind it, so a change
 /// made on the dedicated page shows up here without a dashboard copy to keep
-/// in sync. Brightness has no service bloc yet, so its slider keeps the value
-/// locally.
-class DashboardQuickActions extends StatefulWidget {
+/// in sync. Brightness is driven by `org.rde.Brightness` through
+/// [BrightnessBloc].
+class DashboardQuickActions extends StatelessWidget {
   const DashboardQuickActions({super.key});
-
-  @override
-  State<DashboardQuickActions> createState() => _DashboardQuickActionsState();
-}
-
-class _DashboardQuickActionsState extends State<DashboardQuickActions> {
-  /// Brightness percentage shown by the slider.
-  double _brightness = 0.65;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     final volumeState = context.watch<VolumeBloc>().state;
+    final brightnessState = context.watch<BrightnessBloc>().state;
     final wifiState = context.watch<WifiBloc>().state;
     final bluetoothState = context.watch<BluetoothBloc>().state;
     final themeState = context.watch<ThemeBloc>().state;
     final isDark = themeState.mode.isDark;
+
+    final brightness = brightnessState.level?.percent ?? 0;
+    final brightnessReady =
+        brightnessState.canChange && brightnessState.level != null;
+    final brightnessText = brightnessState.isAvailable ? '$brightness%' : '—';
+    final brightnessIcon = brightness <= 20
+        ? Icons.brightness_low_rounded
+        : brightness <= 70
+        ? Icons.brightness_medium_rounded
+        : Icons.brightness_high_rounded;
 
     return Card(
       child: Container(
@@ -64,33 +69,36 @@ class _DashboardQuickActionsState extends State<DashboardQuickActions> {
                       spacing: 12,
                       children: [
                         IconButton.filledTonal(
-                          onPressed: () {},
-                          icon: Icon(
-                            _brightness <= 0.2
-                                ? Icons.brightness_low_rounded
-                                : _brightness <= 0.7
-                                ? Icons.brightness_medium_rounded
-                                : Icons.brightness_high_rounded,
-                            size: 30,
-                          ),
+                          tooltip: 'Increase brightness',
+                          onPressed: brightnessReady
+                              ? () => context.read<BrightnessBloc>().add(
+                                  const BrightnessIncreaseEvent(10),
+                                )
+                              : null,
+                          icon: Icon(brightnessIcon, size: 30),
                         ),
 
                         Expanded(
                           child: RdeSlider(
                             min: 0,
                             max: 100,
-                            value: _brightness * 100,
+                            value: brightness.toDouble().clamp(0, 100),
                             divisions: 100,
-                            label: "Brightness",
-                            onChanged: (value) =>
-                                setState(() => _brightness = value / 100),
+                            label: brightness
+                                .toDouble()
+                                .clamp(0, 100)
+                                .round()
+                                .toString(),
+                            isEnabled: brightnessReady,
+                            onChanged: brightnessReady
+                                ? (value) => context.read<BrightnessBloc>().add(
+                                    BrightnessSliderChangedEvent(value.round()),
+                                  )
+                                : null,
                           ),
                         ),
                         const SizedBox(width: 16),
-                        Text(
-                          "${(_brightness * 100).toInt()}%",
-                          textAlign: TextAlign.right,
-                        ),
+                        Text(brightnessText, textAlign: TextAlign.right),
                       ],
                     ),
                     SizedBox(height: 16),
@@ -114,7 +122,7 @@ class _DashboardQuickActionsState extends State<DashboardQuickActions> {
                             max: 100,
                             value: volumeState.master?.volume.toDouble() ?? 0,
                             divisions: 100,
-                            label: "Volume",
+                            label: volumeState.master?.volume.toString(),
                             onChanged: (value) {
                               context.read<VolumeBloc>().add(
                                 VolumeSetEvent(value.round()),

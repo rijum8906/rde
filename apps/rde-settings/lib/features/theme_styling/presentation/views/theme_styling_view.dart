@@ -29,7 +29,7 @@ class _ThemeStylingViewState extends State<ThemeStylingView> {
     return Scaffold(
       body: BlocBuilder<ThemeBloc, ThemeState>(
         builder: (context, state) {
-          if (!state.hasCatalog) {
+          if (!state.hasData) {
             return ThemeUnavailableBody(state: state);
           }
           return _buildContent(context, state);

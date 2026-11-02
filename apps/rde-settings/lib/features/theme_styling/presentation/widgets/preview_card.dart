@@ -28,7 +28,7 @@ class PreviewCard extends StatelessWidget {
 
     final scheme = colorSchemeFromResolved(preview, mode: state.previewMode);
     final isDark = state.previewMode.isDark;
-    final desktopMode = state.catalog?.mode;
+    final desktopMode = state.hasData ? state.mode : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

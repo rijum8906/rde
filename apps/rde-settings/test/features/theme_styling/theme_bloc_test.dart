@@ -7,17 +7,17 @@ import 'theme_test_harness.dart';
 
 void main() {
   test(
-    'initial load publishes the catalog and previews the active appearance',
+    'initial load publishes the theme state and previews the active appearance',
     () async {
       final repository = FakeThemeRepository();
       final bloc = buildThemeBloc(repository);
 
-      final loaded = bloc.stream.firstWhere((state) => state.catalog != null);
+      final loaded = bloc.stream.firstWhere((state) => state.hasData);
       bloc.add(const ThemeInitEvent());
       final state = await loaded;
 
       expect(state.status, ThemeStatus.success);
-      expect(state.catalog?.currentTheme, 'default');
+      expect(state.currentTheme, 'default');
       expect(state.themes.map((theme) => theme.name), [
         'default',
         'ocean',
@@ -33,26 +33,32 @@ void main() {
     },
   );
 
-  test('selecting a theme activates it and reloads the catalog', () async {
-    final repository = FakeThemeRepository();
-    final bloc = buildThemeBloc(repository);
+  test(
+    'selecting a theme activates it and reads only the new payload',
+    () async {
+      final repository = FakeThemeRepository();
+      final bloc = buildThemeBloc(repository);
 
-    bloc.add(const ThemeInitEvent());
-    await bloc.stream.firstWhere((state) => state.catalog != null);
+      bloc.add(const ThemeInitEvent());
+      await bloc.stream.firstWhere((state) => state.hasData);
+      final themeLoadsBefore = repository.themeLoads;
 
-    final activated = bloc.stream.firstWhere(
-      (state) => state.catalog?.currentTheme == 'ocean',
-    );
-    bloc.add(const SelectThemeEvent('ocean'));
-    final state = await activated;
+      final activated = bloc.stream.firstWhere(
+        (state) => state.currentTheme == 'ocean',
+      );
+      bloc.add(const SelectThemeEvent('ocean'));
+      final state = await activated;
 
-    expect(repository.calls, contains('setTheme:ocean'));
-    expect(state.activeTheme?.displayName, 'Ocean');
-    expect(state.mode, AppearanceMode.dark);
+      expect(repository.calls, contains('setTheme:ocean'));
+      expect(state.activeTheme?.displayName, 'Ocean');
+      expect(state.mode, AppearanceMode.dark);
+      // The registry did not change, so the manifests were not read again.
+      expect(repository.themeLoads, themeLoadsBefore);
 
-    await bloc.close();
-    await repository.dispose();
-  });
+      await bloc.close();
+      await repository.dispose();
+    },
+  );
 
   test(
     'switching the appearance persists it and follows the payload',
@@ -61,10 +67,10 @@ void main() {
       final bloc = buildThemeBloc(repository);
 
       bloc.add(const ThemeInitEvent());
-      await bloc.stream.firstWhere((state) => state.catalog != null);
+      await bloc.stream.firstWhere((state) => state.hasData);
 
       final switched = bloc.stream.firstWhere(
-        (state) => state.mode == AppearanceMode.light && state.catalog != null,
+        (state) => state.mode == AppearanceMode.light,
       );
       bloc.add(const SetAppearanceEvent(AppearanceMode.light));
       final state = await switched;
@@ -85,7 +91,7 @@ void main() {
       final bloc = buildThemeBloc(repository);
 
       bloc.add(const ThemeInitEvent());
-      await bloc.stream.firstWhere((state) => state.catalog != null);
+      await bloc.stream.firstWhere((state) => state.hasData);
 
       final previewed = bloc.stream.firstWhere(
         (state) => state.previewTheme?.variant == 'light',
@@ -108,7 +114,7 @@ void main() {
     final bloc = buildThemeBloc(repository);
 
     bloc.add(const ThemeInitEvent());
-    await bloc.stream.firstWhere((state) => state.catalog != null);
+    await bloc.stream.firstWhere((state) => state.hasData);
 
     final expected = seedsFromAccent('#B90063');
     final updated = bloc.stream.firstWhere(
@@ -144,7 +150,7 @@ void main() {
     final bloc = buildThemeBloc(repository);
 
     bloc.add(const ThemeInitEvent());
-    await bloc.stream.firstWhere((state) => state.catalog != null);
+    await bloc.stream.firstWhere((state) => state.hasData);
 
     final updated = bloc.stream.firstWhere(
       (state) => state.dynamicSeeds.primary == '#123456',
@@ -170,7 +176,7 @@ void main() {
       final bloc = buildThemeBloc(repository);
 
       bloc.add(const ThemeInitEvent());
-      await bloc.stream.firstWhere((state) => state.catalog != null);
+      await bloc.stream.firstWhere((state) => state.hasData);
 
       final failed = bloc.stream.firstWhere(
         (state) => state.errorMessage != null,
@@ -189,50 +195,106 @@ void main() {
     },
   );
 
-  test('a service change reloads the catalog', () async {
-    final repository = FakeThemeRepository();
-    final bloc = buildThemeBloc(repository);
-
-    bloc.add(const ThemeInitEvent());
-    await bloc.stream.firstWhere((state) => state.catalog != null);
-    final loadsBefore = repository.loadCalls;
-
-    // Simulate another RDE application switching the theme.
-    repository.currentTheme = 'ocean';
-    final reloaded = bloc.stream.firstWhere(
-      (state) => state.catalog?.currentTheme == 'ocean',
-    );
-    repository.notifyChanged();
-    await reloaded;
-
-    expect(repository.loadCalls, greaterThan(loadsBefore));
-
-    await bloc.close();
-    await repository.dispose();
-  });
-
   test(
-    'load failures are surfaced without losing a previous catalog',
+    'a published payload refreshes the colors without reloading the manifests',
     () async {
       final repository = FakeThemeRepository();
       final bloc = buildThemeBloc(repository);
 
       bloc.add(const ThemeInitEvent());
-      await bloc.stream.firstWhere((state) => state.catalog != null);
+      await bloc.stream.firstWhere((state) => state.hasData);
+      final themeLoadsBefore = repository.themeLoads;
+      final resolvedReadsBefore = repository.resolvedReads;
 
-      repository.failLoad = true;
-      final failed = bloc.stream.firstWhere(
-        (state) => state.errorMessage != null,
+      // Simulate another RDE application switching the theme.
+      repository.currentTheme = 'ocean';
+      final reloaded = bloc.stream.firstWhere(
+        (state) => state.currentTheme == 'ocean',
       );
       repository.notifyChanged();
-      final state = await failed;
+      final state = await reloaded;
 
-      expect(state.status, ThemeStatus.success);
-      expect(state.hasCatalog, isTrue);
-      expect(state.errorMessage, 'The theme service is offline.');
+      expect(state.resolved?.themeId, 'ocean');
+      // The notification already carried the payload and the registry list.
+      expect(repository.resolvedReads, resolvedReadsBefore);
+      expect(repository.themeLoads, themeLoadsBefore);
 
       await bloc.close();
       await repository.dispose();
     },
   );
+
+  test('a registry change reloads only the manifests', () async {
+    final repository = FakeThemeRepository();
+    final bloc = buildThemeBloc(repository);
+
+    bloc.add(const ThemeInitEvent());
+    await bloc.stream.firstWhere((state) => state.hasData);
+
+    // Simulate a theme being installed by another application.
+    repository.manifests['forest'] = const ThemeManifest(
+      schemaVersion: 1,
+      name: 'forest',
+      displayName: 'Forest',
+      description: 'forest theme',
+      version: '1.0.0',
+      defaultVariant: 'dark',
+      variants: [
+        ThemeVariant(
+          id: 'dark',
+          mode: AppearanceMode.dark,
+          contrast: ContrastLevel.normal,
+          filePath: 'dark.json',
+        ),
+      ],
+    );
+    final installSeen = bloc.stream.firstWhere(
+      (state) => state.themes.any((theme) => theme.name == 'forest'),
+    );
+    repository.notifyChanged();
+    await installSeen;
+
+    await bloc.close();
+    await repository.dispose();
+  });
+
+  test('refresh failures are surfaced without losing the previous state', () async {
+    final repository = FakeThemeRepository();
+    final bloc = buildThemeBloc(repository);
+
+    bloc.add(const ThemeInitEvent());
+    await bloc.stream.firstWhere((state) => state.hasData);
+
+    // A registry change is the only refresh that reads the manifests, so it is
+    // the one that can fail while the page keeps rendering old data.
+    repository.manifests['forest'] = const ThemeManifest(
+      schemaVersion: 1,
+      name: 'forest',
+      displayName: 'Forest',
+      description: 'forest theme',
+      version: '1.0.0',
+      defaultVariant: 'dark',
+      variants: [
+        ThemeVariant(
+          id: 'dark',
+          mode: AppearanceMode.dark,
+          contrast: ContrastLevel.normal,
+          filePath: 'dark.json',
+        ),
+      ],
+    );
+    repository.failLoad = true;
+    final failed = bloc.stream.firstWhere(
+      (state) => state.errorMessage != null,
+    );
+    repository.notifyChanged();
+    final state = await failed;
+
+    expect(state.status, ThemeStatus.success);
+    expect(state.hasData, isTrue);
+    expect(state.errorMessage, 'The theme service is offline.');
+
+    await bloc.close();
+    await repository.dispose();
+  });
 }

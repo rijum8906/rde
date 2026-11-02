@@ -2,7 +2,6 @@ import 'package:fpdart/fpdart.dart';
 import 'package:core/core.dart';
 import 'package:rde_settings/features/theme_styling/data/datasources/dbus_theme_datasource.dart';
 import 'package:rde_settings/features/theme_styling/data/datasources/wallpaper/kde_wallpaper_seed_source.dart';
-import 'package:rde_settings/features/theme_styling/domain/entities/theme_catalog.dart';
 import 'package:rde_settings/features/theme_styling/domain/repositories/theme_repository.dart';
 import 'package:rde_settings/features/theme_styling/domain/repositories/wallpaper_seed_source.dart';
 
@@ -19,8 +18,20 @@ class ThemeRepositoryImpl implements ThemeRepository {
   final WallpaperSeedSource _wallpaper;
 
   @override
-  Future<Either<Failure, ThemeCatalog>> loadCatalog() async {
-    final result = await _datasource.loadCatalog();
+  Future<Either<Failure, ThemeSnapshot>> loadSnapshot() async {
+    final result = await _datasource.loadSnapshot();
+    return result.mapLeft((error) => Failure(error.message));
+  }
+
+  @override
+  Future<Either<Failure, ResolvedTheme>> getResolvedTheme() async {
+    final result = await _datasource.getResolvedTheme();
+    return result.mapLeft((error) => Failure(error.message));
+  }
+
+  @override
+  Future<Either<Failure, List<ThemeManifest>>> loadThemes() async {
+    final result = await _datasource.loadThemes();
     return result.mapLeft((error) => Failure(error.message));
   }
 
@@ -74,5 +85,9 @@ class ThemeRepositoryImpl implements ThemeRepository {
   }
 
   @override
-  Stream<void> watchThemeChanges() => _datasource.watchThemeChanges();
+  Stream<ResolvedTheme> watchResolvedTheme() =>
+      _datasource.watchResolvedTheme();
+
+  @override
+  Stream<List<String>> watchThemeList() => _datasource.watchThemeList();
 }

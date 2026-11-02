@@ -7,7 +7,7 @@ use super::super::palette::{qtct_color, render_qtct_palette};
 use super::{group_values, relative_luminance, roles};
 use crate::{
     domain::{
-        manifest::{ContrastLevel, ThemeMode},
+        manifest::{Appearance, ContrastLevel},
         resolved::{Color, ColorSeeds},
     },
     material::compute_color_roles,
@@ -77,7 +77,7 @@ fn every_accent_family_reaches_a_distinct_role() {
         tertiary: Color::new("#c26a3a").unwrap(),
         error: Color::new("#ba1a1a").unwrap(),
     };
-    let colors = compute_color_roles(&seeds, ThemeMode::Dark, ContrastLevel::Normal);
+    let colors = compute_color_roles(&seeds, Appearance::Dark, ContrastLevel::Normal);
     let palette = render_qtct_palette(&colors);
     let active = group_values(&palette, "active_colors");
 
@@ -102,7 +102,7 @@ fn every_accent_family_reaches_a_distinct_role() {
 fn bevel_ladder_is_monotonic() {
     let colors = compute_color_roles(
         &ColorSeeds::uniform(&Color::new("#6750a4").unwrap()),
-        ThemeMode::Dark,
+        Appearance::Dark,
         ContrastLevel::Normal,
     );
 
