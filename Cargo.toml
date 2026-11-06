@@ -5,7 +5,6 @@ members = [
   "crates/rde-config",
   "crates/rde-core",
   "crates/rde-ipc",
-  "services/rde-media",
   "services/rde-audio",
   "services/rde-brightness",
   "services/rde-daemon",
